@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>THE LONE PATH — Small steps. Big silence.</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ GAME ============ -->
+<canvas id="scene"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="notes-box">
+    <div id="notes-label">NOTES</div>
+    <div id="notes-count">0&nbsp;/&nbsp;5</div>
+  </div>
+  <div id="compass-wrap">
+    <canvas id="compass" width="96" height="96"></canvas>
+    <div id="compass-label">NOTE&nbsp;01</div>
+  </div>
+</div>
+
+<div id="prompt" class="hidden"><span class="key">E</span><span id="prompt-label">READ</span></div>
+<div id="toast" class="hidden"></div>
+
+<!-- NOTE PANEL -->
+<div id="note-modal" class="hidden">
+  <div id="note-panel">
+    <div id="note-title">NOTE 01</div>
+    <div id="note-body"></div>
+    <button id="note-close">CLOSE</button>
+  </div>
+</div>
+
+<!-- BLACK FADE + BIG TEXT (intro / finale) -->
+<div id="fade"></div>
+<div id="bigtext" class="hidden"><span id="bigtext-inner"></span></div>
+
+<!-- ============ MENU ============ -->
+<div id="menu" class="screen">
+  <canvas id="menu-bg"></canvas>
+  <div class="screen-inner">
+    <div id="game-title">THE&nbsp;LONE&nbsp;PATH</div>
+    <div id="game-slogan">SMALL STEPS. BIG SILENCE.</div>
+    <button class="mbtn" id="btn-start">START</button>
+    <button class="mbtn" id="btn-controls">CONTROLS</button>
+    <button class="mbtn" id="btn-credits">CREDITS</button>
+    <div id="menu-foot">A short interactive story. Playtime 10&ndash;20 minutes.</div>
+  </div>
+</div>
+
+<!-- ============ CONTROLS ============ -->
+<div id="controls-screen" class="screen hidden clickback">
+  <div class="screen-inner small">
+    <div class="sub-title">CONTROLS</div>
+    <div class="ctl"><b>WASD / ARROWS</b><span>MOVE</span></div>
+    <div class="ctl"><b>F</b><span>FLASHLIGHT</span></div>
+    <div class="ctl"><b>E</b><span>INTERACT</span></div>
+    <div class="ctl"><b>ESC</b><span>MENU</span></div>
+    <div class="ctl"><b>M</b><span>MUTE SOUND</span></div>
+    <div class="click-here">CLICK TO RETURN</div>
+  </div>
+</div>
+
+<!-- ============ CREDITS ============ -->
+<div id="credits-screen" class="screen hidden clickback">
+  <div class="screen-inner small">
+    <div class="sub-title">CREDITS</div>
+    <p>THE LONE PATH</p>
+    <p>a small interactive story about silence,<br>light, and what stands inside it.</p>
+    <p>Art, world and sound are generated in code &mdash;<br>no external assets, no engines.</p>
+    <p class="dim">Made with HTML5 Canvas.</p>
+    <div class="click-here">CLICK TO RETURN</div>
+  </div>
+</div>
+
+<!-- ============ PAUSE ============ -->
+<div id="pause-screen" class="screen hidden">
+  <div class="screen-inner small">
+    <div class="sub-title">PAUSED</div>
+    <button class="mbtn" id="btn-resume">RESUME</button>
+    <button class="mbtn" id="btn-pcontrols">CONTROLS</button>
+    <button class="mbtn" id="btn-restart">RESTART</button>
+    <button class="mbtn" id="btn-tomenu">MAIN MENU</button>
+  </div>
+</div>
+
+<!-- ============ END ============ -->
+<div id="end-screen" class="screen hidden">
+  <div class="screen-inner small">
+    <div id="end-title">THE&nbsp;LONE&nbsp;PATH</div>
+    <div id="end-sub">THE END</div>
+    <div id="end-notes">5 / 5 NOTES FOUND</div>
+    <div id="end-btns">
+      <button class="mbtn" id="btn-again">PLAY AGAIN</button>
+      <button class="mbtn" id="btn-endmenu">MAIN MENU</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/utils.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/assets.js"></script>
+<script src="js/world.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

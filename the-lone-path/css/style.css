@@ -1,0 +1,271 @@
+/* ============================================================
+   THE LONE PATH — dark cinematic minimal UI
+   ============================================================ */
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root{
+  --void:#0B0D0D;
+  --green0:#111A16;
+  --green1:#1B2921;
+  --gray1:#626965;
+  --gray2:#A7ACA8;
+  --lamp:#D7D0B7;
+}
+
+html,body{
+  width:100%; height:100%;
+  background:var(--void);
+  overflow:hidden;
+  font-family:"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
+  color:var(--gray2);
+  -webkit-font-smoothing:antialiased;
+  user-select:none;
+  cursor:default;
+}
+
+canvas#scene{
+  position:fixed; inset:0;
+  width:100vw; height:100vh;
+  display:block;
+  background:#000;
+}
+
+.hidden{ display:none !important; }
+
+/* ================= HUD ================= */
+#hud{
+  position:fixed; inset:0;
+  pointer-events:none;
+  z-index:20;
+}
+#notes-box{
+  position:absolute; top:26px; left:32px;
+  opacity:.85;
+}
+#notes-label{
+  font-size:11px; letter-spacing:.42em; color:var(--gray1);
+  margin-bottom:4px;
+}
+#notes-count{
+  font-size:20px; font-weight:200; letter-spacing:.30em; color:var(--gray2);
+}
+#notes-count.pop{ animation:notepop 1.6s ease; }
+@keyframes notepop{
+  0%{ color:var(--lamp); } 100%{ color:var(--gray2); }
+}
+
+#compass-wrap{
+  position:absolute; top:20px; right:28px;
+  width:96px; text-align:center;
+  opacity:.8;
+}
+#compass{ width:96px; height:96px; display:block; }
+#compass-label{
+  margin-top:2px;
+  font-size:9px; letter-spacing:.32em; color:var(--gray1);
+  text-transform:uppercase;
+}
+
+/* interaction prompt */
+#prompt{
+  position:fixed; left:50%; bottom:64px;
+  transform:translateX(-50%);
+  z-index:30;
+  font-size:13px; letter-spacing:.34em;
+  color:var(--gray2);
+  opacity:0;
+  transition:opacity .35s ease;
+  pointer-events:none;
+  text-shadow:0 0 14px rgba(0,0,0,.9);
+}
+#prompt.vis{ opacity:.92; }
+#prompt .key{
+  display:inline-block;
+  border:1px solid rgba(167,172,168,.45);
+  padding:2px 8px 3px; margin-right:12px;
+  font-size:11px; border-radius:2px;
+  color:var(--lamp);
+  background:rgba(11,13,13,.5);
+}
+
+/* toast / objective */
+#toast{
+  position:fixed; left:50%; top:16%;
+  transform:translateX(-50%);
+  z-index:40;
+  font-size:13px; font-weight:300; letter-spacing:.30em;
+  color:var(--gray2);
+  text-shadow:0 0 18px rgba(0,0,0,.95);
+  opacity:0;
+  transition:opacity .9s ease;
+  pointer-events:none;
+  white-space:nowrap;
+  text-align:center;
+}
+#toast.vis{ opacity:.9; }
+
+/* ================= NOTE PANEL ================= */
+#note-modal{
+  position:fixed; inset:0; z-index:60;
+  background:rgba(3,4,4,.55);
+  display:flex; align-items:center; justify-content:center;
+  backdrop-filter:blur(2px);
+  animation:fadein .5s ease;
+}
+@keyframes fadein{ from{opacity:0} to{opacity:1} }
+#note-panel{
+  width:min(560px, 88vw);
+  background:rgba(10,12,12,.92);
+  border:1px solid rgba(167,172,168,.14);
+  box-shadow:0 30px 80px rgba(0,0,0,.8), 0 0 60px rgba(215,208,183,.03);
+  padding:44px 46px 36px;
+  text-align:center;
+}
+#note-title{
+  font-size:12px; letter-spacing:.5em; color:var(--lamp);
+  opacity:.9; margin-bottom:26px;
+}
+#note-body{
+  font-size:15.5px; font-weight:300; line-height:1.95;
+  color:#c8ccc9; letter-spacing:.045em;
+  text-align:left;
+  min-height:110px;
+}
+#note-body .torn{ color:#5d635f; }
+#note-close{
+  margin-top:32px;
+  background:none; border:1px solid rgba(167,172,168,.3);
+  color:var(--gray2);
+  font-size:10.5px; letter-spacing:.42em;
+  padding:10px 26px 11px;
+  cursor:pointer;
+  transition:all .3s ease;
+  font-family:inherit;
+}
+#note-close:hover{ border-color:var(--lamp); color:var(--lamp); background:rgba(215,208,183,.05); }
+
+/* ================= BLACK FADE ================= */
+#fade{
+  position:fixed; inset:0; z-index:80;
+  background:#000; opacity:0; pointer-events:none;
+  transition:opacity .8s ease;
+}
+
+/* ================= BIG TEXT (intro / finale) ================= */
+#bigtext{
+  position:fixed; inset:0; z-index:90;
+  background:#000;
+  display:flex; align-items:center; justify-content:center;
+  text-align:center;
+}
+#bigtext-inner{
+  font-size:clamp(15px, 2.2vw, 22px);
+  font-weight:200; letter-spacing:.26em; line-height:2.1;
+  color:#9ba09d;
+  opacity:0;
+  transition:opacity 1.4s ease;
+  padding:0 8vw;
+}
+#bigtext-inner.vis{ opacity:.95; }
+#bigtext-inner.warn{ color:var(--gray2); text-shadow:0 0 30px rgba(215,208,183,.25); }
+
+/* ================= SCREENS (menu etc) ================= */
+.screen{
+  position:fixed; inset:0; z-index:100;
+  background:#000;
+  display:flex; align-items:center; justify-content:center;
+  animation:fadein 1.2s ease;
+}
+#menu-bg{ position:absolute; inset:0; width:100%; height:100%; }
+.screen-inner{
+  position:relative; z-index:2;
+  text-align:center;
+  padding:24px;
+}
+#game-title{
+  font-size:clamp(34px, 6vw, 64px);
+  font-weight:100; letter-spacing:.44em; text-indent:.44em;
+  color:#dfe3e0;
+  text-shadow:0 0 60px rgba(0,0,0,.9), 0 0 22px rgba(215,208,183,.08);
+  margin-bottom:14px;
+}
+#game-slogan{
+  font-size:clamp(9px, 1.3vw, 12px);
+  letter-spacing:.55em; text-indent:.55em;
+  color:#6e7571;
+  margin-bottom:52px;
+}
+.mbtn{
+  display:block;
+  margin:14px auto 0;
+  min-width:220px;
+  background:none;
+  border:none;
+  color:#9ba09d;
+  font-family:inherit;
+  font-size:12px; font-weight:300; letter-spacing:.44em; text-indent:.44em;
+  padding:13px 10px;
+  cursor:pointer;
+  transition:all .35s ease;
+  position:relative;
+}
+.mbtn:hover{ color:var(--lamp); letter-spacing:.52em; text-indent:.52em; }
+.mbtn::before,.mbtn::after{
+  content:""; position:absolute; top:50%; width:26px; height:1px;
+  background:rgba(167,172,168,.25);
+  transition:all .35s ease;
+}
+.mbtn::before{ left:calc(50% - 130px); }
+.mbtn::after{ right:calc(50% - 130px); }
+.mbtn:hover::before,.mbtn:hover::after{ background:rgba(215,208,183,.5); }
+#menu-foot{
+  margin-top:48px;
+  font-size:10px; letter-spacing:.3em; color:#454c48;
+}
+#menu-foot.complete{ color:var(--lamp); opacity:.7; }
+
+.sub-title{
+  font-size:13px; letter-spacing:.6em; text-indent:.6em;
+  color:var(--lamp); opacity:.85;
+  margin-bottom:40px;
+}
+.screen-inner.small p{
+  font-size:13px; font-weight:300; letter-spacing:.14em; line-height:2;
+  color:#8d938f;
+}
+.screen-inner.small .dim{ color:#565c58; }
+.ctl{ margin:16px 0; }
+.ctl b{
+  display:block; font-size:14px; font-weight:400;
+  letter-spacing:.34em; text-indent:.34em; color:#cdd1ce;
+  margin-bottom:3px;
+}
+.ctl span{ font-size:10px; letter-spacing:.42em; text-indent:.42em; color:#5f6661; }
+.click-here{
+  margin-top:46px;
+  font-size:9.5px; letter-spacing:.44em; text-indent:.44em; color:#4c534e;
+  animation:breathe 3.2s ease infinite;
+}
+@keyframes breathe{ 0%,100%{opacity:.45} 50%{opacity:.95} }
+
+/* ================= END SCREEN ================= */
+#end-title{
+  font-size:clamp(22px,3.4vw,34px); font-weight:100;
+  letter-spacing:.5em; text-indent:.5em; color:#dfe3e0;
+  margin-bottom:26px;
+}
+#end-sub{
+  font-size:13px; letter-spacing:.6em; text-indent:.6em;
+  color:var(--lamp); opacity:.8; margin-bottom:34px;
+}
+#end-notes{
+  font-size:11px; letter-spacing:.4em; text-indent:.4em; color:#6e7571;
+}
+#end-btns{ opacity:0; transition:opacity 1.6s ease; margin-top:10px; }
+#end-btns.vis{ opacity:1; }
+
+@media (max-width:640px){
+  #notes-box{ top:14px; left:16px; }
+  #compass-wrap{ top:10px; right:12px; transform:scale(.8); transform-origin:top right; }
+  #note-panel{ padding:30px 24px 26px; }
+}
