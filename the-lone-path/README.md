@@ -45,6 +45,14 @@ Then press **START** in the menu.
 | `Esc` | menu, or close the note panel |
 | `M` | mute |
 
+**Look control** (pick it on the CONTROLS screen — the choice is remembered):
+
+- **with movement** — the eyes and the lantern swing the way you walk;
+- **with mouse** — the player looks at the cursor, movement still runs on WASD.
+
+A tiny reticle always marks where you look: at the cursor in mouse mode,
+a point ahead of the player in movement mode. It brightens near what you can touch.
+
 ## The five mechanics (and nothing else)
 
 1. **Movement** — smooth free walking on one small map.

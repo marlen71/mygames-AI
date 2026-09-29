@@ -9,6 +9,7 @@
   var I = T.I18N;
   var game = {};
   T.game = game;
+  game.setAimMode = setAimMode;
 
   /* ---------- DOM ---------- */
   var $ = function (id) { return document.getElementById(id); };
@@ -29,6 +30,27 @@
   /* ---------- buffers ---------- */
   var light = T.canvas(2, 2), lctx = light.getContext('2d');
   var CW = 0, CH = 0, DPR = 1, zoom = 1;
+
+  /* the tiny reticle: shows where the mouse is, or where the player looks */
+  function updateXhair() {
+    var el = $('xhair');
+    if (!el) return;
+    if (S.mode !== 'play') { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    var x, y;
+    if (S.aimMode === 'mouse') {
+      x = (S.mx * 0.5 + 0.5) * CW;
+      y = (S.my * 0.5 + 0.5) * CH;
+    } else {
+      var zz = S.world === 'in' ? zoom * 1.22 : zoom;
+      x = CW / 2 + (player.x + Math.cos(player.fa) * 118 - cam.x) * zz;
+      y = CH / 2 + (player.y + Math.sin(player.fa) * 118 - cam.y) * zz;
+    }
+    el.style.left = Math.round(x) + 'px';
+    el.style.top = Math.round(y) + 'px';
+    var tgt = S.interactTarget;
+    el.classList.toggle('hot', !!(tgt && tgt.kind !== 'examine'));
+  }
 
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 1.75);
@@ -90,6 +112,7 @@
     finalDrive: false, driveDark: 0, shake: 0, sparks: [], ratIdx: 0,
     figA: 0, figTarget: 0, flick: 0,
     mx: 0, my: 0, emx: 0, emy: 0,
+    aimMode: 'keys',
     rain: [],
     promptHide: -1, interactTarget: null,
     hints: null, introStep: -1,
@@ -164,6 +187,19 @@
     [menuEl, $('controls-screen'), $('credits-screen'), $('pause-screen'), $('end-screen')].forEach(hide);
   }
   function showScreen(el) { show(el); }
+
+  function setAimMode(m, silent) {
+    S.aimMode = m === 'mouse' ? 'mouse' : 'keys';
+    try { localStorage.setItem('tlp_aim', S.aimMode); } catch (e) {}
+    document.body.classList.toggle('aim-mouse', S.aimMode === 'mouse');
+    var ak = $('aim-keys'), am = $('aim-mouse');
+    if (ak) ak.classList.toggle('active', S.aimMode === 'keys');
+    if (am) am.classList.toggle('active', S.aimMode === 'mouse');
+    if (!silent) {
+      TLP.Audio.ui(false);
+      showToast(I.t(S.aimMode === 'mouse' ? 'aimset_mouse' : 'aimset_keys'));
+    }
+  }
 
   function gotoMenu() {
     hideScreenAll();
@@ -734,7 +770,19 @@
     player.moving = len > 0 && Math.hypot(player.vx, player.vy) > 12;
     if (player.moving) {
       player.walk = (player.walk + dt * (S.world === 'in' ? 2.4 : 2.6)) % 1;
-      player.fa = T.angleLerp(player.fa, Math.atan2(ay, ax), 1 - Math.pow(0.000001, dt));
+      if (S.aimMode === 'keys') {
+        /* keys mode: the eyes and the lantern follow the stride */
+        player.fa = T.angleLerp(player.fa, Math.atan2(ay, ax), 1 - Math.pow(0.000001, dt));
+      }
+    }
+    if (S.aimMode === 'mouse') {
+      /* mouse mode: the player looks at the cursor; movement still runs on keys */
+      var zz = S.world === 'in' ? zoom * 1.22 : zoom;
+      var ax2 = S.mx * CW * 0.5 - (player.x - cam.x) * zz;
+      var ay2 = S.my * CH * 0.5 - (player.y - cam.y) * zz;
+      if (ax2 * ax2 + ay2 * ay2 > 900) {
+        player.fa = T.angleLerp(player.fa, Math.atan2(ay2, ax2), 1 - Math.pow(0.00002, dt));
+      }
     }
 
     if (wantToggleFlash) {
@@ -1090,7 +1138,7 @@
       lctx.rotate(player.fa);
       lctx.globalAlpha = 1 * (S.flick ? flickN : 1);
       var cs = coneLen / 320;
-      lctx.drawImage(T.Assets.cone.canvas, 0, -320 * cs, 320 * cs, 640 * cs);
+      lctx.drawImage(T.Assets.cone.canvas, -320 * cs, -320 * cs, 640 * cs, 640 * cs);
       lctx.restore();
     }
 
@@ -1105,7 +1153,7 @@
       lctx.globalAlpha = S.flick ? 0.35 + 0.65 * flickN : 0.95;
       var clen = 470 * zI * (0.94 + 0.06 * Math.sin(t * 3.3));
       var csc = clen / 320;
-      lctx.drawImage(T.Assets.cone.canvas, 0, -320 * csc, 320 * csc, 640 * csc);
+      lctx.drawImage(T.Assets.cone.canvas, -320 * csc, -320 * csc, 640 * csc, 640 * csc);
       lctx.restore();
       var hr = 84 * zI;
       var hc = scr(cH.x, cH.y);
@@ -1141,7 +1189,7 @@
       ctx.rotate(player.fa);
       var bs = (300 * zI) / 320 * (S.flick ? flickN : 1);
       ctx.globalAlpha = 0.62 * (S.flick ? flickN : 1);
-      ctx.drawImage(T.Assets.beam.canvas, 0, -320 * bs, 320 * bs, 640 * bs);
+      ctx.drawImage(T.Assets.beam.canvas, -320 * bs, -320 * bs, 640 * bs, 640 * bs);
       ctx.restore();
     }
     for (var fj = 0; fj < w.fires.length; fj++) {
@@ -1371,6 +1419,7 @@
     if (S.mode === 'play' || S.mode === 'note' || S.mode === 'pause' || S.mode === 'final') {
       if (S.mode !== 'final') S.darkness = T.smooth(S.darkness, S.targetDark, dt, 0.05);
       renderScene(t);
+      updateXhair();
       drawCompass();
     } else if (S.mode === 'intro') {
       renderScene(t);
@@ -1424,6 +1473,11 @@
   }
 
   /* ---------- language flags ---------- */
+  function bindAim() {
+    var ak = $('aim-keys'), am = $('aim-mouse');
+    if (ak) ak.addEventListener('click', function (ev) { ev.stopPropagation(); setAimMode('keys'); });
+    if (am) am.addEventListener('click', function (ev) { ev.stopPropagation(); setAimMode('mouse'); });
+  }
   function bindFlags(scope) {
     var fl = scope.querySelectorAll('.flag');
     for (var i = 0; i < fl.length; i++) {
@@ -1466,7 +1520,10 @@
     buildGrid(WS.int);
     bindFlags(menuEl);
     bindFlags($('pause-screen'));
+    bindAim();
     I.load();
+    var __am = null; try { __am = localStorage.getItem('tlp_aim'); } catch (e) {}
+    if (__am === 'mouse') setAimMode('mouse', true);
     updateMenuFoot();
     requestAnimationFrame(loop);
   }

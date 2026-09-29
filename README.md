@@ -11,6 +11,7 @@ Short atmospheric top-down mystery in five chapters: wake up in a dark forest, f
 (camp, house, quarry, radio tower, foggy lake), search the house interior, recover three parts
 of an old car and drive away from the place. Strict chapter-gated progression, painterly
 procedural art, dark-cinematic lighting with a lantern cone that starts in the player's hand.
+Look aiming is a choice: the lantern follows your steps or the mouse cursor, with a small reticle in both modes.
 Fully localized (EN/RU/UK via clickable flags). Pure HTML5 Canvas + JS, zero dependencies,
 runs from a single folder — even from `file://`.
 
