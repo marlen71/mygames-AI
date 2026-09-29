@@ -19,6 +19,14 @@ en: {
   aim_mouse_t: 'WITH MOUSE', aim_mouse_d: 'look at the cursor \u00b7 move on WASD',
   aimset_mouse: 'THE LANTERN NOW FOLLOWS THE CURSOR',
   aimset_keys: 'THE LANTERN FOLLOWS YOUR STEPS AGAIN',
+  ep_pick: 'CHOOSE YOUR PART',
+  ep1_t: 'PART I \u00b7 THE LONE PATH', ep1_d: 'the crash, the camp, five notes and one car',
+  ep_ready: 'READY', ep_soon: 'SOON',
+  ep_locked: 'THE NEXT PART IS STILL BEING WRITTEN IN THE FOREST',
+  cr_creator_t: 'GAME CREATOR', cr_creator_v: 'MARLEN',
+  cr_writer_t: 'SCREENWRITER', cr_designer_t: 'GAME DESIGNER',
+  cr_agent_t: 'GAME CREATION', cr_agent_v: 'AGENTS CLAUDE & CHATGPT',
+  end_thanks: 'Thank you for playing this game \u2014 expect the next part.',
   cr_l1: 'THE LONE PATH', cr_l2: 'a small interactive story about silence,', cr_l2b: 'light, and what stands inside it.',
   cr_l3: 'Art, world and sound are generated in code \u2014', cr_l3b: 'no external assets, no engines.', cr_l4: 'Made with HTML5 Canvas.',
   intro: ['I don\u2019t remember coming here.', 'But I remember the forest.', 'Find out what happened.'],
@@ -119,6 +127,14 @@ ru: {
   aim_mouse_t: 'ЗА КУРСОРОМ', aim_mouse_d: 'взгляд за мышью \u00b7 движение на WASD',
   aimset_mouse: 'ФОНАРЬ ТЕПЕРЬ СЛЕДУЕТ ЗА КУРСОРОМ',
   aimset_keys: 'ФОНАРЬ СНОВА СЛЕДУЕТ ЗА ШАГАМИ',
+  ep_pick: 'ВЫБЕРИТЕ ЧАСТЬ',
+  ep1_t: 'ЧАСТЬ I \u00b7 ОДИНОКИЙ ПУТЬ', ep1_d: 'авария, лагерь, пять записок и одна машина',
+  ep_ready: 'ДОСТУПНО', ep_soon: 'СКОРО',
+  ep_locked: 'СЛЕДУЮЩАЯ ЧАСТЬ ЕЩЁ ПИШЕТСЯ В ЛЕСУ',
+  cr_creator_t: 'СОЗДАТЕЛЬ ИГРЫ', cr_creator_v: 'МАРЛЕН',
+  cr_writer_t: 'СЦЕНАРИСТ', cr_designer_t: 'ГЕЙМДИЗАЙНЕР',
+  cr_agent_t: 'ГЕЙМКРЕАТОР', cr_agent_v: 'АГЕНТЫ CLAUDE & CHATGPT',
+  end_thanks: 'Спасибо, что поиграли в эту игру, \u2014 ожидайте следующую часть.',
   cr_l1: 'THE LONE PATH', cr_l2: 'маленькая интерактивная история о тишине,', cr_l2b: 'свете и о том, что стоит внутри него.',
   cr_l3: 'Графика, мир и звук генерируются кодом \u2014', cr_l3b: 'без файлов ассетов и без движков.', cr_l4: 'Сделано на HTML5 Canvas.',
   intro: ['Я не помню, как здесь оказался.', 'Но этот лес я помню.', 'Узнай, что тут случилось.'],
@@ -219,6 +235,14 @@ uk: {
   aim_mouse_t: 'ЗА КУРСОРОМ', aim_mouse_d: 'погляд за мишею \u00b7 рух на WASD',
   aimset_mouse: 'ЛІХТАР ТЕПЕР ЙДЕ ЗА КУРСОРОМ',
   aimset_keys: 'ЛІХТАР ЗНОВУ ЙДЕ ЗА КРОКАМИ',
+  ep_pick: 'ОБЕРІТЬ ЧАСТИНУ',
+  ep1_t: 'ЧАСТИНА I \u00b7 ОДИНАКИЙ ШЛЯХ', ep1_d: 'аварія, табір, п\'ять нотаток та одна машина',
+  ep_ready: 'ДОСТУПНО', ep_soon: 'СКОРО',
+  ep_locked: 'НАСТУПНА ЧАСТИНА ЩЕ ПИШЕТЬСЯ У ЛІСІ',
+  cr_creator_t: 'СТВОРЮВАЧ ГРИ', cr_creator_v: 'МАРЛЕН',
+  cr_writer_t: 'СЦЕНАРИСТ', cr_designer_t: 'ГЕЙМДИЗАЙНЕР',
+  cr_agent_t: 'ГЕЙМКРЕАТОР', cr_agent_v: 'АГЕНТИ CLAUDE & CHATGPT',
+  end_thanks: 'Дякуємо, що пограли в цю гру, \u2014 очікуйте наступну частину.',
   cr_l1: 'THE LONE PATH', cr_l2: 'маленька інтерактивна історія про тишу,', cr_l2b: 'світло і про те, що стоїть у ньому.',
   cr_l3: 'Графіка, світ і звук генеруються кодом \u2014', cr_l3b: 'без файлів і без рушіїв.', cr_l4: 'Зроблено на HTML5 Canvas.',
   intro: ['Я не пам\u2019ятаю, як опинився тут.', 'Але цей ліс я пам\u2019ятаю.', 'Дізнайся, що тут сталося.'],
@@ -352,7 +376,12 @@ uk: {
     document.documentElement.lang = I.lang;
     if (I.onLang) I.onLang();
   };
-  I.noteTitle = function (idx) { return I.t('note_word') + ' 0' + (idx + 1); };
+  /* the notes live in the world in file order, but the story collects them
+     in its own order: camp, the journal in the house, the quarry, the radio,
+     the lake. Number the pages the way the player actually finds them. */
+  var NOTE_NUM = [1, 3, 2, 4, 5];
+  I.noteNum = function (idx) { return NOTE_NUM[idx] || (idx + 1); };
+  I.noteTitle = function (idx) { return I.t('note_word') + ' 0' + I.noteNum(idx); };
   T.I18N = I;
   T.t = function (k) { return I.t(k); };
 })(window.TLP);

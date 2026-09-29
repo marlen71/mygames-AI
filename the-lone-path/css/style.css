@@ -387,3 +387,45 @@ body.aim-mouse .screen, body.aim-mouse #prompt, body.aim-mouse #topbar{ cursor:d
 .aim-opt.active{ border-color:rgba(233,196,106,.45); background:rgba(233,196,106,.05); }
 .aim-opt.active .dmd{ border-color:var(--lamp); background:var(--lamp); }
 .aim-opt.active b{ color:var(--paper); }
+
+/* ============ PART (EPISODE) PICKER ============ */
+#ep-list{ margin-top:26px; display:flex; flex-direction:column; gap:10px; }
+.ep{
+  display:flex; align-items:center; gap:16px;
+  padding:13px 16px; cursor:pointer;
+  border:1px solid var(--line); background:rgba(9,11,14,.55);
+  transition:border-color .3s ease, background .3s ease, transform .3s ease;
+}
+.ep .ep-no{
+  flex:0 0 auto; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+  border:1px solid rgba(233,196,106,.35); color:var(--lamp);
+  font-size:13px; letter-spacing:.08em;
+}
+.ep .ep-mid{ flex:1 1 auto; display:flex; flex-direction:column; gap:4px; }
+.ep .ep-mid b{ font-weight:400; font-size:13px; letter-spacing:.24em; color:#cdd1ce; }
+.ep .ep-mid span{ font-size:10px; letter-spacing:.14em; color:#5f6661; }
+.ep .ep-tag{
+  flex:0 0 auto; font-size:9.5px; letter-spacing:.34em; text-indent:.34em; color:#8b928c;
+  border:1px solid rgba(233,196,106,.3); padding:5px 9px 4px; white-space:nowrap;
+}
+.ep.open:hover{ border-color:rgba(233,196,106,.5); background:rgba(233,196,106,.05); }
+.ep.lock, .ep.lock .ep-no{ pointer-events:auto; }
+.ep.lock{ cursor:default; opacity:.5; }
+.ep.lock .ep-no{ border-color:#3c433e; color:#5f6661; }
+.ep.lock .ep-tag{ border-color:#3c433e; color:#4c534e; }
+.ep-dash{ width:74px; height:1px; background:#3c433e; }
+.plock{ position:relative; width:9px; height:8px; background:#4c534e; border-radius:1.5px; display:inline-block; margin-bottom:-2px; }
+.plock::before{
+  content:''; position:absolute; left:50%; top:-6px; transform:translateX(-50%);
+  width:6px; height:6px; border:1.6px solid #4c534e; border-bottom:none; border-radius:4px 4px 0 0;
+}
+/* ============ CREDITS BLOCKS ============ */
+#end-credits, #cr-authors{ margin-top:26px; display:flex; flex-direction:column; gap:9px; }
+.ec-row{ display:flex; justify-content:space-between; gap:26px; align-items:baseline; }
+.ec-row span{ font-size:9.5px; letter-spacing:.34em; color:#5f6661; white-space:nowrap; }
+.ec-row b{ font-weight:400; font-size:12px; letter-spacing:.26em; color:#cdd1ce; text-align:right; }
+#end-thanks{
+  margin-top:20px; font-size:10.5px; letter-spacing:.18em; color:#8b928c;
+}
+#end-credits, #end-thanks{ opacity:0; transition:opacity 1.6s ease; }
+#end-credits.vis, #end-thanks.vis{ opacity:1; }

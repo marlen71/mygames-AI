@@ -110,7 +110,7 @@
     parts: 0, partsMask: 0, carHinted: false,
     gates: { house: false, quarry: false, radio: false, lake: false },
     finalDrive: false, driveDark: 0, shake: 0, sparks: [], ratIdx: 0,
-    figA: 0, figTarget: 0, flick: 0,
+    figA: 0, figTarget: 0, figX: 402, figY: 1250, flick: 0,
     mx: 0, my: 0, emx: 0, emy: 0,
     aimMode: 'keys',
     rain: [],
@@ -184,7 +184,7 @@
 
   /* ---------- screens ---------- */
   function hideScreenAll() {
-    [menuEl, $('controls-screen'), $('credits-screen'), $('pause-screen'), $('end-screen')].forEach(hide);
+    [menuEl, $('ep-screen'), $('controls-screen'), $('credits-screen'), $('pause-screen'), $('end-screen')].forEach(hide);
   }
   function showScreen(el) { show(el); }
 
@@ -385,7 +385,7 @@
         for (var q = 0; q < w.notes.length; q++) {
           var nq = w.notes[q];
           if (nq.idx === ni && !nq.taken)
-            wants.push({ x: nq.x, y: nq.y, k: null, label: I.t('note_word') + ' 0' + (ni + 1) });
+            wants.push({ x: nq.x, y: nq.y, k: null, label: I.noteTitle(ni) });
         }
       }
       if (ch >= 2 && ((S.partsMask >> (ch - 2)) & 1) === 0) {
@@ -412,7 +412,7 @@
       var d3 = T.dist2(player.x, player.y, nt2.x, nt2.y);
       if (d3 < bd2) { bd2 = d3; best2 = nt2; }
     }
-    if (best2) return { x: best2.x, y: best2.y, k: null, label: I.t('note_word') + ' 0' + (best2.idx + 1) };
+    if (best2) return { x: best2.x, y: best2.y, k: null, label: I.noteTitle(best2.idx) };
     return null;
   }
   function objectiveLabelFor(o) { return o ? (o.label || I.t(o.k)) : ''; }
@@ -879,7 +879,7 @@
   function updateFinal(dt) {
     S.finalT += dt;
     var ft = S.finalT, c = WS.out.carObj;
-    S.targetDark = T.clamp(0.94 + Math.min(ft, 8) * 0.008, 0.94, 0.99);
+    S.targetDark = S.finalDrive ? T.clamp(0.955 + (ft - 2.6) * 0.02, 0.94, 0.992) : T.clamp(0.94 + Math.min(ft, 8) * 0.008, 0.94, 0.99);
     if (ft > 0.9 && !S._f1) { S._f1 = true; WS.out.fires[1].lit = true; }
     if (ft > 1.9 && !S._f2) { S._f2 = true; WS.out.fires[0].lit = true; }
 
@@ -913,7 +913,7 @@
 
     if (S.finalDrive) {
       /* B: the drive. C: whoever is standing in it. */
-      var vt = Math.min(430, 40 + (ft - 2.6) * 190);
+      var vt = Math.min(340, 40 + (ft - 2.6) * 150);
       TLP.Audio.engine(true, T.clamp((vt - 40) / 390, 0.2, 1));
       var rem = vt * dt;
       while (rem > 0.001 && c.segI < CAR_PATH.length - 1) {
@@ -928,14 +928,16 @@
       player.x = c.x; player.y = c.y;
       cam.x = T.smooth(cam.x, c.x + Math.cos(c.rot) * 92, dt, 0.07);
       cam.y = T.smooth(cam.y, c.y + Math.sin(c.rot) * 92 - 14, dt, 0.07);
-      if (!S._fig && c.x < 540) {
+      if (!S._fig && ft > 5.6) {
+        /* three seconds after the roll starts, he is standing in the road */
         S._fig = true;
+        S.figX = c.x - 240; S.figY = c.y + 60;
         S.figTarget = 1;
-        S.figA = 0.85;              /* no gentle fade-in — it just IS there */
+        S.figA = 0.9;               /* no gentle fade-in — he just IS there */
         TLP.Audio.sting();
         TLP.Audio.heartbeat();
       }
-      if (S._fig && !S._figPass && c.x < 306) S._figPass = true;
+      if (S._fig && !S._figPass && c.x < S.figX + 10) { S._figPass = true; TLP.Audio.sting(); }
       if (S._figPass) S.figTarget = 0;
       if (c.segI >= CAR_PATH.length - 1 && !S._gone) {
         S._gone = true;
@@ -959,16 +961,16 @@
     if (ft > 6.9) S.darkness = T.smooth(S.darkness, 1, dt, 0.045);
     else S.darkness = T.smooth(S.darkness, S.targetDark, dt, 0.05);
 
-    if (ft > 7.3) { black(true); hide(hud); }
-    if (ft > 8.1 && !S._t1) {
+    if (ft > 7.9) { black(true); hide(hud); }
+    if (ft > 8.9 && !S._t1) {
       S._t1 = true;
       show(bigtext);
       bigtextInner.textContent = I.t('never_alone');
       bigtextInner.classList.add('warn');
       setTimeout(function () { bigtextInner.classList.add('vis'); }, 150);
     }
-    if (ft > 13.4 && S._t1) { bigtextInner.classList.remove('vis'); }
-    if (ft > 14.9 && S._t1 && !S._t2) {
+    if (ft > 13.9 && S._t1) { bigtextInner.classList.remove('vis'); }
+    if (ft > 15.5 && S._t1 && !S._t2) {
       S._t2 = true;
       setTimeout(function () {
         bigtextInner.textContent = I.t('car_drive');
@@ -976,7 +978,7 @@
         bigtextInner.classList.add('vis');
       }, 400);
     }
-    if (ft > 18.6 && S._t2 && !S._t3) {
+    if (ft > 19.2 && S._t2 && !S._t3) {
       S._t3 = true;
       bigtextInner.classList.remove('vis');
       setTimeout(function () {
@@ -986,7 +988,13 @@
         showScreen($('end-screen'));
         try { localStorage.setItem('tlp_done', '1'); } catch (e) { }
         I.applyDom();
-        setTimeout(function () { endBtns.classList.add('vis'); }, 2200);
+        $('end-credits').classList.remove('vis');
+        $('end-thanks').classList.remove('vis');
+        setTimeout(function () {
+          $('end-credits').classList.add('vis');
+          $('end-thanks').classList.add('vis');
+        }, 1400);
+        setTimeout(function () { endBtns.classList.add('vis'); }, 2600);
         setMode('end');
       }, 1600);
     }
@@ -1083,7 +1091,7 @@
     }
 
     /* the figure: first by the sign tree, then, at the end, on the road */
-    if (S.figA > 0.01 && !inside) T.Assets.figure(ctx, S._fig ? 402 : 722, S._fig ? 1250 : 622, S.figA * 0.94);
+    if (S.figA > 0.01 && !inside) T.Assets.figure(ctx, S._fig ? S.figX : 722, S._fig ? S.figY : 622, S.figA * 0.94);
 
     /* fog in world space (only outdoors) */
     if (!inside) {
@@ -1434,7 +1442,16 @@
   }
 
   /* ---------- UI wiring ---------- */
-  $('btn-start').addEventListener('click', startGame);
+  $('btn-start').addEventListener('click', function () { audioClick(false); showScreen($('ep-screen')); });
+  $('ep-screen').addEventListener('click', function () { audioClick(false); hideScreenAll(); show(menuEl); });
+  $('ep-1').addEventListener('click', function (ev) { ev.stopPropagation(); startGame(); });
+  var lockedEps = $('ep-screen').querySelectorAll('.ep.lock');
+  for (var li = 0; li < lockedEps.length; li++)
+    lockedEps[li].addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      TLP.Audio.ui(false);
+      showToast(I.t('ep_locked'), 2800);
+    });
   $('btn-controls').addEventListener('click', function () { audioClick(false); showScreen($('controls-screen')); S.screenBack = 'menu'; });
   $('btn-credits').addEventListener('click', function () { audioClick(false); showScreen($('credits-screen')); S.screenBack = 'menu'; });
   $('controls-screen').addEventListener('click', function () {

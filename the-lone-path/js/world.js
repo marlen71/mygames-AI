@@ -339,10 +339,36 @@
       return { sealed: true, bars: 5 };
     }
     world.gateReport = {
+      house: gateWall('house', 690, 858, 0.776),
       quarry: gateWall('quarry', 960, 870, 2.214),
+      /* the east road to the car belongs to the quarry chapter as well */
+      car: gateWall('quarry', 1010, 988, 1.571),
       radio: gateWall('radio', 401, 648, 0.0398),
       lake: gateWall('lake', 957, 358, 0.9696)
     };
+
+    /* pines along the escape route: the last drive runs through woods, not void */
+    var DRIVE = [[1040, 1060], [840, 1140], [660, 1170], [470, 1215], [260, 1265], [-60, 1310]];
+    var dr = T.rng(4242);
+    for (var di = 0; di < DRIVE.length - 1; di++) {
+      var pa = DRIVE[di], pb = DRIVE[di + 1];
+      var segL = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
+      var nxx = -(pb[1] - pa[1]) / segL, nyy = (pb[0] - pa[0]) / segL;
+      for (var ki = 0; ki < 3; ki++) {
+        var tt = (ki + 0.5) / 3;
+        var qx = pa[0] + (pb[0] - pa[0]) * tt, qy = pa[1] + (pb[1] - pa[1]) * tt;
+        for (var side = -1; side <= 1; side += 2) {
+          var off = 118 + dr() * 150;
+          var tx = qx + nxx * off * side, ty = qy + nyy * off * side;
+          if (tx < 34 || tx > W - 34 || ty < 34 || ty > H - 34) continue;
+          if (Math.hypot(tx - 556, ty - 995) < 210) continue;      /* the camp keeps its clearing */
+          if (ty < 1010 && tx > 930) continue;                      /* keep the quarry wall free */
+          var ts = 1.05 + dr() * 0.55;
+          world.objs.push(mk(dr() < 0.55 ? 'pine' : 'fir', tx, ty, ts));
+          world.colliders.push({ x: tx, y: ty, r: 9 * ts });
+        }
+      }
+    }
     GATES_OUT = {
       house: { x: 800, y: 774 },
       quarry: { x: 960, y: 870 },

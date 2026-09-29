@@ -53,6 +53,9 @@ Then press **START** in the menu.
 A tiny reticle always marks where you look: at the cursor in mouse mode,
 a point ahead of the player in movement mode. It brightens near what you can touch.
 
+`START` opens the **part picker**: Part I — *The Lone Path* — is ready; parts II–V of the
+planned five‑part story are greyed out with a padlock until they exist.
+
 ## The five mechanics (and nothing else)
 
 1. **Movement** — smooth free walking on one small map.
@@ -84,7 +87,16 @@ The story runs as five soft chapters on a single hand‑made 1600×1600 map plus
 | V | **The Foggy Lake** | the pier, the lamp lit this evening, the last note — and a spare wheel in the mud |
 
 With 5/5 notes and 3/3 parts the compass turns to **the car**: fix it and drive out of the forest.
-Someone will be standing on the road in your headlights — *you were never alone.*
+Three seconds after the car starts rolling, someone will be standing in your headlights —
+*you were never alone.* Then the credits roll.
+
+Two more things the forest does for the story:
+
+- **visible barriers** — every road that is not yours yet is blocked with a pile of fallen
+  logs, a broken fence and faded red tape; the whole barricade rots away the moment you earn
+  the way (the house road and the east road to the car are sealed like the rest);
+- **honest numbering** — the pages number themselves in the order the story collects them:
+  NOTE 01 at the camp, 02 in the house, 03 at the quarry, 04 by the tower, 05 at the lake.
 
 ## Project structure
 
