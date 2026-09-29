@@ -57,6 +57,18 @@ canvas#scene{
 #counters{ display:flex; gap:36px; align-items:flex-start; }
 #notes-box{ opacity:.85; }
 #things-box{ opacity:.9; }
+#parts-box{ opacity:.9; }
+#parts-label{
+  font-size:11px; letter-spacing:.42em; color:var(--gray1);
+  margin-bottom:4px;
+}
+#parts-count{
+  font-size:20px; font-weight:200; letter-spacing:.30em; color:#8fb6bd;
+}
+#parts-count.pop{ animation:partspop 1.6s ease; }
+@keyframes partspop{
+  0%{ color:var(--lamp); } 100%{ color:#8fb6bd; }
+}
 #things-label{
   font-size:11px; letter-spacing:.42em; color:var(--gray1);
   margin-bottom:4px;
@@ -311,6 +323,10 @@ canvas#scene{
 }
 #end-things{
   font-size:11px; letter-spacing:.4em; text-indent:.4em; color:#8a6f43;
+  margin-top:8px;
+}
+#end-parts{
+  font-size:11px; letter-spacing:.4em; text-indent:.4em; color:#7d979c;
   margin-top:8px;
 }
 #end-btns{ margin-top:26px; }

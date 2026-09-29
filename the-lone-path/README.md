@@ -3,8 +3,10 @@
 *Small steps. Big silence.*
 
 A short atmospheric top‑down mystery game for the browser — a small interactive story, not a big RPG.
-You wake up at night in an unknown forest with a lantern and one clear goal: **find 5 old notes**,
-search the old house for what was hidden inside it, and piece together what happened here.
+You wake up at night in an unknown forest with a lantern and one way out: **find 5 old notes**,
+search the old house, recover **three parts of an old car** hidden at the locations, repair it —
+and drive away. The forest lets you pass chapter by chapter: locked doors and fallen trees keep
+the story in its order.
 
 Built with **pure HTML5 Canvas + CSS + JavaScript**. No engine, no npm, no external assets —
 every visual (trees, house, quarry crane, radio tower, lake, fires, player, fog, rain, lighting)
@@ -48,13 +50,18 @@ Then press **START** in the menu.
 1. **Movement** — smooth free walking on one small map.
 2. **Lantern** — a warm cone of light that starts right at the lamp in the player's hand,
    plus a small ambient pool at his feet; no batteries, always works.
-3. **Interaction** — `[E] READ / EXAMINE / TAKE / ENTER` prompts on a handful of objects.
-4. **Notes & things** — 5 collectible pages that tell the story; inside the house you must
-   find 3 items and open the locked cabinet to get the page hidden there.
+3. **Interaction** — `[E] READ / EXAMINE / TAKE / ENTER` prompts on a handful of objects;
+   whatever you can reach right now is marked with a soft pulsing ring, visible even in the dark.
+4. **Notes, things & parts** — 5 collectible pages tell the story; inside the house you must
+   find 3 items and open the locked cabinet for the hidden journal; at the quarry, the tower
+   and the lake you also recover a toolbox, a fuel can and a spare wheel for the car on the
+   quarry rim. Each chapter closes only with its note **and** its part.
 5. **Orientation** — a minimal round compass pointing at the current objective (chapter note,
-   then the house, then the cabinet…), with the chapter and objective written in the HUD.
+   part, the house door, the cabinet, finally the car), with the chapter and objective written
+   in the HUD, and `PARTS n/3` ticking up beside the note counter.
 
-No combat, no enemies, no crafting, no XP, no procedural generation.
+No combat, no enemies, no crafting, no XP, no procedural generation. The progression is scripted:
+every location, door and findable object is guarded by the chapter that earned it.
 
 ## One night, five chapters, five places
 
@@ -63,13 +70,13 @@ The story runs as five soft chapters on a single hand‑made 1600×1600 map plus
 | Chapter | Place | What happens |
 |---|---|---|
 | I | **The Camp** | the first note by the cold fire pit |
-| II | **The House** | enter the cabin; search the room; unlock the cabinet with the iron key; read the hidden journal |
-| III | **The Abandoned Quarry** | the black water pit, the car on the rim, the crane bent over the edge |
-| IV | **The Radio Tower** | a dead station's mast whose red beacon still blinks; a hut with a warm kettle |
-| V | **The Foggy Lake** | the pier, the lamp lit this evening, the last note |
+| II | **The House** | the door opens only after the camp note; search the room; unlock the cabinet with the iron key; read the hidden journal |
+| III | **The Abandoned Quarry** | past the fallen trees: the black water pit, the car on the rim, the crane — and a toolbox near the dock |
+| IV | **The Radio Tower** | a dead station's mast whose red beacon still blinks; a hut, a warm kettle — and a fuel can |
+| V | **The Foggy Lake** | the pier, the lamp lit this evening, the last note — and a spare wheel in the mud |
 
-Collecting the five notes sends you back to the house. What waits there changes the ending —
-*you were never alone.*
+With 5/5 notes and 3/3 parts the compass turns to **the car**: fix it and drive out of the forest.
+Someone will be standing on the road in your headlights — *you were never alone.*
 
 ## Project structure
 
@@ -93,6 +100,7 @@ There is no 3D engine and no lightmaps. One full‑screen darkness layer (a tran
 canvas) has holes punched out of it with `destination-out`: the lantern cone anchored at the
 player's hand, a soft pool at his feet, round holes around every fire, the pier lamp and the
 lit house window. Then a `lighter` pass adds the warm glow of lamps and fires, the blinking red
-beacon of the tower, fireflies, dust drifting through the beam and pale pulses over uncollected
-notes. The interior of the house reuses the exact same pipeline with its own lantern — only the
-map (and the fear) changes.
+beacon of the tower, fireflies, dust drifting through the beam, pale pulses over uncollected
+notes and car parts, and the interaction ring. During the finale the headlights of the old car
+punch a moving cone through the dark. The interior of the house reuses the exact same pipeline
+with its own lantern — only the map (and the fear) changes.

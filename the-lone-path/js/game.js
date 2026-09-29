@@ -15,6 +15,7 @@
   var scene = $('scene'), ctx = scene.getContext('2d');
   var hud = $('hud'), notesCount = $('notes-count'), thingsCount = $('things-count');
   var thingsBox = $('things-box');
+  var partsBox = $('parts-box'), partsCount = $('parts-count');
   var chapterLabel = $('chapter-label'), objectiveLabel = $('objective-label');
   var prompt = $('prompt'), promptLabel = $('prompt-label');
   var toast = $('toast');
@@ -84,6 +85,9 @@
     chapter: -1, chapterToast: null,
     enteredHouse: false, exitHinted: false,
     finalStarted: false, finalT: -1, _t1: false, _t2: false, _t3: false,
+    parts: 0, partsMask: 0, carHinted: false,
+    gates: { house: false, quarry: false, radio: false, lake: false },
+    finalDrive: false, driveDark: 0, shake: 0, sparks: [], ratIdx: 0,
     figA: 0, figTarget: 0, flick: 0,
     mx: 0, my: 0, emx: 0, emy: 0,
     rain: [],
@@ -94,7 +98,7 @@
   };
   game.S = S;
 
-  var player = { x: 800, y: 1195, vx: 0, vy: 0, fa: -Math.PI / 2, walk: 0, moving: false };
+  var player = { x: 800, y: 1195, vx: 0, vy: 0, fa: -Math.PI / 2, walk: 0, moving: false, pose: '', poseT: 0 };
   var cam = { x: 800, y: 1195 };
   var flash = false;
   game.flash = false;
@@ -168,6 +172,7 @@
     hide(noteModal);
     S.panel = null;
     clearTimeout(toastTimer);
+    TLP.Audio.engine(false, 0);
     TLP.Audio.quiet(true);
     setMode('menu');
     black(false);
@@ -230,20 +235,30 @@
     flash = false; game.flash = false;
     S.notes = [false, false, false, false, false];
     S.collected = 0; S.things = 0; S.itemsMask = 0;
+    S.parts = 0; S.partsMask = 0; S.carHinted = false;
+    S.gates = { house: false, quarry: false, radio: false, lake: false };
+    S.finalDrive = false; S.driveDark = 0; S.shake = 0; S.sparks = [];
+    player.pose = ''; player.poseT = 0;
+    var carO = WS.out.carObj;
+    if (carO) { carO.x = 1152; carO.y = 982; carO.rot = -0.45; carO.segI = 0; carO.lighted = false; }
+    TLP.Audio.engine(false, 0);
     S.chapter = -1; S.chapterToast = null;
     S.enteredHouse = false; S.exitHinted = false;
     S.finalStarted = false; S.finalT = -1;
     S.figA = 0; S.figTarget = 0; S.flick = 0;
     S._t1 = S._t2 = S._t3 = false;
+    S._f1 = S._f2 = S._fig = S._figPass = S._gone = false;
     S.letterbox = 0;
     S.darkness = 0.84; S.targetDark = 0.84;
     S.interactTarget = null; S.promptHide = -1;
     S.transitioning = 0;
     hide(prompt); hide(toast); hide(noteModal);
     thingsBox.classList.add('hidden');
+    partsBox.classList.add('hidden');
     S.panel = null;
     clearTimeout(toastTimer);
     WS.out.notes.forEach(function (n) { n.taken = false; });
+    updateGates(true);
     [WS.out, WS.int].forEach(function (w) {
       w.items.forEach(function (it) { it.taken = false; });
       w.fires.forEach(function (f) { if (f.kind !== 'lamp') f.lit = false; });
@@ -256,12 +271,35 @@
     refreshObjective();
   }
 
+  /* ---------- progression: the forest opens in its own order ------------ */
+  var GATE_REQ = { house: 0, quarry: 2, radio: 1, lake: 3 };   /* gate <- note that opens it */
+  var NOTE_REQ = [null, 2, null, 1, 3];                          /* a note may demand an earlier one */
+  var PART_GATE = ['quarry', 'radio', 'lake'];                   /* a part lives behind a gate */
+  var NOTE_GATE = [null, 'quarry', null, 'radio', 'lake'];
+  function noteLocked(i) { var r = NOTE_REQ[i]; return r != null && !S.notes[r]; }
+  function partLocked(id) { return !S.gates[PART_GATE[id]]; }
+  function allDone() { return S.collected >= 5 && S.parts >= 3; }
+  function updateGates(silent) {
+    for (var g in GATE_REQ) {
+      var open = S.notes[GATE_REQ[g]];
+      if (open !== S.gates[g]) {
+        S.gates[g] = open;
+        if (open && !silent && g !== 'house') {
+          showToast(I.t('gate_open'), 3400);
+          TLP.Audio.ui(true);
+        }
+      }
+    }
+  }
+
   /* ---------- chapters ---------- */
   function computeChapter(silent) {
     var CN = T.World.CHAPTER_NOTE;
     var ch = 5;
-    for (var i = 0; i < 5; i++)
-      if (!S.notes[CN[i]]) { ch = i; break; }
+    for (var i = 0; i < 5; i++) {
+      var needPart = i >= 2 && ((S.partsMask >> (i - 2)) & 1) === 0;
+      if (!S.notes[CN[i]] || needPart) { ch = i; break; }
+    }
     if (ch !== S.chapter) {
       var prev = S.chapter;
       S.chapter = ch;
@@ -275,7 +313,7 @@
     var ch = T.clamp(S.chapter < 0 ? 0 : (S.chapter > 4 ? 4 : S.chapter), 0, 4);
     chapterLabel.textContent = I.t('hud_chapter') + ' ' + ['I', 'II', 'III', 'IV', 'V'][ch] + ' \u00B7 ' + I.t('ch')[ch];
     var objTxt;
-    if (S.collected >= 5) objTxt = I.t('ret_cabin');
+    if (allDone()) objTxt = I.t('ret_car');
     else if (S.chapter === 1 && S.world === 'in') objTxt = I.t('obj_search');
     else objTxt = I.t('ch_obj')[ch];
     objectiveLabel.textContent = objTxt;
@@ -301,25 +339,42 @@
       }
       return { x: w.W / 2, y: w.H - 16, k: 'lbl_leave' };
     }
-    if (S.collected >= 5) return { x: 800, y: 700, k: 'lbl_cabin' };
+    if (allDone()) return { x: 1152, y: 968, k: 'lbl_car' };
     if (S.chapter === 1 && !S.notes[2]) return { x: 800, y: 748, k: 'lbl_door_out' };
     var CN = T.World.CHAPTER_NOTE;
-    var idx = S.chapter >= 0 && S.chapter < 5 ? CN[S.chapter] : -1;
-    var best2 = null, bd2 = 1e18;
-    for (var n = 0; n < w.notes.length; n++) {
-      var nt = w.notes[n];
-      if (nt.taken || S.notes[nt.idx]) continue;
-      if (idx >= 0 && nt.idx !== idx) continue;
-      var d2 = T.dist2(player.x, player.y, nt.x, nt.y);
-      if (d2 < bd2) { bd2 = d2; best2 = nt; }
-    }
-    if (!best2) {  /* fallback: any uncollected note */
-      for (var n2 = 0; n2 < w.notes.length; n2++) {
-        var nt2 = w.notes[n2];
-        if (nt2.taken || S.notes[nt2.idx]) continue;
-        var d3 = T.dist2(player.x, player.y, nt2.x, nt2.y);
-        if (d3 < bd2) { bd2 = d3; best2 = nt2; }
+    var ch = S.chapter, wants = [];
+    if (ch >= 0 && ch <= 4) {
+      var ni = CN[ch];
+      if (!S.notes[ni]) {
+        for (var q = 0; q < w.notes.length; q++) {
+          var nq = w.notes[q];
+          if (nq.idx === ni && !nq.taken)
+            wants.push({ x: nq.x, y: nq.y, k: null, label: I.t('note_word') + ' 0' + (ni + 1) });
+        }
       }
+      if (ch >= 2 && ((S.partsMask >> (ch - 2)) & 1) === 0) {
+        for (var qq = 0; qq < w.items.length; qq++) {
+          var iq = w.items[qq];
+          if (iq.part && iq.id === ch - 2 && !iq.taken)
+            wants.push({ x: iq.x, y: iq.y, k: null, label: I.t(iq.label) });
+        }
+      }
+      if (wants.length) {
+        var bw = null, bdw = 1e18;
+        for (var m = 0; m < wants.length; m++) {
+          var dd = T.dist2(player.x, player.y, wants[m].x, wants[m].y);
+          if (dd < bdw) { bdw = dd; bw = wants[m]; }
+        }
+        if (bw) return bw;
+      }
+    }
+    /* fallback: any note the forest is willing to show */
+    var best2 = null, bd2 = 1e18;
+    for (var n2 = 0; n2 < w.notes.length; n2++) {
+      var nt2 = w.notes[n2];
+      if (nt2.taken || S.notes[nt2.idx] || noteLocked(nt2.idx)) continue;
+      var d3 = T.dist2(player.x, player.y, nt2.x, nt2.y);
+      if (d3 < bd2) { bd2 = d3; best2 = nt2; }
     }
     if (best2) return { x: best2.x, y: best2.y, k: null, label: I.t('note_word') + ' 0' + (best2.idx + 1) };
     return null;
@@ -371,6 +426,7 @@
         if (!arr) continue;
         for (var i = 0; i < arr.length; i++) {
           var c = arr[i];
+          if (c.gate && S.gates[c.gate]) continue;
           if (c.rect) {
             var r = c.rect;
             var nx = T.clamp(x, r.x, r.x + r.w), ny = T.clamp(y, r.y, r.y + r.h);
@@ -446,7 +502,7 @@
     if (!best) return null;
     var e2 = best;
     var act = e2.special || 'panel';
-    var label = I.t(e2.label || 'examine');
+    var label = act === 'car' && allDone() ? I.t('act_fix') : I.t(e2.label || 'examine');
     if (act === 'cabinet') {
       var cab = e2.data;
       label = (!cab.open) ? I.t('examine')
@@ -457,8 +513,10 @@
 
   function openPanel(title, lines, src) {
     S.panel = src || null;
+    if (!lines || !lines.length) lines = [''];
     noteTitle.textContent = title;
     noteBody.innerHTML = lines.join('<br>');
+    player.pose = 'read';
     prompt.classList.remove('vis');
     hide(prompt);
     S.promptHide = -1;
@@ -469,7 +527,8 @@
     var p = S.panel;
     if (!p) return null;
     if (p.type === 'note') return { title: I.noteTitle(p.idx), lines: I.notes()[p.idx].lines };
-    if (p.type === 'ex') { var ex = I.ex(p.key); return { title: ex.t, lines: ex.l }; }
+    if (p.type === 'car') return { title: I.ex('car').t, lines: carLines() };
+    if (p.type === 'ex') { var ex = I.ex(p.key) || { t: I.t('examine'), l: [] }; return { title: ex.t, lines: ex.l }; }
     if (p.type === 'text') return { title: I.t(p.titleKey), lines: [I.t(p.bodyKey)] };
     return null;
   }
@@ -487,22 +546,28 @@
       showToast(s, 3400);
       audioClick(true);
     }
-    if (S.collected >= 5 && !S.finalStarted) {
-      showToast(I.t('ret_cabin'), 3600);
-      compassLabel.textContent = I.t('lbl_cabin');
-    }
+    player.pose = ''; player.poseT = 0;
+    if (allDone() && !S.finalStarted) hintCar();
     refreshObjective();
     hudTexts();
   }
 
+  function hintCar() {
+    if (S.carHinted) return;
+    S.carHinted = true;
+    showToast(I.t('ret_car'), 3600);
+    compassLabel.textContent = I.t('lbl_car');
+  }
   function takeNote(idx) {
     S.notes[idx] = true;
     S.collected++;
+    player.pose = 'pickup'; player.poseT = 1.15;
     var w = world();
     w.notes.forEach(function (n) { if (n.idx === idx) n.taken = true; });
     updateNotesHud();
     TLP.Audio.noteGet();
     computeChapter(false);
+    updateGates(false);
     openPanel(I.noteTitle(idx), I.notes()[idx].lines, { type: 'note', idx: idx });
   }
   function updateNotesHud() {
@@ -511,10 +576,41 @@
     void notesCount.offsetWidth;
     notesCount.classList.add('pop');
     thingsCount.innerHTML = S.things + '&nbsp;/&nbsp;3';
+    partsCount.innerHTML = S.parts + '&nbsp;/&nbsp;3';
+    partsCount.classList.remove('pop');
+    void partsCount.offsetWidth;
+    if (S.parts > 0) partsCount.classList.add('pop');
+    partsBox.classList.toggle('hidden', !(S.world === 'out' && (S.chapter >= 2 || S.parts > 0)));
+  }
+  function takePart(it) {
+    it.taken = true;
+    S.parts++;
+    S.partsMask |= (1 << it.id);
+    player.pose = 'pickup'; player.poseT = 1.15;
+    TLP.Audio.ui(true);
+    updateNotesHud();
+    showToast(I.t('toast_parts')[it.id], 3200);
+    computeChapter(false);
+    updateGates(false);
+    if (allDone()) hintCar();
+    refreshObjective();
+    hudTexts();
+  }
+  function carLines() {
+    var lines = [I.t('car_need')];
+    var names = ['item_tools', 'item_fuel', 'item_wheel'];
+    for (var i = 0; i < 3; i++) {
+      var got = ((S.partsMask >> i) & 1) !== 0;
+      lines.push(I.t(names[i]) + '  \u2014  <span style="color:' + (got ? '#d8dccd' : '#a06a40') + '">' +
+        I.t(got ? 'car_have' : 'car_missing') + '</span>');
+    }
+    lines.push('<span style="opacity:.55">' + I.ex('car').l.join('<br>') + '</span>');
+    return lines;
   }
 
   function takeItem(it) {
     it.taken = true;
+    player.pose = 'pickup'; player.poseT = 1.0;
     S.things++;
     S.itemsMask |= (1 << it.id);
     updateNotesHud();
@@ -546,6 +642,7 @@
       }
       refreshObjective();
       hudTexts();
+      updateNotesHud();
       black(false);
       setTimeout(function () {
         fadeEl.style.transition = '';
@@ -576,12 +673,42 @@
 
   function doInteract(tg) {
     var d = tg.data;
-    if (tg.act === 'note') { takeNote(d.idx); return; }
-    if (tg.act === 'item') { takeItem(d); return; }
-    if (tg.act === 'enter') { goWorld(true, T.World.RW / 2, T.World.RH - 64, -Math.PI / 2); return; }
+    if (tg.act === 'note') {
+      if (noteLocked(d.idx)) {
+        TLP.Audio.ui(false);
+        showToast(I.t('gate_' + NOTE_GATE[d.idx]), 3000);
+        return;
+      }
+      takeNote(d.idx); return;
+    }
+    if (tg.act === 'item') {
+      if (d.part) {
+        if (partLocked(d.id)) {
+          TLP.Audio.ui(false);
+          showToast(I.t('gate_' + PART_GATE[d.id]), 3000);
+          return;
+        }
+        takePart(d); return;
+      }
+      takeItem(d); return;
+    }
+    if (tg.act === 'enter') {
+      if (!S.gates.house) {
+        TLP.Audio.ui(false);
+        showToast(I.t('gate_house'), 3000);
+        return;
+      }
+      goWorld(true, T.World.RW / 2, T.World.RH - 64, -Math.PI / 2); return;
+    }
     if (tg.act === 'exit') { goWorld(false, 800, 784, Math.PI / 2); return; }
     if (tg.act === 'cabinet') { cabinetAct(world().cabinet); return; }
-    var ex = I.ex(d.ikey);
+    if (tg.act === 'car') {
+      if (allDone()) { startFinal(); return; }
+      TLP.Audio.ui(false);
+      openPanel(I.ex('car').t, carLines(), { type: 'car' });
+      return;
+    }
+    var ex = I.ex(d.ikey) || { t: I.t('examine'), l: [] };
     TLP.Audio.ui(false);
     openPanel(ex.t, ex.l, { type: 'ex', key: d.ikey });
   }
@@ -670,49 +797,123 @@
     }
     TLP.Audio.setFire(nearFire > 0.01, nearFire);
 
-    if (S.collected >= 5 && !S.finalStarted && S.world === 'out') {
-      if (T.dist2(player.x, player.y, 800, 716) < 100 * 100) startFinal();
+    if (S.world === 'out' && allDone() && !S.finalStarted) hintCar();
+
+    /* the crouch after a pick-up, then back to the lantern */
+    if (player.poseT > 0) {
+      player.poseT -= dt;
+      if (player.poseT <= 0 && player.pose !== 'read') player.pose = '';
     }
   }
 
-  /* ---------- final sequence ---------- */
+  /* ---------- final sequence: fix the car, drive out of the forest ---------- */
+  var CAR_PATH = [[1152, 982], [1040, 1060], [840, 1140], [660, 1170], [470, 1215], [260, 1265], [-60, 1310]];
   function startFinal() {
     S.finalStarted = true;
     S.finalT = 0;
+    S.finalDrive = false;
+    S.figA = 0; S.figTarget = 0; S.flick = 0;
+    S._fig = S._figPass = S._gone = S._f1 = S._f2 = false;
+    S.sparks = []; S.ratIdx = 0;
+    var c = WS.out.carObj;
+    c.x = CAR_PATH[0][0]; c.y = CAR_PATH[0][1]; c.rot = -0.45; c.segI = 0; c.lighted = false;
+    player.x = 1116; player.y = 1012; player.vx = 0; player.vy = 0;
+    player.fa = -2.3; player.pose = ''; player.poseT = 0;
+    cam.x = 1150; cam.y = 992;
     setMode('final');
     prompt.classList.remove('vis');
     hide(prompt);
     hide(toast);
-    hide(thingsBox);
-    compassLabel.textContent = '';
-    TLP.Audio.swell();
-    TLP.Audio.setFire(true, 0.55);
+    hide(hud);
+    TLP.Audio.quiet(false);
+    TLP.Audio.setFire(true, 0.45);
   }
   function updateFinal(dt) {
     S.finalT += dt;
-    var ft = S.finalT;
-    S.targetDark = T.clamp(0.945 + ft * 0.02, 0.945, 0.99);
-    if (ft > 1.2) { WS.out.fires[1].lit = true; WS.out.fires[0].lit = true; }
-    if (ft > 2.2) S.figTarget = 1;
-    S.figA = T.smooth(S.figA, S.figTarget, dt, 0.06);
-    S.flick = ft > 4.4 && ft < 7.4 ? 1 : 0;
-    player.vx = T.smooth(player.vx, 0, dt, 0.3);
-    player.vy = T.smooth(player.vy, 0, dt, 0.3);
-    var res = collide(player.x + player.vx * dt, player.y + player.vy * dt);
-    player.x = res[0]; player.y = res[1];
-    player.moving = false;
-    cam.x = T.smooth(cam.x, player.x, dt, 0.05);
-    cam.y = T.smooth(cam.y, player.y, dt, 0.05);
-    S.letterbox = T.smooth(S.letterbox, 1, dt, 0.03);
+    var ft = S.finalT, c = WS.out.carObj;
+    S.targetDark = T.clamp(0.94 + Math.min(ft, 8) * 0.008, 0.94, 0.99);
+    if (ft > 0.9 && !S._f1) { S._f1 = true; WS.out.fires[1].lit = true; }
+    if (ft > 1.9 && !S._f2) { S._f2 = true; WS.out.fires[0].lit = true; }
 
-    if (ft > 6.2) S.darkness = T.smooth(S.darkness, 1, dt, 0.045);
+    if (ft < 2.6) {
+      /* A: under the hood. Ratchet ticks, sparks, the first cough of the engine. */
+      var RAT = [0.55, 1.15, 1.75, 2.3];
+      if (S.ratIdx < RAT.length && ft > RAT[S.ratIdx]) {
+        S.ratIdx++;
+        TLP.Audio.ratchet(S.ratIdx % 2 === 0);
+        for (var sk = 0; sk < 7; sk++)
+          S.sparks.push({ x: 1140 + Math.random() * 26, y: 964 + Math.random() * 12, vx: -60 + Math.random() * 130, vy: -140 - Math.random() * 90, l: 0.6 + Math.random() * 0.5 });
+      }
+      if (ft > 1.7 && !c.lighted) { c.lighted = true; }
+    } else if (!S.finalDrive) {
+      /* the engine catches; headlights saw the road awake */
+      S.finalDrive = true;
+      S.shake = 7;
+      c.lighted = true;
+      TLP.Audio.engine(true, 0.25);
+      TLP.Audio.setFire(false, 0);
+      TLP.Audio.ui(true);
+    }
+
+    for (var s1 = S.sparks.length - 1; s1 >= 0; s1--) {
+      var sp = S.sparks[s1];
+      sp.l -= dt * 1.25;
+      if (sp.l <= 0) { S.sparks.splice(s1, 1); continue; }
+      sp.vy += 420 * dt;
+      sp.x += sp.vx * dt; sp.y += sp.vy * dt;
+    }
+
+    if (S.finalDrive) {
+      /* B: the drive. C: whoever is standing in it. */
+      var vt = Math.min(430, 40 + (ft - 2.6) * 190);
+      TLP.Audio.engine(true, T.clamp((vt - 40) / 390, 0.2, 1));
+      var rem = vt * dt;
+      while (rem > 0.001 && c.segI < CAR_PATH.length - 1) {
+        var tp = CAR_PATH[c.segI + 1];
+        var dx = tp[0] - c.x, dy = tp[1] - c.y;
+        var dd = Math.hypot(dx, dy);
+        if (dd <= rem) { c.x = tp[0]; c.y = tp[1]; c.segI++; rem -= dd; }
+        else { c.x += dx / dd * rem; c.y += dy / dd * rem; rem = 0; }
+      }
+      if (c.segI < CAR_PATH.length - 1)
+        c.rot = T.angleLerp(c.rot, Math.atan2(tp[1] - c.y, tp[0] - c.x), 1 - Math.pow(0.0001, dt));
+      player.x = c.x; player.y = c.y;
+      cam.x = T.smooth(cam.x, c.x + Math.cos(c.rot) * 92, dt, 0.07);
+      cam.y = T.smooth(cam.y, c.y + Math.sin(c.rot) * 92 - 14, dt, 0.07);
+      if (!S._fig && c.x < 540) {
+        S._fig = true;
+        S.figTarget = 1;
+        S.figA = 0.85;              /* no gentle fade-in — it just IS there */
+        TLP.Audio.sting();
+        TLP.Audio.heartbeat();
+      }
+      if (S._fig && !S._figPass && c.x < 306) S._figPass = true;
+      if (S._figPass) S.figTarget = 0;
+      if (c.segI >= CAR_PATH.length - 1 && !S._gone) {
+        S._gone = true;
+        TLP.Audio.engine(false, 0);
+      }
+    } else {
+      player.vx = T.smooth(player.vx, 0, dt, 0.3);
+      player.vy = T.smooth(player.vy, 0, dt, 0.3);
+      var res = collide(player.x + player.vx * dt, player.y + player.vy * dt);
+      player.x = res[0]; player.y = res[1];
+      player.fa = T.angleLerp(player.fa, Math.atan2(c.y - 6 - player.y, c.x - 8 - player.x), 1 - Math.pow(0.001, dt));
+      cam.x = T.smooth(cam.x, player.x, dt, 0.05);
+      cam.y = T.smooth(cam.y, player.y, dt, 0.05);
+    }
+    player.moving = false;
+    S.flick = S._fig && !S._figPass ? 1 : 0;
+    S.figA = T.smooth(S.figA, S.figTarget, dt, 0.05);
+    S.letterbox = T.smooth(S.letterbox, 1, dt, 0.03);
+    S.shake = Math.max(0, S.shake - dt * 11);
+
+    if (ft > 6.9) S.darkness = T.smooth(S.darkness, 1, dt, 0.045);
     else S.darkness = T.smooth(S.darkness, S.targetDark, dt, 0.05);
 
     if (ft > 7.3) { black(true); hide(hud); }
     if (ft > 8.1 && !S._t1) {
       S._t1 = true;
-      TLP.Audio.sting();
-      TLP.Audio.heartbeat();
       show(bigtext);
       bigtextInner.textContent = I.t('never_alone');
       bigtextInner.classList.add('warn');
@@ -722,7 +923,8 @@
     if (ft > 14.9 && S._t1 && !S._t2) {
       S._t2 = true;
       setTimeout(function () {
-        bigtextInner.textContent = I.t('the_end');
+        bigtextInner.textContent = I.t('car_drive');
+        bigtextInner.classList.remove('warn');
         bigtextInner.classList.add('vis');
       }, 400);
     }
@@ -732,6 +934,7 @@
       setTimeout(function () {
         hide(bigtext);
         black(false);
+        bigtextInner.classList.remove('warn');
         showScreen($('end-screen'));
         try { localStorage.setItem('tlp_done', '1'); } catch (e) { }
         I.applyDom();
@@ -755,6 +958,7 @@
     var vw = CW / zI, vh = CH / zI;
     var swayX = (S.mode === 'play' && !inside) ? Math.sin(t * 0.24) * 1.6 : 0;
     var swayY = Math.cos(t * 0.19) * 1.1;
+    if (S.shake) { swayX += Math.sin(t * 57) * S.shake; swayY += Math.cos(t * 49) * S.shake * 0.6; }
 
     ctx.save();
     ctx.translate(CW / 2 + swayX, CH / 2 + swayY);
@@ -801,17 +1005,19 @@
     var drawnPlayer = false;
     var eIdx = 0;
     var py = player.y;
+    var hideP = S.finalDrive && !inside;
 
     for (var i = 0; i < objs.length; i++) {
       var o = objs[i];
       var oy = o.ySort || o.y;
+      if (o.gate && S.gates[o.gate]) continue;
       if (!drawnPlayer && oy > py) {
         while (eIdx < ents.length && ents[eIdx].y <= oy) {
           var en = ents[eIdx++];
           if (en.note) T.Assets.note(ctx, en.note, t);
           else T.Assets.item(ctx, en.item, t);
         }
-        T.Assets.player(ctx, player, t);
+        if (!hideP) T.Assets.player(ctx, player, t);
         drawnPlayer = true;
       }
       if (o.x < cx0 || o.x > cx1 || oy < cy0 || oy > cy1) continue;
@@ -825,11 +1031,11 @@
         if (en2.note) T.Assets.note(ctx, en2.note, t);
         else T.Assets.item(ctx, en2.item, t);
       }
-      T.Assets.player(ctx, player, t);
+      if (!hideP) T.Assets.player(ctx, player, t);
     }
 
-    /* the figure, near the sign tree */
-    if (S.figA > 0.01 && !inside) T.Assets.figure(ctx, 722, 622, S.figA * 0.94);
+    /* the figure: first by the sign tree, then, at the end, on the road */
+    if (S.figA > 0.01 && !inside) T.Assets.figure(ctx, S._fig ? 402 : 722, S._fig ? 1250 : 622, S.figA * 0.94);
 
     /* fog in world space (only outdoors) */
     if (!inside) {
@@ -871,11 +1077,13 @@
     var flickN = 1;
     if (S.flick) flickN = 0.3 + 0.7 * Math.abs(Math.sin(t * 17) * Math.sin(t * 5.3) + 0.35);
 
-    lctx.globalAlpha = flash ? 1 : 0.72;
-    var ambR = (flash ? 96 : 52) * zI * (S.flick ? flickN : 1);
-    lctx.drawImage(T.Assets.circleSprite, ps[0] - ambR, ps[1] - ambR + 4, ambR * 2, ambR * 2);
+    if (!hideP) {
+      lctx.globalAlpha = flash ? 1 : 0.72;
+      var ambR = (flash ? 96 : 52) * zI * (S.flick ? flickN : 1);
+      lctx.drawImage(T.Assets.circleSprite, ps[0] - ambR, ps[1] - ambR + 4, ambR * 2, ambR * 2);
+    }
 
-    if (flash || S.flick) {
+    if ((flash || S.flick) && !hideP) {
       var coneLen = 310 * zI * (S.flick ? flickN : 0.9 + 0.06 * Math.sin(t * 3.1));
       lctx.save();
       lctx.translate(ls[0], ls[1]);
@@ -884,6 +1092,26 @@
       var cs = coneLen / 320;
       lctx.drawImage(T.Assets.cone.canvas, 0, -320 * cs, 320 * cs, 640 * cs);
       lctx.restore();
+    }
+
+    /* during the escape the headlights are the fire */
+    if (S.finalDrive) {
+      var cH = WS.out.carObj;
+      var chx = Math.cos(cH.rot), chy = Math.sin(cH.rot);
+      var hs = scr(cH.x + chx * 46, cH.y + chy * 46);
+      lctx.save();
+      lctx.translate(hs[0], hs[1]);
+      lctx.rotate(cH.rot);
+      lctx.globalAlpha = S.flick ? 0.35 + 0.65 * flickN : 0.95;
+      var clen = 470 * zI * (0.94 + 0.06 * Math.sin(t * 3.3));
+      var csc = clen / 320;
+      lctx.drawImage(T.Assets.cone.canvas, 0, -320 * csc, 320 * csc, 640 * csc);
+      lctx.restore();
+      var hr = 84 * zI;
+      var hc = scr(cH.x, cH.y);
+      lctx.globalAlpha = 0.8;
+      lctx.drawImage(T.Assets.circleSprite, hc[0] - hr, hc[1] - hr * 0.78, hr * 2, hr * 1.56);
+      lctx.globalAlpha = 1;
     }
 
     for (var fi = 0; fi < w.fires.length; fi++) {
@@ -941,6 +1169,15 @@
         var rr2 = 24 + 5 * pulse;
         ctx.drawImage(T.Assets.warmCircle, nt2.x - rr2, nt2.y - rr2, rr2 * 2, rr2 * 2);
       }
+      /* car parts pulse the same soft way, so the dark has small suns to walk to */
+      for (var pb = 0; pb < w.items.length; pb++) {
+        var pbit = w.items[pb];
+        if (!pbit.part || pbit.taken) continue;
+        var pbp = 0.5 + 0.5 * Math.sin(t * 2.2 + pb * 2.1);
+        ctx.globalAlpha = 0.06 + 0.08 * pbp;
+        var pbr = 20 + 7 * pbp;
+        ctx.drawImage(T.Assets.warmCircle, pbit.x - pbr, pbit.y - pbr, pbr * 2, pbr * 2);
+      }
       /* the warm window spills onto the porch grass */
       var wflick = 0.84 + 0.16 * Math.sin(t * 6.3 + 1.2) * Math.sin(t * 2.7);
       ctx.globalAlpha = 0.07 * wflick;
@@ -980,6 +1217,52 @@
     }
     ctx.globalAlpha = 1;
 
+    /* what the hand can reach right now, drawn over the dark */
+    if (S.mode === 'play' && S.interactTarget && !S.finalStarted) {
+      var itg = S.interactTarget, tx = itg.data.x, ty = itg.data.y, tr = 15, tw = true;
+      if (itg.kind === 'examine') {
+        tr = T.clamp((itg.data.r || 30) * 0.55, 17, 34);
+        tw = itg.act !== 'panel';
+      } else if (itg.kind === 'item') ty += 2;
+      T.Assets.selRing(ctx, tx, ty, tr, t, tw);
+    }
+
+    /* the escape: headlights bleeding warm light into the dark */
+    if (S.finalDrive) {
+      var cB = WS.out.carObj;
+      var bfx = Math.cos(cB.rot), bfy = Math.sin(cB.rot);
+      var bgr2 = ctx.createLinearGradient(cB.x, cB.y, cB.x + bfx * 430, cB.y + bfy * 430);
+      bgr2.addColorStop(0, 'rgba(244,226,164,' + (S.flick ? 0.16 : 0.32) + ')');
+      bgr2.addColorStop(0.75, 'rgba(244,226,164,0.09)');
+      bgr2.addColorStop(1, 'rgba(244,226,164,0)');
+      ctx.fillStyle = bgr2;
+      ctx.beginPath();
+      ctx.moveTo(cB.x + bfx * 42 - bfy * 12, cB.y + bfy * 42 + bfx * 12);
+      ctx.lineTo(cB.x + bfx * 440 - bfy * 94, cB.y + bfy * 440 + bfx * 94);
+      ctx.lineTo(cB.x + bfx * 440 + bfy * 94, cB.y + bfy * 440 - bfx * 94);
+      ctx.lineTo(cB.x + bfx * 42 + bfy * 12, cB.y + bfy * 42 - bfx * 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,244,208,0.95)';
+      for (var bh = 0; bh < 2; bh++) {
+        var sg2 = bh ? 1 : -1;
+        ctx.beginPath();
+        ctx.arc(cB.x + bfx * 44 + bfy * 9 * sg2, cB.y + bfy * 44 - bfx * 9 * sg2, 2.7, 0, T.TAU);
+        ctx.fill();
+      }
+    }
+
+    /* sparks under the hood during the repair */
+    if (S.finalStarted && !S.finalDrive) {
+      ctx.fillStyle = '#eab85e';
+      for (var sk2 = 0; sk2 < S.sparks.length; sk2++) {
+        var spk = S.sparks[sk2];
+        ctx.globalAlpha = T.clamp(spk.l, 0, 1) * 0.9;
+        ctx.fillRect(spk.x, spk.y, 1.7, 1.7);
+      }
+      ctx.globalAlpha = 1;
+    }
+
     /* dust caught in the lantern beam */
     if (flash && !inside) {
       var fdx = Math.cos(player.fa), fdy = Math.sin(player.fa);
@@ -997,20 +1280,20 @@
       ctx.globalAlpha = 1;
     }
 
-    /* CABIN marker after all notes */
-    if (S.collected >= 5 && !inside && (S.mode === 'play' || S.mode === 'note')) {
+    /* the CAR marker, once everything needed is in hand */
+    if (allDone() && !inside && (S.mode === 'play' || S.mode === 'note') && !S.finalStarted) {
       var mp = 0.5 + 0.5 * Math.sin(t * 2);
       ctx.globalAlpha = 0.5 + 0.25 * mp;
       ctx.fillStyle = '#A7ACA8';
       ctx.beginPath();
-      ctx.moveTo(800, 616 + mp * 3);
-      ctx.lineTo(793, 604 + mp * 3);
-      ctx.lineTo(807, 604 + mp * 3);
+      ctx.moveTo(1152, 946 + mp * 3);
+      ctx.lineTo(1145, 934 + mp * 3);
+      ctx.lineTo(1159, 934 + mp * 3);
       ctx.closePath();
       ctx.fill();
       ctx.font = '300 11px "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(I.t('lbl_cabin'), 800, 597 + mp * 3);
+      ctx.fillText(I.t('lbl_car'), 1152, 927 + mp * 3);
     }
     ctx.restore();
 
@@ -1057,6 +1340,12 @@
   /* ---------- main loop ---------- */
   var last = 0;
   function loop(ts) {
+    /* schedule first: even a thrown error cannot freeze the game again */
+    requestAnimationFrame(loop);
+    try { frame(ts); }
+    catch (err) { if (window.console && console.error) console.error('TLP frame error:', err); }
+  }
+  function frame(ts) {
     var t = ts / 1000;
     var dt = Math.min(0.05, last ? t - last : 0.016);
     last = t;
@@ -1093,7 +1382,6 @@
     } else if (S.mode === 'end') {
       /* keep last frame under the black end screen */
     }
-    requestAnimationFrame(loop);
   }
 
   /* ---------- UI wiring ---------- */

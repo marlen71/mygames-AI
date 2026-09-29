@@ -708,10 +708,33 @@
   /* ============================================================
      THE CAR
      ============================================================ */
-  A.car = function (ctx, o) {
+  A.car = function (ctx, o, t) {
     ctx.save();
     ctx.translate(o.x, o.y);
     ctx.rotate(o.rot || 0);
+    /* headlight beams, thrown ahead of a car that finally runs */
+    if (o.lighted) {
+      var hf = 0.9 + 0.1 * Math.sin((t || 0) * 11);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (var hl = 0; hl < 2; hl++) {
+        var hy = hl ? 9 : -9;
+        var hgr = ctx.createLinearGradient(38, 0, 150, 0);
+        hgr.addColorStop(0, 'rgba(240,222,160,' + (0.34 * hf).toFixed(2) + ')');
+        hgr.addColorStop(1, 'rgba(240,222,160,0)');
+        ctx.fillStyle = hgr;
+        ctx.beginPath();
+        ctx.moveTo(38, hy - 3);
+        ctx.lineTo(150, hy - 26);
+        ctx.lineTo(150, hy + 26);
+        ctx.lineTo(38, hy + 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,240,200,0.95)';
+        ctx.beginPath(); ctx.arc(39, hy, 2.4, 0, T.TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
     shadow(ctx, 0, 7, 45, 17, 0.5);
     ctx.fillStyle = '#0d0f0e';
     [[-26, -18], [-26, 18], [26, -18], [26, 18]].forEach(function (p) {
@@ -1068,11 +1091,14 @@
      ============================================================ */
   A.player = function (ctx, p, t) {
     var moving = p.moving;
+    var pose = p.pose || '';
+    if (pose === 'read' || pose === 'pickup') moving = false;
     var cyc = p.walk * T.TAU;
     var fx = Math.cos(p.fa), fy = Math.sin(p.fa);
     var bx = -fy, by = fx;
     var step = moving ? Math.sin(cyc) : 0;
     var bob = moving ? Math.abs(Math.cos(cyc)) * 1.1 : Math.sin(t * 1.4) * 0.22;
+    if (pose === 'pickup') bob += 1.8;               /* crouch a shade */
     ctx.save();
     /* long soft shadow */
     ctx.globalAlpha = 0.5;
@@ -1208,11 +1234,50 @@
       ctx.fill();
       ctx.restore();
     }
+    /* pose overlays: reading the pages / crouching for a pick-up */
+    if (pose === 'read') {
+      ctx.strokeStyle = '#2e352f';
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(fx * 1.4 - bx * 3, -11.4); ctx.lineTo(fx * 4.4 - bx * 1.2, -9.2);
+      ctx.moveTo(fx * 1.4 + bx * 3, -11.4); ctx.lineTo(fx * 4.4 + bx * 1.2, -9.2);
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(fx * 5.4, -9.4);
+      ctx.rotate(fx * 0.12);
+      ctx.fillStyle = '#ddd6ba';
+      rr(ctx, -3.4, -2.6, 6.8, 5.2, 0.8); ctx.fill();
+      ctx.fillStyle = 'rgba(90,84,60,0.55)';
+      for (var rl = 0; rl < 2; rl++) ctx.fillRect(-2.2, -1.2 + rl * 1.8, 4.4, 0.7);
+      ctx.restore();
+    } else if (pose === 'pickup') {
+      ctx.strokeStyle = '#2e352f';
+      ctx.lineWidth = 1.9;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(fx * 1.4 + bx * 3, -10.4);
+      ctx.lineTo(fx * 7.4 + bx * 2.4, -3.4);
+      ctx.stroke();
+      if ((p.poseT || 0) > 0.45) {
+        ctx.save();
+        ctx.translate(fx * 8.6 + bx * 2.4, -2.6);
+        ctx.rotate(0.4);
+        ctx.fillStyle = '#ddd6ba';
+        rr(ctx, -3, -2.2, 6, 4.4, 0.8); ctx.fill();
+        ctx.restore();
+      }
+    }
     ctx.restore();
   };
   A.playerLanternPos = function (p) {
+    /* exactly where A.player draws the lantern glass: same math, same frame */
     var fx = Math.cos(p.fa), fy = Math.sin(p.fa);
-    return { x: p.x + fx * 7.8 - fy * 3.6 * 0.2, y: p.y - 8.2 + fy * 2.4 };
+    var bx = -fy, by = fx;
+    var la = 6.6;
+    var lx2 = fx * la + bx * 3.6, ly2 = -10.4 + fy * 2.4;
+    var lx3 = lx2 + fx * 1.2, ly3 = ly2 + 2.2;
+    return { x: p.x + lx3, y: p.y + ly3 };
   };
 
   /* ---------- the figure ---------- */
@@ -1511,7 +1576,7 @@
       ctx.fillRect(-3.4, -3.6, 5.4, 1.4);
       ctx.fillStyle = 'rgba(230,220,190,0.5)';
       ctx.fillRect(-4.4, -1.4, 8.8, 0.8);
-    } else { /* key */
+    } else if (o.kind === 'key') {
       ctx.rotate(0.5);
       ctx.strokeStyle = '#9a9182';
       ctx.lineWidth = 1.6;
@@ -1521,6 +1586,94 @@
       ctx.strokeStyle = 'rgba(226,222,200,0.5)';
       ctx.lineWidth = 0.6;
       ctx.beginPath(); ctx.moveTo(-1.2, -0.5); ctx.lineTo(5, -0.5); ctx.stroke();
+    } else if (o.kind === 'tools') {
+      /* open toolbox with a wrench peeking out */
+      ctx.fillStyle = '#6d2f22';
+      rr(ctx, -6.4, -2.4, 12.8, 6.4, 1.4); ctx.fill();
+      ctx.fillStyle = '#48201a';
+      ctx.fillRect(-6.4, -2.4, 12.8, 1.6);
+      ctx.save();
+      ctx.rotate(-0.5);
+      ctx.strokeStyle = '#9aa09a';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(-2, -3.4); ctx.lineTo(4.4, -3.4); ctx.stroke();
+      ctx.beginPath(); ctx.arc(-3.2, -3.4, 1.5, 0.9, 5.4); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = 'rgba(210,214,200,0.18)';
+      ctx.fillRect(-5.4, 0.4, 10.8, 0.8);
+    } else if (o.kind === 'fuel') {
+      /* a red jerry can, half-full of yesterday */
+      ctx.fillStyle = '#6e2a20';
+      rr(ctx, -5.4, -6.4, 10.8, 12.8, 1.6); ctx.fill();
+      ctx.fillStyle = 'rgba(14,10,8,0.5)';
+      ctx.fillRect(-5.4, 1.6, 10.8, 4.8);
+      ctx.strokeStyle = 'rgba(200,190,170,0.16)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-5.4, -6.4, 10.8, 12.8);
+      ctx.fillStyle = '#2e332d';
+      ctx.fillRect(-1.6, -8.2, 3.2, 2);
+      ctx.strokeStyle = '#43483f';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(-4.4, -6.4); ctx.quadraticCurveTo(0, -9.6, 4.4, -6.4); ctx.stroke();
+      ctx.fillStyle = 'rgba(226,210,170,0.2)';
+      ctx.fillRect(-3.4, -4.4, 6.8, 2.4);
+    } else { /* wheel */
+      ctx.rotate(0.28);
+      ctx.fillStyle = '#101312';
+      ctx.beginPath(); ctx.arc(0, 0, 7.6, 0, T.TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,126,118,0.22)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, 0, 6.4, 0, T.TAU); ctx.stroke();
+      ctx.fillStyle = '#3c413c';
+      ctx.beginPath(); ctx.arc(0, 0, 3.4, 0, T.TAU); ctx.fill();
+      ctx.fillStyle = '#8d938d';
+      ctx.beginPath(); ctx.arc(0, 0, 1.2, 0, T.TAU); ctx.fill();
+      for (var wl = 0; wl < 4; wl++) {
+        ctx.save();
+        ctx.rotate(wl * T.TAU / 4 + 0.3);
+        ctx.fillStyle = 'rgba(150,156,146,0.3)';
+        ctx.fillRect(1.6, -0.5, 1.6, 1);
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+  };
+  /* interaction highlight: a soft pulse ring + corner ticks, drawn above darkness */
+  A.selRing = function (ctx, x, y, r, t, warm) {
+    var pu = 0.5 + 0.5 * Math.sin(t * 3.1);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    var col = warm ? '232,202,126' : '198,212,220';
+    /* faint wash so the object lifts out of the dark */
+    var gr = ctx.createRadialGradient(x, y, r * 0.2, x, y, r + 14);
+    gr.addColorStop(0, 'rgba(' + col + ',' + (0.05 + 0.025 * pu).toFixed(3) + ')');
+    gr.addColorStop(1, 'rgba(' + col + ',0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r + 14, (r + 14) * 0.68, 0, 0, T.TAU);
+    ctx.fill();
+    /* the ring */
+    ctx.strokeStyle = 'rgba(' + col + ',1)';
+    ctx.lineWidth = 1.9;
+    ctx.globalAlpha = 0.5 + 0.26 * pu;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r + pu * 2.6, (r + pu * 2.6) * 0.56, 0, 0, T.TAU);
+    ctx.stroke();
+    ctx.globalAlpha = 0.2 + 0.12 * pu;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r + 6.5, (r + 6.5) * 0.56, 0, 0, T.TAU);
+    ctx.stroke();
+    /* ticks at the diagonal points */
+    ctx.globalAlpha = 0.55 + 0.3 * pu;
+    ctx.lineWidth = 1.7;
+    var rr2 = r + 9.4;
+    for (var q = 0; q < 4; q++) {
+      var a = q * Math.PI / 2 + Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * rr2, y + Math.sin(a) * rr2 * 0.56);
+      ctx.lineTo(x + Math.cos(a) * (rr2 + 4), y + Math.sin(a) * (rr2 + 4) * 0.56);
+      ctx.stroke();
     }
     ctx.restore();
   };

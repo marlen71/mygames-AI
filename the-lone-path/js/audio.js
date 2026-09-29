@@ -222,6 +222,48 @@
     o.start(t); o.stop(t + 3.4);
   };
 
+  /* the old engine turning over: two detuned low oscillators behind a filter */
+  var eng = null;
+  A.engine = function (on, level) {
+    if (!ctx) return;
+    if (on && !eng) {
+      var o1 = ctx.createOscillator(), o2 = ctx.createOscillator();
+      var f = ctx.createBiquadFilter(), g = ctx.createGain();
+      o1.type = 'sawtooth'; o2.type = 'square';
+      o1.frequency.value = 34; o2.frequency.value = 51.5;
+      f.type = 'lowpass'; f.frequency.value = 190;
+      g.gain.value = 0.0001;
+      o1.connect(f); o2.connect(f); f.connect(g); g.connect(master);
+      o1.start(); o2.start();
+      eng = { o1: o1, o2: o2, g: g };
+    }
+    if (eng) {
+      var lv = on ? TLP.clamp(level, 0, 1) : 0;
+      var t = ctx.currentTime;
+      eng.o1.frequency.setTargetAtTime(30 + 42 * lv, t, 0.15);
+      eng.o2.frequency.setTargetAtTime(45 + 70 * lv, t, 0.15);
+      eng.g.gain.setTargetAtTime(muted ? 0.0001 : 0.0001 + lv * 0.05, t, 0.12);
+      if (!on) {
+        var e2 = eng; eng = null;
+        setTimeout(function () { try { e2.o1.stop(); e2.o2.stop(); } catch (e) { } }, 600);
+      }
+    }
+  };
+  /* wrench tick on the car */
+  A.ratchet = function (heavy) {
+    if (!ctx) return;
+    var t = ctx.currentTime;
+    var src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(0.08);
+    var f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = heavy ? 900 : 2400; f.Q.value = 6;
+    var g = ctx.createGain();
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (heavy ? 0.14 : 0.07));
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t);
+  };
+
   /* fade everything down on leaving the game */
   A.quiet = function (q) {
     if (!ctx) return;

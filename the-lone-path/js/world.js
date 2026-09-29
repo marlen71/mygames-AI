@@ -10,6 +10,7 @@
   var T = window.TLP;
 
   var W = 1600, H = 1600;
+  var GATES_OUT = null;
 
   /* chapters: I camp, II house+interior, III quarry, IV radio tower, V foggy lake */
   var CHAPTER_NOTE = [0, 2, 1, 3, 4];
@@ -29,7 +30,7 @@
     { x: 452, y: 908, r: 44, ikey: 'tent', label: 'examine' },
     { x: 736, y: 590, r: 40, ikey: 'symbol', label: 'read' },
     { x: 706, y: 1046, r: 38, ikey: 'sign', label: 'read' },
-    { x: 1148, y: 966, r: 48, ikey: 'car', label: 'examine' },
+    { x: 1114, y: 952, r: 46, ikey: 'car', label: 'examine', special: 'car' },
     { x: 1215, y: 978, r: 52, ikey: 'quarry', label: 'examine' },
     { x: 1284, y: 868, r: 46, ikey: 'crane', label: 'examine' },
     { x: 430, y: 425, r: 46, ikey: 'tower', label: 'examine' },
@@ -100,6 +101,16 @@
     add({ x: 100, y: 300, r: 380 }, 0.5);
     add({ x: 1560, y: 700, r: 260 }, 0.4);
     add({ x: 940, y: 620, r: 200 }, 0.3);
+    /* darker woods narrow the open meadows into valleys between places */
+    add({ x: 985, y: 690, r: 190 }, 0.92);
+    add({ x: 700, y: 630, r: 150 }, 0.88);
+    add({ x: 300, y: 620, r: 170 }, 0.88);
+    add({ x: 566, y: 546, r: 150 }, 0.88);
+    add({ x: 812, y: 236, r: 170 }, 0.92);
+    add({ x: 1250, y: 610, r: 210 }, 0.88);
+    add({ x: 620, y: 1180, r: 150 }, 0.85);
+    add({ x: 1096, y: 1190, r: 140 }, 0.8);
+    add({ x: 214, y: 940, r: 150 }, 0.85);
     var edge = Math.min(x, y, W - x, W - y);
     if (edge < 170) d += 0.95 * (1 - edge / 170);
     /* open ground around every place of interest */
@@ -186,6 +197,7 @@
     var car = mk('car', 1152, 982, 1, { rot: -0.45 });
     car.ySort = 1000;
     world.objs.push(car);
+    world.carObj = car;
     solidR(1152, 982, 34);
     var crane = mk('crane', 1292, 836, 1);
     crane.ySort = 842;
@@ -277,7 +289,8 @@
         if (tr <= types[ti][1]) { kind = types[ti][0]; trunk = types[ti][2]; break; }
       var s = 0.75 + r() * 0.62 + (kind === 'pine' ? r() * 0.2 : 0);
       var o = mk(kind, x, y, s);
-      if (trunk > 0) solidR(x, y, trunk * s * 0.62);
+      /* in the deep thickets trunks grow wide: those woods become a wall */
+      if (trunk > 0) solidR(x, y, trunk * s * (densityAt(x, y) > 0.5 ? 1.3 : 0.62));
       world.objs.push(o);
       placed.push([x, y]);
       if (r() < 0.18) {
@@ -301,6 +314,41 @@
     }
     /* -- atmospheric examines -- */
     for (var e = 0; e < EXAMINES.length; e++) world.examines.push(EXAMINES[e]);
+
+    /* -- three car parts: what the chapters trade a note for -- */
+    world.items.push(
+      { id: 0, kind: 'tools', x: 1348, y: 972, r: 14, part: true, label: 'item_tools' },
+      { id: 1, kind: 'fuel', x: 546, y: 438, r: 14, part: true, label: 'item_fuel' },
+      { id: 2, kind: 'wheel', x: 1236, y: 392, r: 15, part: true, label: 'item_wheel' }
+    );
+
+    /* -- fallen trees across the trails: they mark the chapters that are not
+       yours yet. The strict lock lives in game.js (notes and parts refuse an
+       unearned hand), so a wandering shortcut never breaks the story order. -- */
+    function gateWall(gate, cx, cy, crossAng) {
+      var ux = Math.cos(crossAng), uy = Math.sin(crossAng);
+      for (var i = -2; i <= 2; i++) {
+        var bx = cx + ux * i * 37, by = cy + uy * i * 37;
+        world.colliders.push({ x: bx, y: by, r: 15, kind: 'log', gate: gate });
+        world.objs.push({ k: 'bush', x: bx, y: by + 4, s: 1.5 + ((i + 2) * 7 % 3) * 0.16, comp: 1, gate: gate });
+        if (i % 2 === 0)
+          world.objs.push({ k: 'fence', x: bx, y: by - 2, s: 1.05, rot: crossAng, gate: gate });
+        if (i === 0)
+          world.objs.push({ k: 'fallen', x: cx - uy * 14, y: cy + ux * 14 - 2, s: 1.0, rot: crossAng + 1.9, gate: gate });
+      }
+      return { sealed: true, bars: 5 };
+    }
+    world.gateReport = {
+      quarry: gateWall('quarry', 960, 870, 2.214),
+      radio: gateWall('radio', 401, 648, 0.0398),
+      lake: gateWall('lake', 957, 358, 0.9696)
+    };
+    GATES_OUT = {
+      house: { x: 800, y: 774 },
+      quarry: { x: 960, y: 870 },
+      radio: { x: 401, y: 648 },
+      lake: { x: 957, y: 358 }
+    };
 
     world.objs.sort(function (a, b) { return (a.ySort || a.y) - (b.ySort || b.y); });
     world.ground = bakeOutdoor(r);
@@ -730,6 +778,7 @@
     ZONES: ZONES, NOTES_META: NOTES, CHAPTER_NOTE: CHAPTER_NOTE,
     distToPaths: distToPaths, PATHS: PATHS,
     WATERS: WATERS, PIER: PIER,
+    get GATES() { return GATES_OUT; },
     RW: RW, RH: RH
   };
 })();
