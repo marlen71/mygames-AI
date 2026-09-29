@@ -13,13 +13,23 @@
 
 <!-- HUD -->
 <div id="hud" class="hidden">
-  <div id="notes-box">
-    <div id="notes-label">NOTES</div>
-    <div id="notes-count">0&nbsp;/&nbsp;5</div>
+  <div id="hud-left">
+    <div id="chapter-label"></div>
+    <div id="objective-label"></div>
+    <div id="counters">
+      <div id="notes-box">
+        <div id="notes-label" data-i18n="hud_notes">NOTES</div>
+        <div id="notes-count">0&nbsp;/&nbsp;5</div>
+      </div>
+      <div id="things-box" class="hidden">
+        <div id="things-label" data-i18n="hud_things">THINGS</div>
+        <div id="things-count">0&nbsp;/&nbsp;3</div>
+      </div>
+    </div>
   </div>
   <div id="compass-wrap">
     <canvas id="compass" width="96" height="96"></canvas>
-    <div id="compass-label">NOTE&nbsp;01</div>
+    <div id="compass-label"></div>
   </div>
 </div>
 
@@ -31,7 +41,7 @@
   <div id="note-panel">
     <div id="note-title">NOTE 01</div>
     <div id="note-body"></div>
-    <button id="note-close">CLOSE</button>
+    <button id="note-close" data-i18n="close">CLOSE</button>
   </div>
 </div>
 
@@ -44,65 +54,91 @@
   <canvas id="menu-bg"></canvas>
   <div class="screen-inner">
     <div id="game-title">THE&nbsp;LONE&nbsp;PATH</div>
-    <div id="game-slogan">SMALL STEPS. BIG SILENCE.</div>
-    <button class="mbtn" id="btn-start">START</button>
-    <button class="mbtn" id="btn-controls">CONTROLS</button>
-    <button class="mbtn" id="btn-credits">CREDITS</button>
-    <div id="menu-foot">A short interactive story. Playtime 10&ndash;20 minutes.</div>
+    <div id="game-slogan" data-i18n="slogan">SMALL STEPS. BIG SILENCE.</div>
+    <button class="mbtn" id="btn-start" data-i18n="btn_start">START</button>
+    <button class="mbtn" id="btn-controls" data-i18n="btn_controls">CONTROLS</button>
+    <button class="mbtn" id="btn-credits" data-i18n="btn_credits">CREDITS</button>
+    <div class="flags" id="menu-flags">
+      <button class="flag" data-lang="en" title="English" aria-label="English">
+        <svg viewBox="0 0 24 16" preserveAspectRatio="none"><rect width="24" height="16" fill="#1f3f73"/><path d="M0 0L24 16M24 0L0 16" stroke="#dfe3e6" stroke-width="3.4"/><path d="M0 0L24 16M24 0L0 16" stroke="#c8352b" stroke-width="1.6"/><path d="M12 0V16M0 8H24" stroke="#dfe3e6" stroke-width="4.6"/><path d="M12 0V16M0 8H24" stroke="#c8352b" stroke-width="2.4"/></svg>
+      </button>
+      <button class="flag" data-lang="ru" title="Русский" aria-label="Русский">
+        <svg viewBox="0 0 24 16" preserveAspectRatio="none"><rect width="24" height="16" fill="#dfe3e6"/><rect y="5.3" width="24" height="5.4" fill="#2f4f8f"/><rect y="10.7" width="24" height="5.3" fill="#b4372c"/></svg>
+      </button>
+      <button class="flag" data-lang="uk" title="Українська" aria-label="Українська">
+        <svg viewBox="0 0 24 16" preserveAspectRatio="none"><rect width="24" height="8" fill="#2f6bb0"/><rect y="8" width="24" height="8" fill="#e8c245"/></svg>
+      </button>
+    </div>
+    <div id="menu-foot" data-i18n="menu_foot">A short interactive story. Playtime 10&ndash;20 minutes.</div>
   </div>
 </div>
 
 <!-- ============ CONTROLS ============ -->
 <div id="controls-screen" class="screen hidden clickback">
   <div class="screen-inner small">
-    <div class="sub-title">CONTROLS</div>
-    <div class="ctl"><b>WASD / ARROWS</b><span>MOVE</span></div>
-    <div class="ctl"><b>F</b><span>FLASHLIGHT</span></div>
-    <div class="ctl"><b>E</b><span>INTERACT</span></div>
-    <div class="ctl"><b>ESC</b><span>MENU</span></div>
-    <div class="ctl"><b>M</b><span>MUTE SOUND</span></div>
-    <div class="click-here">CLICK TO RETURN</div>
+    <div class="sub-title" data-i18n="controls">CONTROLS</div>
+    <div class="ctl"><b>WASD / ARROWS</b><span data-i18n="k_move">MOVE</span></div>
+    <div class="ctl"><b>F</b><span data-i18n="k_flash">FLASHLIGHT</span></div>
+    <div class="ctl"><b>E</b><span data-i18n="k_inter">INTERACT</span></div>
+    <div class="ctl"><b>ESC</b><span data-i18n="k_esc">MENU</span></div>
+    <div class="ctl"><b>M</b><span data-i18n="k_mute">MUTE SOUND</span></div>
+    <div class="click-here" data-i18n="click_return">CLICK TO RETURN</div>
   </div>
 </div>
 
 <!-- ============ CREDITS ============ -->
 <div id="credits-screen" class="screen hidden clickback">
   <div class="screen-inner small">
-    <div class="sub-title">CREDITS</div>
-    <p>THE LONE PATH</p>
-    <p>a small interactive story about silence,<br>light, and what stands inside it.</p>
-    <p>Art, world and sound are generated in code &mdash;<br>no external assets, no engines.</p>
-    <p class="dim">Made with HTML5 Canvas.</p>
-    <div class="click-here">CLICK TO RETURN</div>
+    <div class="sub-title" data-i18n="credits">CREDITS</div>
+    <p data-i18n="cr_l1">THE LONE PATH</p>
+    <p data-i18n="cr_l2">a small interactive story about silence,</p>
+    <p data-i18n="cr_l2b">light, and what stands inside it.</p>
+    <p data-i18n="cr_l3">Art, world and sound are generated in code &mdash;</p>
+    <p data-i18n="cr_l3b">no external assets, no engines.</p>
+    <p class="dim" data-i18n="cr_l4">Made with HTML5 Canvas.</p>
+    <div class="click-here" data-i18n="click_return">CLICK TO RETURN</div>
   </div>
 </div>
 
 <!-- ============ PAUSE ============ -->
 <div id="pause-screen" class="screen hidden">
   <div class="screen-inner small">
-    <div class="sub-title">PAUSED</div>
-    <button class="mbtn" id="btn-resume">RESUME</button>
-    <button class="mbtn" id="btn-pcontrols">CONTROLS</button>
-    <button class="mbtn" id="btn-restart">RESTART</button>
-    <button class="mbtn" id="btn-tomenu">MAIN MENU</button>
+    <div class="sub-title" data-i18n="paused">PAUSED</div>
+    <button class="mbtn" id="btn-resume" data-i18n="btn_resume">RESUME</button>
+    <button class="mbtn" id="btn-pcontrols" data-i18n="btn_controls">CONTROLS</button>
+    <button class="mbtn" id="btn-restart" data-i18n="btn_restart">RESTART</button>
+    <button class="mbtn" id="btn-tomenu" data-i18n="btn_menu">MAIN MENU</button>
+    <div class="flags">
+      <button class="flag" data-lang="en" title="English" aria-label="English">
+        <svg viewBox="0 0 24 16" preserveAspectRatio="none"><rect width="24" height="16" fill="#1f3f73"/><path d="M0 0L24 16M24 0L0 16" stroke="#dfe3e6" stroke-width="3.4"/><path d="M0 0L24 16M24 0L0 16" stroke="#c8352b" stroke-width="1.6"/><path d="M12 0V16M0 8H24" stroke="#dfe3e6" stroke-width="4.6"/><path d="M12 0V16M0 8H24" stroke="#c8352b" stroke-width="2.4"/></svg>
+      </button>
+      <button class="flag" data-lang="ru" title="Русский" aria-label="Русский">
+        <svg viewBox="0 0 24 16" preserveAspectRatio="none"><rect width="24" height="16" fill="#dfe3e6"/><rect y="5.3" width="24" height="5.4" fill="#2f4f8f"/><rect y="10.7" width="24" height="5.3" fill="#b4372c"/></svg>
+      </button>
+      <button class="flag" data-lang="uk" title="Українська" aria-label="Українська">
+        <svg viewBox="0 0 24 16" preserveAspectRatio="none"><rect width="24" height="8" fill="#2f6bb0"/><rect y="8" width="24" height="8" fill="#e8c245"/></svg>
+      </button>
+    </div>
   </div>
 </div>
 
 <!-- ============ END ============ -->
 <div id="end-screen" class="screen hidden">
   <div class="screen-inner small">
-    <div id="end-title">THE&nbsp;LONE&nbsp;PATH</div>
-    <div id="end-sub">THE END</div>
-    <div id="end-notes">5 / 5 NOTES FOUND</div>
+    <div id="end-title" data-i18n="end_title">THE&nbsp;LONE&nbsp;PATH</div>
+    <div id="end-sub" data-i18n="the_end">THE END</div>
+    <div id="end-notes" data-i18n="found_notes">5 / 5 NOTES FOUND</div>
+    <div id="end-things" data-i18n="found_things">3 / 3 THINGS FOUND</div>
     <div id="end-btns">
-      <button class="mbtn" id="btn-again">PLAY AGAIN</button>
-      <button class="mbtn" id="btn-endmenu">MAIN MENU</button>
+      <button class="mbtn" id="btn-again" data-i18n="btn_again">PLAY AGAIN</button>
+      <button class="mbtn" id="btn-endmenu" data-i18n="btn_menu">MAIN MENU</button>
     </div>
   </div>
 </div>
 
 <script src="js/utils.js"></script>
 <script src="js/audio.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/world.js"></script>
 <script src="js/game.js"></script>
