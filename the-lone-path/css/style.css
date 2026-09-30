@@ -16,6 +16,8 @@ html,body{
   width:100%; height:100%;
   background:var(--void);
   overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-text-size-adjust:100%; text-size-adjust:100%;
   font-family:"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
   color:var(--gray2);
   -webkit-font-smoothing:antialiased;
@@ -27,6 +29,7 @@ canvas#scene{
   position:fixed; inset:0;
   width:100vw; height:100vh;
   display:block;
+  touch-action:none;
   background:#000;
 }
 
@@ -210,6 +213,9 @@ canvas#scene{
   position:fixed; inset:0; z-index:100;
   background:#000;
   display:flex; align-items:center; justify-content:center;
+  align-items:safe center; justify-content:safe center;
+  overflow:auto;
+  padding:calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom));
   animation:fadein 1.2s ease;
 }
 #menu-bg{ position:absolute; inset:0; width:100%; height:100%; }
@@ -334,10 +340,46 @@ canvas#scene{
 #end-btns.vis{ opacity:1; }
 
 @media (max-width:640px){
-  #hud-left{ top:12px; left:14px; }
-  #objective-label{ max-width:52vw; }
-  #compass-wrap{ top:10px; right:12px; transform:scale(.8); transform-origin:top right; }
-  #note-panel{ padding:30px 24px 26px; }
+  #hud-left{ top:calc(10px + env(safe-area-inset-top)); left:12px; }
+  #objective-label{ max-width:44vw; font-size:10px; }
+  #chapter-label{ font-size:8px; }
+  #counters{ transform:scale(.9); transform-origin:top left; }
+  #compass-wrap{ top:calc(8px + env(safe-area-inset-top)); right:10px; transform:scale(.72); transform-origin:top right; }
+  #note-panel{ padding:26px 18px 22px; }
+  #prompt{ bottom:150px; max-width:78vw; text-align:center; }
+  #stick{ left:14px; }
+  #tbtns{ right:12px; }
+  .screen-inner{ padding:14px 6px; }
+}
+
+/* landscape phones: the vertical budget is brutal — compact everything */
+@media (pointer:coarse) and (max-height:520px){
+  #compass-wrap{ transform:scale(.58); }
+  #hud-left{ transform:scale(.82); transform-origin:top left; }
+  #prompt{ bottom:132px; font-size:11.5px; }
+  #stick{ width:98px; height:98px; bottom:calc(12px + env(safe-area-inset-bottom)); }
+  #stick-knob{ width:40px; height:40px; margin:-20px 0 0 -20px; }
+  #tbtns{ bottom:calc(12px + env(safe-area-inset-bottom)); right:10px; gap:10px; }
+  .tbtn{ width:48px; height:48px; font-size:14px; }
+  .tbtn.big{ width:62px; height:62px; font-size:17px; }
+  .tbtn.small{ width:42px; height:42px; }
+  #tbtn-pause{ width:38px; height:38px; margin-bottom:46px; }
+  #note-panel{ max-height:80vh; padding:18px 16px 16px; }
+  .screen-inner .sub-title{ margin-bottom:12px; }
+  .dev{ padding:8px 10px; }
+  .aim-cap{ margin:12px 0 8px; }
+  #roll-screen .roll-in{ font-size:84%; }
+}
+
+#rot-hint{
+  position:fixed; left:50%; top:calc(10px + env(safe-area-inset-top));
+  transform:translateX(-50%);
+  z-index:60; pointer-events:none; white-space:nowrap;
+  font-size:10px; letter-spacing:.3em; text-indent:.3em;
+  color:rgba(215,208,183,.78);
+  background:rgba(8,10,12,.74); border:1px solid rgba(215,208,183,.24);
+  border-radius:999px; padding:7px 14px;
+  animation:breathe 3.4s ease-in-out infinite;
 }
 
 /* ============ AIM RETICLE & LOOK CONTROL ============ */

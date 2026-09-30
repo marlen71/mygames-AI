@@ -60,9 +60,25 @@
     menuBg.width = scene.width; menuBg.height = scene.height;
     var cdpr = Math.min(DPR, 2);
     compass.width = Math.floor(96 * cdpr); compass.height = Math.floor(96 * cdpr);
-    zoom = T.clamp(CH / 620, 0.95, 2.3);
+    /* the screen fits the device: on anything narrower than a desktop we
+       guarantee a full view window (~980x600 world units) so no zone of the
+       camp, the road or the house can hide behind the edge of the screen. */
+    var wide = CW >= 1100;
+    if (wide) zoom = T.clamp(CH / 620, 0.95, 2.3);
+    else zoom = T.clamp(Math.min(CH / 620, CW / 980, CH / 600), 0.32, 1.35);
+    var rh = $('rot-hint');
+    if (rh) rh.classList.toggle('hidden', !(CH > CW && CW < 560 && S && S.mode !== 'menu'));
+    game.zoom = zoom;
   }
   window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', function () {
+    setTimeout(resize, 120); setTimeout(resize, 480);
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', function () {
+      setTimeout(resize, 60);
+    });
+  }
 
   /* ---------- worlds ---------- */
   var WS = null;                                   /* { out, int } */

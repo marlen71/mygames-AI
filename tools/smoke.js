@@ -307,6 +307,22 @@ function boot() {
     if (!html.classList.contains('touch')) errors.push('touch class missing');
     if (win.localStorage.getItem('tlp_dev') !== 'phone') errors.push('device not persisted');
     if (doc.getElementById('touch-ui').style.visibility !== 'visible') errors.push('touch ui hidden during phone play');
+    /* phone fit: the viewport adapts, the whole zone stays visible */
+    const W0 = win.innerWidth, H0 = win.innerHeight;
+    const setVP = (w, h) => {
+      Object.defineProperty(win, 'innerWidth', { value: w, configurable: true });
+      Object.defineProperty(win, 'innerHeight', { value: h, configurable: true });
+      win.dispatchEvent(new win.Event('resize'));
+    };
+    setVP(844, 390); await frames(2);
+    let zfit = G.zoom;
+    if (!(zfit > 0.58 && zfit < 0.68)) errors.push('landscape phone zoom should fit ~0.63, got ' + zfit);
+    if (!doc.getElementById('rot-hint').classList.contains('hidden')) errors.push('rot hint shown in landscape');
+    setVP(390, 844); await frames(2);
+    zfit = G.zoom;
+    if (!(zfit > 0.36 && zfit < 0.44)) errors.push('portrait phone zoom should open up the view ~0.40, got ' + zfit);
+    if (doc.getElementById('rot-hint').classList.contains('hidden')) errors.push('rot hint missing in portrait');
+    setVP(W0, H0); await frames(2);
     /* the stick walks */
     player.x = 700; player.y = 1050; await frames(2);
     T.touch.active = true; T.touch.x = -1; T.touch.y = 0;
