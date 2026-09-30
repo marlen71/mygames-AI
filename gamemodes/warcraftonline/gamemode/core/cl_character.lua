@@ -6,6 +6,34 @@
 
 WO.Character.Local = WO.Character.Local or nil
 WO.Character.List = WO.Character.List or {}
+WO.Character.StateReceived = WO.Character.StateReceived or false
+
+---------------------------------------------------------------------------
+-- Хендшейк готовности клиента
+-- Сервер не знает, когда клиент закончил загружать Lua, поэтому клиент
+-- сам сообщает о готовности и при необходимости повторяет запрос.
+---------------------------------------------------------------------------
+
+local function SendReady()
+    WO.Net.SendToServer("Client.Ready")
+end
+
+hook.Add("InitPostEntity", "wo_client_ready", function()
+    timer.Simple(0.5, SendReady)
+end)
+
+-- Ретраи: если ответ (Character.List) не пришёл
+timer.Simple(3, function()
+    if not WO.Character.StateReceived then
+        SendReady()
+    end
+end)
+
+timer.Simple(8, function()
+    if not WO.Character.StateReceived then
+        SendReady()
+    end
+end)
 
 ---------------------------------------------------------------------------
 -- События (вызываются net-обработчиками из core/sh_character_net.lua)

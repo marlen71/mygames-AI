@@ -7,6 +7,9 @@
         staminaCost, durability, требования, анимации, звуки.
 ]]
 
+-- Файл загружается и WO-загрузчиком, и движком — всегда начинаем с чистой таблицы.
+SWEP = {}
+
 SWEP.Base = "weapon_base"
 
 SWEP.PrintName = "WO Melee Base"
@@ -22,6 +25,9 @@ SWEP.HoldType = "melee"
 
 SWEP.AutoSwitchTo = true
 SWEP.AutoSwitchFrom = false
+
+SWEP.Primary = {}
+SWEP.Secondary = {}
 
 -- Боевые параметры (переопределяются потомками)
 SWEP.WODamage = 15               -- базовый урон
@@ -211,4 +217,11 @@ end
 
 function SWEP:Reload()
     -- Нет перезарядки
+end
+
+-- Регистрация (загрузчик WO или движок — файл самодостаточен)
+if WO and WO.Weapons and WO.Weapons.Register then
+    WO.Weapons.Register(SWEP, "wo_base_melee")
+else
+    weapons.Register(SWEP, "wo_base_melee")
 end

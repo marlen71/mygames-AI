@@ -200,6 +200,11 @@ function WO.Items.SetState(instance, to)
 
     local from = instance.state or WO.Items.State.INVENTORY
 
+    -- Повторная установка того же состояния — no-op (идемпотентность)
+    if from == to then
+        return true
+    end
+
     if not WO.Items.CanTransition(from, to) then
         WO.Error("WO.Items.SetState: illegal transition " .. tostring(from) .. " -> " .. tostring(to) ..
             " for item " .. tostring(instance.uid))

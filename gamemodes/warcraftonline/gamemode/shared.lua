@@ -26,17 +26,32 @@ WO.Version = "1.0.0"
 
 local function ResolveGamemodeFolder()
     local gm = GAMEMODE or GM
+    local candidates = {}
 
+    -- GM.Folder может быть как "gamemodes/<name>", так и "gamemodes/<name>/gamemode" —
+    -- проверяем кандидатов наличием shared.lua, чтобы file.Find гарантированно
+    -- нашёл config/, ui/, plugins/, schemas/ и т.д.
     if gm and isstring(gm.Folder) and gm.Folder ~= "" then
-        return gm.Folder
+        candidates[#candidates + 1] = gm.Folder
+        candidates[#candidates + 1] = gm.Folder .. "/gamemode"
     end
 
     if gm and isstring(gm.FolderName) and gm.FolderName ~= "" then
         if string.find(gm.FolderName, "/", 1, true) then
-            return gm.FolderName .. "/gamemode"
+            candidates[#candidates + 1] = gm.FolderName
+            candidates[#candidates + 1] = gm.FolderName .. "/gamemode"
+        else
+            candidates[#candidates + 1] = "gamemodes/" .. gm.FolderName
+            candidates[#candidates + 1] = "gamemodes/" .. gm.FolderName .. "/gamemode"
         end
+    end
 
-        return "gamemodes/" .. gm.FolderName .. "/gamemode"
+    candidates[#candidates + 1] = "gamemodes/warcraftonline/gamemode"
+
+    for _, path in ipairs(candidates) do
+        if file.Exists(path .. "/shared.lua", "GAME") then
+            return path
+        end
     end
 
     return "gamemodes/warcraftonline/gamemode"

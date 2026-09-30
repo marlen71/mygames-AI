@@ -2,6 +2,8 @@
     Warcraft Online — Посох ученика (magic-оружие, урон arcane).
 ]]
 
+SWEP = {}
+
 SWEP.Base = "wo_base_melee"
 
 SWEP.PrintName = "Apprentice Staff"
@@ -31,4 +33,8 @@ function SWEP:ApplyDamage(owner, target)
     })
 end
 
-WO.Weapons.Register(SWEP, "wo_staff_apprentice")
+if WO and WO.Weapons and WO.Weapons.Register then
+    WO.Weapons.Register(SWEP, "wo_staff_apprentice")
+else
+    weapons.Register(SWEP, "wo_staff_apprentice")
+end

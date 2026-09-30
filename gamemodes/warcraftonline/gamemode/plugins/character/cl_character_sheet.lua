@@ -3,6 +3,8 @@
     Клавиша C: лист персонажа (характеристики, уровень, опыт).
 ]]
 
+WO.CharacterUI = WO.CharacterUI or {}
+
 local sheetFrame = nil
 
 local STAT_ORDER = {

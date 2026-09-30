@@ -176,6 +176,35 @@ function WO.HUD.DrawDeathScreen()
 end
 
 ---------------------------------------------------------------------------
+-- Трекер квестов (правый верхний угол)
+---------------------------------------------------------------------------
+
+function WO.HUD.DrawQuestTracker()
+    if not (WO.Quests and WO.Quests.GetTrackerLines) then return end
+
+    local lines = WO.Quests.GetTrackerLines()
+
+    if #lines == 0 then return end
+
+    local x = ScrW() - 320
+    local y = 32
+
+    WO.UI.DrawPanelOutlined(x - 12, y - 10, 320, #lines * 20 + 20,
+        WO.UI.Colors.panel, WO.UI.Colors.border)
+
+    for _, line in ipairs(lines) do
+        if line.header then
+            draw.SimpleText(line.text, "WO.Small", x, y, WO.UI.Colors.accent)
+        else
+            draw.SimpleText(line.text, "WO.Tiny", x + 8, y,
+                line.done and WO.UI.Colors.good or WO.UI.Colors.textDim)
+        end
+
+        y = y + 20
+    end
+end
+
+---------------------------------------------------------------------------
 -- Отрисовка
 ---------------------------------------------------------------------------
 
@@ -194,4 +223,5 @@ hook.Add("HUDPaint", "wo_hud_paint", function()
 
     WO.HUD.DrawPlayerFrame()
     WO.HUD.DrawTargetFrame()
+    WO.HUD.DrawQuestTracker()
 end)

@@ -46,8 +46,9 @@ function WO.Weapons.Register(sWEP, name)
     end
 
     if weapons.GetStored(name) then
-        WO.Error("WO.Weapons.Register: duplicate weapon '" .. name .. "'")
-        return false
+        -- Файл мог быть уже зарегистрирован движком (или повторная загрузка) —
+        -- перезаписываем осознанно: содержимое идентично.
+        WO.Warn("WO.Weapons.Register: weapon '" .. name .. "' already registered — overwriting")
     end
 
     if isstring(sWEP.Base) and sWEP.Base ~= "" and sWEP.Base ~= "weapon_base" then

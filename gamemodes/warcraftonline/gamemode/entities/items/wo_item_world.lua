@@ -15,6 +15,9 @@
         Entity:Interact(ply)
 ]]
 
+-- Файл загружается и WO-загрузчиком, и движком — всегда начинаем с чистой таблицы.
+ENT = {}
+
 ENT.Type = "anim"
 ENT.Base = "base_anim"
 

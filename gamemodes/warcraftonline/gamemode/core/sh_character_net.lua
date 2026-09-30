@@ -51,6 +51,7 @@ WO.Net.Register("Character.List", {
     end,
     handler = function(_, list)
         WO.Character.List = list
+        WO.Character.StateReceived = true
         WO.Hook.Run("CharacterListReceived", list)
     end,
 })
@@ -118,6 +119,21 @@ WO.Net.Register("Character.Death", {
 ---------------------------------------------------------------------------
 -- Клиент → сервер
 ---------------------------------------------------------------------------
+
+-- Клиент полностью загрузился и готов принимать net-сообщения.
+-- Без этого хендшейка сервер мог отправить меню раньше, чем клиент
+-- зарегистрировал обработчики, — экран создания не открывался.
+WO.Net.Register("Client.Ready", {
+    direction = "toserver",
+    rate = { max = 5, window = 10 },
+    handler = function(ply)
+        if not IsValid(ply) then return end
+
+        ply.wo_client_ready = true
+
+        WO.Character.SendState(ply)
+    end,
+})
 
 -- Запрос на создание персонажа. Данные валидируются на сервере.
 WO.Net.Register("Character.Create", {

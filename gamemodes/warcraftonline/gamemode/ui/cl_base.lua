@@ -247,18 +247,27 @@ function WO.UI.Scroll(parent)
 
     local sbar = scroll:GetVBar()
 
-    sbar:SetWide(6)
+    if IsValid(sbar) then
+        sbar:SetWide(6)
 
-    function sbar:Paint(w, h)
-        draw.RoundedBox(2, 0, 0, w, h, WO.UI.Colors.panelDark)
+        function sbar:Paint(w, h)
+            draw.RoundedBox(2, 0, 0, w, h, WO.UI.Colors.panelDark)
+        end
+
+        if IsValid(sbar.btnGrip) then
+            function sbar.btnGrip:Paint(w, h)
+                draw.RoundedBox(2, 0, 0, w, h, WO.UI.Colors.borderLight)
+            end
+        end
+
+        if IsValid(sbar.btnUp) then
+            function sbar.btnUp:Paint(w, h) end
+        end
+
+        if IsValid(sbar.btnDown) then
+            function sbar.btnDown:Paint(w, h) end
+        end
     end
-
-    function sbar.btnGrip:Paint(w, h)
-        draw.RoundedBox(2, 0, 0, w, h, WO.UI.Colors.borderLight)
-    end
-
-    function sbar.btnUp:Paint(w, h) end
-    function sbar.btnDown:Paint(w, h) end
 
     return scroll
 end

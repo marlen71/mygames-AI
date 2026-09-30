@@ -51,21 +51,13 @@ hook.Add("PlayerInitialSpawn", "wo_player_initial_spawn", function(ply)
 
     PutInLimbo(ply)
 
-    -- Загружаем список персонажей игрока и отправляем клиенту
-    local list = WO.Character.LoadList(ply)
-
     WO.Hook.Run("PlayerConnected", ply)
 
-    -- Отложенный запрос на случай, если клиент ещё не готов принимать net
-    timer.Simple(1, function()
-        if IsValid(ply) then
-            WO.Net.Send("Character.List", ply, list)
-
-            if #list == 0 then
-                WO.Net.Send("Character.OpenCreate", ply)
-            else
-                WO.Net.Send("Character.OpenSelect", ply)
-            end
+    -- Фолбэк: клиент мог не успеть/не ответить — отправляем состояние повторно.
+    -- Основной путь — хендшейк Client.Ready (см. sh_character_net.lua).
+    timer.Simple(3, function()
+        if IsValid(ply) and not ply.wo_client_ready then
+            WO.Character.SendState(ply)
         end
     end)
 end)

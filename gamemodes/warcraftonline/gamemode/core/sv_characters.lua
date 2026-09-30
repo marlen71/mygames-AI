@@ -212,7 +212,10 @@ function WO.Character.Create(ply, data)
 
     WO.Log("Character created: " .. char:GetFullName() .. " [" .. char.id .. "] for " .. ply:Nick())
 
+    -- Полная персистентность сразу: инвентарь/экипировка/данные плагинов
+    -- пишутся через CharacterSave — иначе Select→Load терял бы стартовые предметы.
     WO.SaveQueue.MarkDirty(char)
+    WO.Character.Save(char)
     WO.Hook.Run("CharacterCreated", char)
 
     return true, char
@@ -524,6 +527,28 @@ end
 --[[
     Отправляет клиенту все данные активного персонажа.
 ]]
+--[[--
+    Отправляет клиенту состояние меню персонажей: список + какой экран открыть.
+    Вызывается по готовности клиента (Client.Ready) и как фолбэк при входе.
+]]
+function WO.Character.SendState(ply)
+    if not IsValid(ply) then return end
+
+    local list = WO.Character.LoadList(ply)
+
+    WO.Net.Send("Character.List", ply, list)
+
+    if ply:HasCharacter() then
+        return
+    end
+
+    if #list == 0 then
+        WO.Net.Send("Character.OpenCreate", ply)
+    else
+        WO.Net.Send("Character.OpenSelect", ply)
+    end
+end
+
 function WO.Character.SyncToClient(ply)
     if not IsValid(ply) then return end
 

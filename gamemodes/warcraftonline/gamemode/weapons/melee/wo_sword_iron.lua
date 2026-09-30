@@ -4,6 +4,8 @@
     конфигурацию предмета и оружия.
 ]]
 
+SWEP = {}
+
 SWEP.Base = "wo_base_melee"
 
 SWEP.PrintName = "Iron Sword"
@@ -19,4 +21,8 @@ SWEP.WORange = 85
 SWEP.WOStaminaCost = 5
 SWEP.WODurabilityLoss = 1
 
-WO.Weapons.Register(SWEP, "wo_sword_iron")
+if WO and WO.Weapons and WO.Weapons.Register then
+    WO.Weapons.Register(SWEP, "wo_sword_iron")
+else
+    weapons.Register(SWEP, "wo_sword_iron")
+end
