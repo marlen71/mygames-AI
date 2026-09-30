@@ -86,6 +86,12 @@ function WO.Net.Register(name, def)
     end
 
     net.Receive(name, function(len, ply)
+        -- Запрещаем принимать сообщения противоположного направления: определения
+        -- shared регистрируются в обоих realm, но это не делает toclient/toserver
+        -- двусторонними протоколами.
+        if SERVER and def.direction == "toclient" then return end
+        if CLIENT and def.direction == "toserver" then return end
+
         -- На клиенте ply = nil
         if SERVER then
             if not IsValid(ply) then return end

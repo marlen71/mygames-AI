@@ -51,9 +51,16 @@ WO.Config.Sounds = {
 WO.Config.InventoryWidth = 10
 WO.Config.InventoryHeight = 6
 
+-- Draconic Base templates use SWEP.UseHands = true and GMod c_arms models.
+-- Registered player-model hand mappings are preferred; this is the safe fallback.
+WO.Config.DefaultHandsModel = "models/weapons/c_arms.mdl"
+
 ---------------------------------------------------------------------------
 -- Характеристики в бою
 ---------------------------------------------------------------------------
 
 WO.Config.MeleeStaminaCost = 5      -- Расход выносливости за удар
 WO.Config.CombatRegenDelay = 5      -- Секунд после боя до регена
+
+-- Tab зарезервирован за единым scoreboard/menu; цель переключается на F3.
+WO.Config.TargetingKeyName = "KEY_F3"

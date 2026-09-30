@@ -22,3 +22,9 @@ WO.Net.Register("Leveling.Sync", {
         WO.Hook.Run("LevelingSynced", data)
     end,
 })
+
+if CLIENT then
+    WO.Hook.Add("CharacterMenuOpening", "leveling_client_clear", function()
+        WO.Leveling.ClientData = nil
+    end)
+end

@@ -14,7 +14,7 @@
 ]]
 
 local function CheckAdmin(ply, permission)
-    if IsValid(ply) and not WO.Admin:Can(ply, permission) then
+    if IsValid(ply) and not WO.Admin.Can(ply, permission) then
         ply:ChatPrint("[WO] Недостаточно прав.")
         return false
     end

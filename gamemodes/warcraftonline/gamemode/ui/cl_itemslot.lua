@@ -27,18 +27,39 @@ local function UnregisterDropTarget(panel)
 end
 
 local function FindDropTarget(x, y)
+    local bestTarget
+    local bestArea = math.huge
+
     for panel in pairs(WO.UI.DropTargets) do
-        if IsValid(panel) then
+        if not IsValid(panel) then
+            WO.UI.DropTargets[panel] = nil
+        else
             local px, py = panel:LocalToScreen(0, 0)
             local w, h = panel:GetSize()
 
-            if x >= px and x <= px + w and y >= py and y <= py + h then
-                return panel
+            if isnumber(px) and isnumber(py) and isnumber(w) and isnumber(h) and
+                x >= px and x <= px + w and y >= py and y <= py + h then
+                local area = w * h
+
+                if area < bestArea then
+                    bestTarget = panel
+                    bestArea = area
+                end
             end
         end
     end
 
-    return nil
+    return bestTarget
+end
+
+function WO.UI.CancelDrag()
+    local drag = WO.UI.Drag
+
+    if drag and IsValid(drag.ghost) then
+        drag.ghost:Remove()
+    end
+
+    WO.UI.Drag = nil
 end
 
 ---------------------------------------------------------------------------
@@ -287,6 +308,14 @@ end
 
 function SLOT:OnRemove()
     UnregisterDropTarget(self)
+
+    if WO.UI.Drag and WO.UI.Drag.source == self then
+        WO.UI.CancelDrag()
+    end
+
+    if IsValid(tooltip) then
+        WO.UI.HideTooltip()
+    end
 end
 
 function SLOT:Paint(w, h)
@@ -392,18 +421,35 @@ end
 
 function SLOT:OnMousePressed(code)
     if code == MOUSE_LEFT and self.item then
-        -- Начало перетаскивания
+        local def = WO.Items.Get(self.item.class)
+        local itemWidth = self.itemWidth or (def and def.size and def.size.w) or 1
+        local itemHeight = self.itemHeight or (def and def.size and def.size.h) or 1
+        local offsetX, offsetY = 0, 0
+        local mouseX, mouseY = gui.MouseX(), gui.MouseY()
+
+        if isfunction(self.ScreenToLocal) then
+            local ok, localX, localY = pcall(self.ScreenToLocal, self, mouseX, mouseY)
+
+            if ok and isnumber(localX) and isnumber(localY) then
+                local pitch = self.gridPitch or self:GetWide() or WO.UI.Metrics.slotSize
+                local cellSize = self.gridSlotSize or pitch
+                local gap = math.max(0, pitch - cellSize)
+
+                offsetX = math.Clamp(math.floor(localX / math.max(1, cellSize + gap)), 0, itemWidth - 1)
+                offsetY = math.Clamp(math.floor(localY / math.max(1, cellSize + gap)), 0, itemHeight - 1)
+            end
+        end
+
         local ghost = vgui.Create("DPanel")
         ghost:SetSize(self:GetWide(), self:GetTall())
         ghost:SetMouseInputEnabled(false)
         ghost:SetDrawOnTop(true)
         ghost:SetPaintBackground(false)
-
         ghost.Paint = function(_, w, h)
             draw.RoundedBox(WO.UI.Metrics.radiusSmall, 0, 0, w, h, Color(255, 255, 255, 40))
 
-            local def = WO.Items.Get(self.item.class)
-            local col = def and WO.UI.GetRarityColor(def.rarity) or color_white
+            local itemDef = WO.Items.Get(self.item.class)
+            local col = itemDef and WO.UI.GetRarityColor(itemDef.rarity) or color_white
 
             surface.SetDrawColor(col)
             surface.DrawOutlinedRect(0, 0, w, h, 2)
@@ -414,7 +460,15 @@ function SLOT:OnMousePressed(code)
             item = self.item,
             source = self,
             ghost = ghost,
+            offsetX = offsetX,
+            offsetY = offsetY,
+            itemWidth = itemWidth,
+            itemHeight = itemHeight,
         }
+
+        if self.MouseCapture then
+            self:MouseCapture(true)
+        end
 
         WO.UI.HideTooltip()
     elseif code == MOUSE_RIGHT then
@@ -423,38 +477,45 @@ function SLOT:OnMousePressed(code)
 end
 
 function SLOT:OnMouseReleased(code)
-    if code == MOUSE_LEFT and WO.UI.Drag then
-        local drag = WO.UI.Drag
+    local drag = WO.UI.Drag
 
-        if IsValid(drag.ghost) then
-            drag.ghost:Remove()
+    if code ~= MOUSE_LEFT or not drag or drag.source ~= self then return end
+
+    if IsValid(drag.ghost) then
+        drag.ghost:Remove()
+    end
+
+    if self.MouseCapture then
+        self:MouseCapture(false)
+    end
+
+    local target = FindDropTarget(gui.MouseX(), gui.MouseY())
+    WO.UI.Drag = nil
+
+    if IsValid(target) and target ~= drag.source then
+        local canDrop = true
+
+        if isfunction(target.CanDropItem) then
+            canDrop = target:CanDropItem(drag) == true
         end
 
-        local x, y = gui.MouseX(), gui.MouseY()
-        local target = FindDropTarget(x, y)
-
-        WO.UI.Drag = nil
-
-        if IsValid(target) and target ~= drag.source then
-            local canDrop = true
-
-            if isfunction(target.CanDropItem) then
-                canDrop = target:CanDropItem(drag) == true
-            end
-
-            if canDrop and isfunction(target.OnItemDropped) then
-                target:OnItemDropped(drag)
-            end
+        if canDrop and isfunction(target.OnItemDropped) then
+            target:OnItemDropped(drag)
         end
     end
 end
 
 function SLOT:Think()
-    if WO.UI.Drag and WO.UI.Drag.source == self and IsValid(WO.UI.Drag.ghost) then
-        local x, y = gui.MouseX(), gui.MouseY()
+    local drag = WO.UI.Drag
 
-        WO.UI.Drag.ghost:SetPos(x - self:GetWide() / 2, y - self:GetTall() / 2)
-    end
+    if not drag or drag.source ~= self or not IsValid(drag.ghost) then return end
+
+    local pitch = self.gridPitch or self:GetWide() or WO.UI.Metrics.slotSize
+    local cellSize = self.gridSlotSize or pitch
+    local offsetX = (drag.offsetX or 0) * pitch + cellSize / 2
+    local offsetY = (drag.offsetY or 0) * pitch + cellSize / 2
+
+    drag.ghost:SetPos(gui.MouseX() - offsetX, gui.MouseY() - offsetY)
 end
 
 -- Контекстное меню (правый клик)

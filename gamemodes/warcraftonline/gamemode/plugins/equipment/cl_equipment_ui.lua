@@ -1,101 +1,96 @@
 --[[
     Warcraft Online — UI экипировки (client).
-    Панель слотов (используется в окне инвентаря и персонажа).
+    Независимая панель со всеми configured equipment slots.
 ]]
 
 WO.EquipmentUI = WO.EquipmentUI or {}
 
---[[
-    Создаёт панель экипировки (список слотов).
+function WO.EquipmentUI.CreatePanel(parent, options)
+    options = options or {}
 
-    @param parent Panel
-    @return Panel
-]]
-function WO.EquipmentUI.CreatePanel(parent)
     local panel = vgui.Create("DPanel", parent)
+    local panelWidth = math.max(1, tonumber(options.width) or 300)
+    local panelHeight = math.max(1, tonumber(options.height) or 500)
+    local topInset = math.max(38, tonumber(options.topInset) or 42)
 
-    panel:SetSize(255, 400)
+    panel:SetPos(tonumber(options.x) or 0, tonumber(options.y) or 0)
+    panel:SetSize(panelWidth, panelHeight)
     panel:SetPaintBackground(false)
 
     panel.Paint = function(_, w, h)
-        draw.SimpleText(WO.Lang:Get("equipment.title"), "WO.Subtitle", w / 2, 8, WO.UI.Colors.accent, TEXT_ALIGN_CENTER)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, WO.UI.Colors.border)
+        draw.SimpleText(WO.Lang:Get("equipment.title"), "WO.Subtitle",
+            14, 20, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
     end
 
     local slots = {}
+    local slotDefs = WO.Config.EquipSlots or {}
+    local columns = panelWidth < 360 and 1 or 2
+    local rowCount = math.max(1, math.ceil(#slotDefs / columns))
+    local padding = 10
+    local columnGap = 8
+    local columnWidth = math.floor((panelWidth - padding * 2 - columnGap * (columns - 1)) / columns)
+    local availableHeight = math.max(0, panelHeight - topInset - 8)
+    local rowHeight = math.floor(availableHeight / rowCount)
+    rowHeight = math.max(20, math.min(38, rowHeight))
+    local slotSize = math.max(18, math.min(34, rowHeight - 2))
 
-    local function BuildSlots()
-        for _, slot in ipairs(slots) do
-            if IsValid(slot) then
-                slot:Remove()
-            end
+    for index, slotDef in ipairs(slotDefs) do
+        local column = math.floor((index - 1) / rowCount)
+        local row = (index - 1) % rowCount
+        local rowPanel = vgui.Create("DPanel", panel)
+        rowPanel:SetPos(padding + column * (columnWidth + columnGap), topInset + row * rowHeight)
+        rowPanel:SetSize(columnWidth, rowHeight - 2)
+        rowPanel:SetPaintBackground(false)
+
+        local slot = vgui.Create("WO_ItemSlot", rowPanel)
+        slot:SetPos(math.max(0, columnWidth - slotSize), math.floor((rowHeight - slotSize) / 2))
+        slot:SetSize(slotSize, slotSize)
+        slot:SetDroppable(true)
+        slot.slotId = slotDef.id
+        slot.slotColor = WO.UI.Colors.panelDark
+
+        rowPanel.Paint = function(_, w, h)
+            local labelWidth = math.max(0, w - slotSize - 8)
+            draw.SimpleText(WO.Lang:Get(slotDef.nameKey), "WO.Tiny",
+                labelWidth, h / 2, WO.UI.Colors.textDim,
+                TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
         end
 
-        slots = {}
-
-        local y = 30
-
-        for _, slotDef in ipairs(WO.Config.EquipSlots or {}) do
-            local row = vgui.Create("DPanel", panel)
-
-            row:SetPos(0, y)
-            row:SetSize(255, 34)
-            row:SetPaintBackground(false)
-
-            row.Paint = function(_, w, h)
-                draw.SimpleText(WO.Lang:Get(slotDef.nameKey), "WO.Small", 78, h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
-            end
-
-            local slot = vgui.Create("WO_ItemSlot", row)
-
-            slot:SetPos(88, 1)
-            slot:SetSize(32, 32)
-            slot:SetDroppable(true)
-            slot.slotId = slotDef.id
-
-            -- Drop из инвентаря → экипировать
-            slot.CanDropItem = function()
-                return true
-            end
-
-            slot.OnItemDropped = function(_, drag)
-                WO.Net.SendToServer("Equipment.Equip", drag.uid)
-            end
-
-            -- Правый клик → снять
-            slot.OnContextMenu = function(selfSlot, item)
-                if not item then return end
-
-                local menu = DermaMenu()
-
-                menu:AddOption(WO.Lang:Get("inventory.unequip"), function()
-                    WO.Net.SendToServer("Equipment.Unequip", selfSlot.slotId)
-                end)
-
-                menu:Open()
-            end
-
-            slots[#slots + 1] = slot
-
-            y = y + 27
+        slot.CanDropItem = function(_, drag)
+            return drag ~= nil and drag.uid ~= nil and
+                not (IsValid(drag.source) and drag.source.slotId ~= nil)
         end
+
+        slot.OnItemDropped = function(_, drag)
+            WO.Net.SendToServer("Equipment.Equip", drag.uid)
+        end
+
+        slot.OnContextMenu = function(selfSlot, item)
+            if not item then return end
+
+            local menu = DermaMenu()
+            menu:AddOption(WO.Lang:Get("inventory.unequip"), function()
+                WO.Net.SendToServer("Equipment.Unequip", selfSlot.slotId)
+            end)
+            menu:Open()
+        end
+
+        slots[#slots + 1] = slot
     end
 
     local function Refresh()
         for _, slot in ipairs(slots) do
             if IsValid(slot) then
                 local item = WO.Equipment.ClientData and WO.Equipment.ClientData[slot.slotId] or nil
-
                 slot:SetItem(item)
             end
         end
     end
 
-    BuildSlots()
     Refresh()
 
-    -- Обновления
-    local hookId = "wo_equip_ui_" .. panel:EntIndex()
-
+    local hookId = "wo_equip_ui_" .. tostring(panel:EntIndex())
     WO.Hook.Add("EquipmentSynced", hookId, function()
         if IsValid(panel) then
             Refresh()
@@ -110,3 +105,7 @@ function WO.EquipmentUI.CreatePanel(parent)
 
     return panel
 end
+
+WO.Hook.Add("CharacterMenuOpening", "equipment_client_clear", function()
+    WO.Equipment.ClientData = {}
+end)

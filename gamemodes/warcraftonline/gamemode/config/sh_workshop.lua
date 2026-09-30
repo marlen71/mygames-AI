@@ -28,6 +28,15 @@
 WO.Workshop = WO.Workshop or {}
 
 WO.Workshop.Catalog = {
+    -- Draconic Base — framework для оружия; его шаблон использует UseHands и
+    -- базовые GMod c_arms. Для кастомного WO-оружия применяется тот же путь.
+    draconic_base = {
+        id = 1847505933,
+        title = "Draconic Base",
+        type = "framework",
+        url = "https://steamcommunity.com/sharedfiles/filedetails/?id=1847505933",
+    },
+
     -- Мечи (Basic Swords) — SWEP-классы; поле classes заполняется после
     -- установки аддона (см. список классов в spawnmenu → Weapons).
     basic_swords = {

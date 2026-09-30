@@ -85,6 +85,13 @@ function WO.CharacterUI.OpenSheet()
     end
 end
 
+WO.Hook.Add("CharacterMenuOpening", "character_sheet_close", function()
+    if IsValid(sheetFrame) then
+        sheetFrame:Remove()
+        sheetFrame = nil
+    end
+end)
+
 WO.UI.BindKey(KEY_C, function()
     if WO.Character.GetLocal() then
         WO.CharacterUI.OpenSheet()

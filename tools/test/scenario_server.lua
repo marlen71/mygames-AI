@@ -23,8 +23,8 @@ MOCK.RunTimers(0.1)
 MOCK.Assert(WO.Core.IsLoaded, "WO.Core.IsLoaded после загрузки")
 MOCK.Assert(WO.GamemodeIncludeFolder == "warcraftonline/gamemode",
     "абсолютный include-root GMod: " .. tostring(WO.GamemodeIncludeFolder))
-MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 24,
-    "загружены все 24 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
+MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 26,
+    "загружены все 26 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
 MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
     "плагины персонажа и HUD загрузились")
 MOCK.Assert(MOCK.clientFilesAdded["warcraftonline/gamemode/plugins/character/sh_plugin.lua"],
@@ -40,6 +40,39 @@ MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() >= 4, "классы за�
 MOCK.Assert(WO.Items.GetAll and table.Count(WO.Items.GetAll()) >= 10, "предметы зарегистрированы: " ..
     (WO.Items.GetAll and table.Count(WO.Items.GetAll()) or 0))
 MOCK.Assert(WO.Models ~= nil and WO.Models.Catalog ~= nil, "каталог моделей Mailer на месте")
+
+-- Проверяем приоритет SAM над встроенными GMod-флагами администратора.
+local previousSAM = rawget(_G, "sam")
+local registeredSAMPermissions = {}
+sam = {
+    permissions = {
+        add = function(name, _, defaultGroup)
+            registeredSAMPermissions[name] = defaultGroup
+        end,
+    },
+}
+WO.Admin.RegisteredSAMPermissions = nil
+MOCK.Assert(WO.Admin.RegisterSAMPermissions(), "SAM права регистрируются")
+MOCK.Assert(table.Count(registeredSAMPermissions) == 7 and
+    registeredSAMPermissions.wo_debug == "admin", "в SAM добавлены семь WO permissions")
+
+local permissionPly = MOCK.NewEntity("player")
+permissionPly.__admin = true
+permissionPly.__samPermissions = {}
+permissionPly.HasPermission = function(self, permission)
+    return self.__samPermissions[permission] == true
+end
+MOCK.Assert(not WO.Admin.IsAdmin(permissionPly),
+    "SAM deny не обходится встроенным Player:IsAdmin")
+permissionPly.__samPermissions.wo_item_give = true
+MOCK.Assert(WO.Admin.Can(permissionPly, "item.give") and
+    not WO.Admin.Can(permissionPly, "money.give") and
+    not WO.Admin.Can(permissionPly, "unknown.permission"),
+    "SAM проверяет индивидуальные разрешения и fail-closed unknown права")
+
+sam = previousSAM
+WO.Admin.RegisteredSAMPermissions = nil
+WO.Admin.SAMReady = nil
 
 print("[scenario] load OK: plugins=" .. table.Count(WO.Plugins.GetAll()) ..
     " races=" .. #WO.Races.GetIDs() .. " items=" .. table.Count(WO.Items.GetAll()))
@@ -235,7 +268,18 @@ print("[scenario] persistence OK")
 -- 8b. NPC / диалоги / квесты / торговля
 ---------------------------------------------------------------------------
 
-MOCK.Assert(#WO.NPCs.Spawned >= 3, "NPC заспавнены: " .. #WO.NPCs.Spawned)
+MOCK.Assert(#WO.NPCs.Spawned == 0,
+    "NPC без map-specific spawn-точек не появляются автоматически")
+
+-- Добавляем явные map-specific точки, чтобы проверить обычный жизненный цикл NPC.
+for _, def in pairs(WO.NPCs.List) do
+    def.spawns = {
+        { map = game.GetMap(), pos = Vector(0, 0, 16), ang = Angle(0, 180, 0) },
+    }
+end
+WO.NPCs.SpawnAll()
+
+MOCK.Assert(#WO.NPCs.Spawned >= 3, "явно настроенные NPC заспавнены: " .. #WO.NPCs.Spawned)
 
 local function FindNPC(id)
     for _, ent in ipairs(WO.NPCs.Spawned) do

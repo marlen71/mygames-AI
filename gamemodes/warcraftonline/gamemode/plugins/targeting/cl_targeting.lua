@@ -43,22 +43,25 @@ local function FindTarget()
     return bestEnt
 end
 
-WO.UI.BindKey(KEY_TAB, function()
-    local ply = LocalPlayer()
+local targetingKey = rawget(_G, WO.Config.TargetingKeyName or "KEY_F3") or rawget(_G, "KEY_F1")
 
-    if not IsValid(ply) or not ply:HasCharacter() then return end
+if targetingKey then
+    WO.UI.BindKey(targetingKey, function()
+        local ply = LocalPlayer()
 
-    -- Сброс текущей цели по второму Tab, иначе — новая цель
-    local current = ply:GetNW2Entity("wo_target")
+        if not IsValid(ply) or not ply:HasCharacter() then return end
 
-    if IsValid(current) then
-        WO.Net.SendToServer("Target.Set", 0)
-    else
-        local target = FindTarget()
+        -- Повторное нажатие сбрасывает цель; иначе выбирается ближайшая.
+        local current = ply:GetNW2Entity("wo_target")
 
-        WO.Net.SendToServer("Target.Set", IsValid(target) and target:EntIndex() or 0)
-    end
-end, "targeting_tab")
+        if IsValid(current) then
+            WO.Net.SendToServer("Target.Set", 0)
+        else
+            local target = FindTarget()
+            WO.Net.SendToServer("Target.Set", IsValid(target) and target:EntIndex() or 0)
+        end
+    end, "targeting_cycle")
+end
 
 --- Возвращает текущую цель локального игрока.
 function WO.Target.Get()

@@ -15,12 +15,11 @@ WO.NPCs.Register({
     model = WO.Workshop.ModelOr("black_wolf", "models/zombie/fast.mdl"),
     scale = 0.85,
 
-    spawns = {},
+    spawns = {}, -- Configure explicit map positions before enabling this NPC.
 
     health = 120,
     damage = 8,
     attackRange = 140,
     interactRange = 0,
 
-    noAutoSpawn = false,
 })

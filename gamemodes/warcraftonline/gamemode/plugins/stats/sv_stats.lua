@@ -73,25 +73,6 @@ function WO.Stats.Refresh(ply, fullHeal)
 end
 
 ---------------------------------------------------------------------------
--- Net: синхронизация статов
----------------------------------------------------------------------------
-
-WO.Net.Register("Stats.Sync", {
-    direction = "toclient",
-    write = function(statsTable)
-        net.WriteTable(statsTable)
-    end,
-    read = function()
-        return net.ReadTable()
-    end,
-    handler = function(_, statsTable)
-        WO.Stats.Networked = statsTable
-
-        WO.Hook.Run("StatsSynced", statsTable)
-    end,
-})
-
----------------------------------------------------------------------------
 -- Статы при загрузке персонажа
 ---------------------------------------------------------------------------
 

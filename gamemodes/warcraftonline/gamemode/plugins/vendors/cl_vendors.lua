@@ -187,3 +187,8 @@ hook.Add("Think", "wo_vendor_autoclose", function()
         end
     end
 end)
+
+WO.Hook.Add("CharacterMenuOpening", "vendor_ui_close", function()
+    CloseVendor()
+    vendorData = nil
+end)

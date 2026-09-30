@@ -24,13 +24,15 @@ function MODEL:Init()
     self:SetFOV(self.previewFOV)
     self:SetAnimated(true)
 
-    self.spin = false
+    -- Preview cards should visibly rotate without requiring an extra toggle.
+    self.spin = true
     self.dragging = false
 end
 
 function MODEL:LayoutEntity(ent)
     if self.spin and not self.dragging then
-        self.yaw = (self.yaw + FrameTime() * 12) % 360
+        local frameTime = FrameTime and FrameTime() or 0
+        self.yaw = (self.yaw + frameTime * 12) % 360
     end
 
     -- Камера находится со стороны -Forward(), поэтому лицо должно смотреть

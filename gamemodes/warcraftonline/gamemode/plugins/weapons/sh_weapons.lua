@@ -61,6 +61,9 @@ function WO.Weapons.Register(sWEP, name)
     end
 
     sWEP.Base = "weapon_base"
+    if sWEP.UseHands == nil then
+        sWEP.UseHands = true
+    end
     sWEP.Spawnable = false
     sWEP.AdminSpawnable = false
 

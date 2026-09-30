@@ -49,12 +49,15 @@ end
 hook.Add("Think", "wo_keybinds", function()
     if gui.IsGameUIVisible() or gui.IsConsoleVisible() then return end
 
+    local menuOpen = WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen()
     local typing = TypingInField()
 
     for _, bind in ipairs(WO.UI.Binds) do
         local down = input.IsKeyDown(bind.key)
 
-        if down and not wasDown[bind.key] and not typing then
+        -- Не запускаем игровые hotkeys за собственным scoreboard/menu.
+        -- Обновляем edge-state, чтобы закрытие меню не воспроизводило старое нажатие.
+        if not menuOpen and down and not wasDown[bind.key] and not typing then
             local ok, err = pcall(bind.fn)
 
             if not ok then

@@ -37,17 +37,18 @@ WO.Net.Register("Inventory.Sync", {
         local count = net.ReadUInt(16)
 
         for i = 1, count do
-            local durability = net.ReadInt(16)
-
-            data.items[i] = {
+            local item = {
                 uid = net.ReadString(),
                 class = net.ReadString(),
                 amount = net.ReadUInt(16),
-                durability = durability >= 0 and durability or nil,
-                x = net.ReadUInt(8),
-                y = net.ReadUInt(8),
-                data = net.ReadTable(),
             }
+            local durability = net.ReadInt(16)
+
+            item.durability = durability >= 0 and durability or nil
+            item.x = net.ReadUInt(8)
+            item.y = net.ReadUInt(8)
+            item.data = net.ReadTable()
+            data.items[i] = item
         end
 
         return data
@@ -90,17 +91,18 @@ WO.Net.Register("Inventory.Delta", {
         }
 
         if net.ReadBool() then
-            local durability = net.ReadInt(16)
-
-            delta.item = {
+            local item = {
                 uid = net.ReadString(),
                 class = net.ReadString(),
                 amount = net.ReadUInt(16),
-                durability = durability >= 0 and durability or nil,
-                x = net.ReadUInt(8),
-                y = net.ReadUInt(8),
-                data = net.ReadTable(),
             }
+            local durability = net.ReadInt(16)
+
+            item.durability = durability >= 0 and durability or nil
+            item.x = net.ReadUInt(8)
+            item.y = net.ReadUInt(8)
+            item.data = net.ReadTable()
+            delta.item = item
         end
 
         if net.ReadBool() then

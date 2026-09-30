@@ -79,6 +79,10 @@ WO.Hook.Add("DialogueClosed", "dialogue_ui", function()
     CloseDialogue()
 end)
 
+WO.Hook.Add("CharacterMenuOpening", "dialogue_ui_close", function()
+    CloseDialogue()
+end)
+
 -- ESC/выход из машины/смерть — закрываем
 hook.Add("Think", "wo_dialogue_autoclose", function()
     if IsValid(dialogueFrame) then

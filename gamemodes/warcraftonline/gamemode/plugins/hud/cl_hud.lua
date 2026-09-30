@@ -16,6 +16,13 @@ local HIDE = {
     CHudSecondaryAmmo = true,
     CHudWeaponSelection = true,
     CHudCrosshair = true,
+    CHudScoreboard = true,
+    CHudDamageIndicator = true,
+    CHudGeiger = true,
+    CHudSuitPower = true,
+    CHudVehicle = true,
+    CHudTrain = true,
+    CHudGMod = true,
 }
 
 hook.Add("HUDShouldDraw", "wo_hud_hide", function(name)

@@ -22,6 +22,7 @@ SWEP.AdminSpawnable = false
 
 SWEP.WorldModel = "models/weapons/w_crowbar.mdl"
 SWEP.HoldType = "melee"
+SWEP.UseHands = true -- стандартный c_arms путь, совместимый с Draconic Base
 
 SWEP.AutoSwitchTo = true
 SWEP.AutoSwitchFrom = false

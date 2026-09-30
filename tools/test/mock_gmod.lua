@@ -332,7 +332,17 @@ angle_zero = Angle(0, 0, 0)
 function IsValid(obj)
     if obj == nil then return false end
     if type(obj) ~= "table" then return false end
-    if obj.__entity then return obj.__valid == true end
+
+    -- Panel metatables synthesize unknown methods; inspect raw flags so a
+    -- vgui panel is not mistaken for an Entity by the mock runtime.
+    if rawget(obj, "__entity") == true then
+        return rawget(obj, "__valid") == true
+    end
+
+    if rawget(obj, "__panel") == true then
+        return rawget(obj, "__removed") ~= true
+    end
+
     return true
 end
 
@@ -387,6 +397,9 @@ function MOCK.NewEntity(class)
 
         local known = t.__methods[k]
         if known ~= nil then return known end
+
+        local accessorFields = rawget(t, "__mockAccessorFields")
+        if accessorFields and accessorFields[k] then return nil end
 
         local fromMeta = EntityMetaLookup(t, k)
         if fromMeta ~= nil then return fromMeta end
@@ -467,8 +480,11 @@ function MOCK.NewEntity(class)
     e.__methods.GetBodygroup = function(tt, i) return (tt.__bodygroups and tt.__bodygroups[i]) or 0 end
     e.__methods.GetBodyGroups = function(tt) return tt.__bg_list or {} end
     e.__methods.GetNumBodyGroups = function(tt) return #(tt.__bg_list or {}) end
+    e.__methods.GetBodygroupCount = function() return 1 end
+    e.__methods.GetBodygroupName = function(_, i) return "Bodygroup " .. tostring(i) end
     e.__methods.SetSkin = function(tt, i) tt.__skin = i end
     e.__methods.GetSkin = function(tt) return tt.__skin or 0 end
+    e.__methods.SkinCount = function() return 1 end
     e.__methods.GetMaterial = function() return "" end
     e.__methods.SetMaterial = function() end
     e.__methods.GetColor = function() return Color(255, 255, 255, 255) end
@@ -511,6 +527,13 @@ function MOCK.NewEntity(class)
     e.__methods.SetUseType = function() end
 
     return e
+end
+
+RENDERGROUP_OPAQUE = 0
+ClientsideModel = function(modelPath)
+    local entity = MOCK.NewEntity("clientside_model")
+    entity:SetModel(modelPath)
+    return entity
 end
 
 ---------------------------------------------------------------------------
@@ -1267,15 +1290,57 @@ local function NewPanel(class)
 
     p.SetText = function(tt, text) tt.__text = text end
     p.GetText = function(tt) return tt.__text or "" end
+    p.SetValue = function(tt, value) tt.__value = value end
+    p.GetValue = function(tt) return tt.__value or "" end
     p.SetEnabled = function(tt, enabled) tt.__enabled = enabled == true end
     p.IsEnabled = function(tt) return tt.__enabled end
     p.SetVisible = function(tt, visible) tt.__visible = visible == true end
     p.IsVisible = function(tt) return tt.__visible end
     p.Remove = function(tt)
+        if tt.__removed then return end
         tt.__removed = true
+
+        if isfunction(tt.OnRemove) then
+            pcall(tt.OnRemove, tt)
+        end
+
         for _, child in ipairs(tt.__children) do
             if child.Remove then child:Remove() end
         end
+    end
+
+    p.Close = function(tt) tt:Remove() end
+    p.SetSize = function(tt, w, h) tt.__w, tt.__h = w, h end
+    p.GetSize = function(tt) return tt.__w or 0, tt.__h or 0 end
+    p.GetWide = function(tt) return tt.__w or 0 end
+    p.GetTall = function(tt) return tt.__h or 0 end
+    p.SetPos = function(tt, x, y) tt.__x, tt.__y = x, y end
+    p.GetPos = function(tt) return tt.__x or 0, tt.__y or 0 end
+    p.GetParent = function(tt) return tt.__parent end
+    p.Center = function(tt)
+        tt.__x = math.floor((ScrW() - (tt.__w or 0)) / 2)
+        tt.__y = math.floor((ScrH() - (tt.__h or 0)) / 2)
+    end
+    p.LocalToScreen = function(tt, x, y)
+        local parent = tt.__parent
+        local px, py = tt.__x or 0, tt.__y or 0
+        if parent and parent.LocalToScreen then
+            local ox, oy = parent:LocalToScreen(px, py)
+            px, py = ox or 0, oy or 0
+        end
+        return px + (x or 0), py + (y or 0)
+    end
+    p.ScreenToLocal = function(tt, x, y)
+        local px, py = tt:LocalToScreen(0, 0)
+        return (x or 0) - px, (y or 0) - py
+    end
+    p.MouseCapture = function(tt, enabled) tt.__mouseCapture = enabled == true end
+    p.SetZPos = function(tt, z) tt.__zpos = z end
+    p.Clear = function(tt)
+        for _, child in ipairs(tt.__children) do
+            if child.Remove then child:Remove() end
+        end
+        tt.__children = {}
     end
 
     local meta = {}
@@ -1283,9 +1348,13 @@ local function NewPanel(class)
         local raw = rawget(t, k)
         if raw ~= nil then return raw end
 
+        local accessorFields = rawget(t, "__mockAccessorFields")
+        if accessorFields and accessorFields[k] then return nil end
+
         return function(tt, ...)
             if k == "Add" then
                 local child = ...
+                child.__parent = tt
                 tt.__children[#tt.__children + 1] = child
                 return child
             end
@@ -1407,8 +1476,9 @@ function input.GetKeyCode() return 0 end
 function input.LookupBinding() return "" end
 function input.GetCursorPos() return 0, 0 end
 
-ScrW = function() return 1920 end
-ScrH = function() return 1080 end
+ScrW = function() return MOCK.screenW or 1920 end
+ScrH = function() return MOCK.screenH or 1080 end
+FrameTime = function() return MOCK.frameTime or 0 end
 
 ---------------------------------------------------------------------------
 -- game / ents / player / weapons / scripted_ents / player_manager / chat / sound
@@ -1617,6 +1687,8 @@ LocalPlayer = function()
 end
 
 AccessorFunc = function(target, field, name, external)
+    target.__mockAccessorFields = target.__mockAccessorFields or {}
+    target.__mockAccessorFields[field] = true
     target["Set" .. name] = function(self, v) self[field] = v end
     target["Get" .. name] = function(self) return self[field] end
 end

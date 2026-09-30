@@ -21,6 +21,10 @@ local function CloseAllCharacterUI()
         frame = nil
     end
 
+    if WO.MenuUI and WO.MenuUI.Close then
+        WO.MenuUI.Close()
+    end
+
     SetScreen(nil)
 
     if WO.CharacterUI.CloseCreate then
@@ -36,7 +40,14 @@ WO.CharacterUI.CloseMenus = CloseAllCharacterUI
 
 function WO.CharacterUI.OpenMainMenu()
     CloseAllCharacterUI()
+    SetScreen("main")
 
+    if WO.MenuUI and WO.MenuUI.Show then
+        WO.MenuUI.Show("characters")
+        return
+    end
+
+    -- Fallback для запуска без scoreboard-плагина.
     local list = WO.Character.GetList()
     local panelWidth = math.min(520, ScrW() - 48)
     local panelHeight = 380

@@ -3,7 +3,7 @@
 
     Шаги:
         1. Раса → 2. Пол → 3. Возраст → 4. Имя → 5. Фамилия →
-        6. Кастомизация → 7. Класс → 8. Предпросмотр → 9. Подтверждение
+        6. Кастомизация → 7. Класс → 8. Итоговая карточка и подтверждение
 
     Справа — 3D-preview (вращение мышью, zoom колесом, обновление в реальном времени).
     Сервер — финальный авторитет: клиентская валидация только для удобства.
@@ -35,6 +35,7 @@ local function NewDraft()
             bodygroups = {},
         },
         class = nil,
+        confirmed = false,
     }
 end
 
@@ -52,7 +53,6 @@ local STEP_NAMES = {
     "character.step.surname",
     "character.step.customization",
     "character.step.class",
-    "character.step.preview",
     "character.step.confirm",
 }
 
@@ -114,6 +114,8 @@ local function ValidateStep(step)
         end
     elseif step == 7 and not draft.class then
         return false, "character.class"
+    elseif step == 8 and not draft.confirmed then
+        return false, "character.confirm_required"
     end
 
     return true
@@ -439,11 +441,26 @@ stepBuilders[6] = function(parent, modelPanel)
 end
 
 -- Шаг 7: класс
-stepBuilders[7] = function(parent, modelPanel)
+stepBuilders[7] = function(parent)
+    local selectedLabel = WO.UI.Label(parent, "", "WO.Small", WO.UI.Colors.accent)
+
+    selectedLabel:Dock(TOP)
+    selectedLabel:DockMargin(0, 0, 0, 4)
+    selectedLabel:SetTall(22)
+
+    local function UpdateSelectedClass()
+        local class = draft.class and WO.Classes.Get(draft.class)
+        local name = class and class.name or WO.Lang:Get("character.class_unselected")
+
+        selectedLabel:SetText(WO.Lang:Get("character.selected_class") .. ": " .. name)
+    end
+
+    UpdateSelectedClass()
+
     local scroll = WO.UI.Scroll(parent)
 
     scroll:Dock(FILL)
-    scroll:DockMargin(0, 10, 0, 0)
+    scroll:DockMargin(0, 4, 0, 0)
 
     for _, classId in ipairs(WO.Classes.GetIDs()) do
         local class = WO.Classes.Get(classId)
@@ -453,6 +470,7 @@ stepBuilders[7] = function(parent, modelPanel)
             if not allowed then return end
 
             draft.class = classId
+            UpdateSelectedClass()
         end)
 
         button:Dock(TOP)
@@ -470,88 +488,88 @@ stepBuilders[7] = function(parent, modelPanel)
     end
 end
 
--- Шаг 8: предпросмотр
-stepBuilders[8] = function(parent)
-    local race = WO.Races.Get(draft.race)
-    local class = WO.Classes.Get(draft.class)
+local function SubmitDraft()
+    if submitPending or not draft.confirmed then return end
 
-    local lines = {
-        WO.Lang:Get("character.full_name") .. ": " .. draft.name .. " " .. draft.surname,
-        WO.Lang:Get("character.age") .. ": " .. draft.age,
-        WO.Lang:Get("character.gender") .. ": " .. WO.Lang:Get("gender." .. tostring(draft.gender)),
-        WO.Lang:Get("character.race") .. ": " .. (race and race.name or "?"),
-        WO.Lang:Get("character.class") .. ": " .. (class and class.name or "?"),
-    }
+    submitPending = true
+    submitButton = IsValid(createFrame) and createFrame.primaryButton or nil
 
-    for _, line in ipairs(lines) do
-        local label = WO.UI.Label(parent, line, "WO.Body")
-
-        label:Dock(TOP)
-        label:DockMargin(0, 8, 0, 0)
-        label:SetTall(20)
+    if IsValid(submitButton) then
+        submitButton:SetEnabled(false)
     end
 
-    -- Бонусы расы/класса
-    local statsLabel = WO.UI.Label(parent, WO.Lang:Get("character_menu.stats"), "WO.Subtitle", WO.UI.Colors.accent)
+    WO.Character.RequestCreate({
+        name = draft.name,
+        surname = draft.surname,
+        age = draft.age,
+        gender = draft.gender,
+        race = draft.race,
+        class = draft.class,
+        model = draft.model,
+        customization = draft.customization,
+    })
+end
 
+-- Шаг 8: итоговая карточка и явное подтверждение создания
+stepBuilders[8] = function(parent)
+    draft.confirmed = false
+
+    local race = WO.Races.Get(draft.race)
+    local class = WO.Classes.Get(draft.class)
+    local rows = {
+        { key = "character.full_name", value = draft.name .. " " .. draft.surname },
+        { key = "character.age", value = tostring(draft.age) },
+        { key = "character.gender", value = WO.Lang:Get("gender." .. tostring(draft.gender)) },
+        { key = "character.race", value = race and race.name or "—" },
+        { key = "character.class", value = class and class.name or "—" },
+        { key = "character.model", value = draft.model or "—" },
+    }
+
+    local intro = WO.UI.Label(parent, WO.Lang:Get("character.review_instructions"),
+        "WO.Small", WO.UI.Colors.textDim)
+    intro:Dock(TOP)
+    intro:DockMargin(0, 0, 0, 8)
+    intro:SetTall(34)
+
+    for _, row in ipairs(rows) do
+        local label = WO.UI.Label(parent, WO.Lang:Get(row.key) .. ": " .. row.value, "WO.Body")
+        label:Dock(TOP)
+        label:DockMargin(0, 3, 0, 0)
+        label:SetTall(21)
+    end
+
+    local statsLabel = WO.UI.Label(parent, WO.Lang:Get("character_menu.stats"),
+        "WO.Subtitle", WO.UI.Colors.accent)
     statsLabel:Dock(TOP)
-    statsLabel:DockMargin(0, 20, 0, 4)
+    statsLabel:DockMargin(0, 12, 0, 3)
     statsLabel:SetTall(22)
 
     for _, stat in ipairs(WO.Stats.PrimaryStats or { "strength", "agility", "intelligence", "stamina", "spirit" }) do
         local raceBonus = (race and race.stats and race.stats[stat]) or 0
         local classBonus = (class and class.stats and class.stats[stat]) or 0
-
         local label = WO.UI.Label(parent,
             WO.Lang:Get("stats." .. stat) .. ": " .. (raceBonus + classBonus),
             "WO.Small", WO.UI.Colors.textDim)
-
         label:Dock(TOP)
-        label:DockMargin(8, 2, 0, 0)
-        label:SetTall(16)
+        label:DockMargin(8, 1, 0, 0)
+        label:SetTall(17)
     end
-end
 
--- Шаг 9: подтверждение
-stepBuilders[9] = function(parent)
-    local label = WO.UI.Label(parent, draft.name .. " " .. draft.surname, "WO.Title", WO.UI.Colors.accent)
+    local confirmToggle
+    confirmToggle = WO.UI.Button(parent, "", function()
+        draft.confirmed = not draft.confirmed
+        confirmToggle:SetText((draft.confirmed and "☑ " or "☐ ") ..
+            WO.Lang:Get("character.create_confirm_check"))
+        confirmToggle:SetAccent(draft.confirmed)
 
-    label:Dock(TOP)
-    label:DockMargin(0, 20, 0, 10)
-    label:SetTall(30)
-
-    local confirmButton
-
-    confirmButton = WO.UI.Button(parent, WO.Lang:Get("ui.confirm"), function()
-        if submitPending then return end
-
-        submitPending = true
-        submitButton = confirmButton
-        confirmButton:SetEnabled(false)
-
-        WO.Character.RequestCreate({
-            name = draft.name,
-            surname = draft.surname,
-            age = draft.age,
-            gender = draft.gender,
-            race = draft.race,
-            class = draft.class,
-            model = draft.model,
-            customization = draft.customization,
-        })
+        if IsValid(createFrame) and IsValid(createFrame.primaryButton) then
+            createFrame.primaryButton:SetEnabled(draft.confirmed and not submitPending)
+        end
     end)
-
-    confirmButton:Dock(TOP)
-    confirmButton:DockMargin(0, 16, 0, 0)
-    confirmButton:SetTall(44)
-    confirmButton:SetAccent(true)
-    confirmButton:SetFont("WO.Subtitle")
-
-    local hint = WO.UI.Label(parent, WO.Lang:Get("character.create"), "WO.Small", WO.UI.Colors.textDim)
-
-    hint:Dock(TOP)
-    hint:DockMargin(0, 12, 0, 0)
-    hint:SetTall(18)
+    confirmToggle:Dock(TOP)
+    confirmToggle:DockMargin(0, 12, 0, 0)
+    confirmToggle:SetTall(38)
+    confirmToggle:SetText("☐ " .. WO.Lang:Get("character.create_confirm_check"))
 end
 
 ---------------------------------------------------------------------------
@@ -571,6 +589,18 @@ local function BuildStep(parent, modelPanel)
 
     if builder then
         builder(parent, modelPanel)
+    end
+
+    local primaryButton = IsValid(createFrame) and createFrame.primaryButton
+
+    if IsValid(primaryButton) then
+        if draft.step == 8 then
+            primaryButton:SetText(WO.Lang:Get("character.create_confirm_action"))
+            primaryButton:SetEnabled(draft.confirmed and not submitPending)
+        else
+            primaryButton:SetText(WO.Lang:Get("ui.next"))
+            primaryButton:SetEnabled(true)
+        end
     end
 end
 
@@ -619,7 +649,7 @@ function WO.CharacterUI.OpenCreate()
 
     modelPanel:SetPos(modelX, 70)
     modelPanel:SetSize(modelWidth, ScrH() - 170)
-    modelPanel.spin = false
+    modelPanel.spin = true
 
     local rotateButtonY = ScrH() - 128
     local rotateButtonWidth = 190
@@ -662,24 +692,29 @@ function WO.CharacterUI.OpenCreate()
 
         if not valid then
             WO.Notify.Show("error", WO.Lang:Get(tostring(reason)))
-
             return
         end
 
-        if draft.step < 9 then
-            draft.step = draft.step + 1
+        if draft.step == 8 then
+            SubmitDraft()
+            return
+        end
 
+        if draft.step < 8 then
+            draft.step = draft.step + 1
             BuildStep(stepPanel, modelPanel)
 
-            -- Перестраиваем bodygroups при входе в шаг кастомизации
+            -- Первый проход создаёт контролы bodygroups; второй обновляет их
+            -- после того, как PreviewModel получил RebuildBodygroups callback.
             if draft.step == 6 and modelPanel.UpdateBodygroups then
                 BuildStep(stepPanel, modelPanel)
             end
         end
     end)
 
-    nextButton:SetPos(ScrW() * 0.42 + ScrW() * 0.52 - 150, navY)
-    nextButton:SetSize(150, 40)
+    createFrame.primaryButton = nextButton
+    nextButton:SetPos(ScrW() * 0.42 + ScrW() * 0.52 - 200, navY)
+    nextButton:SetSize(190, 40)
     nextButton:SetAccent(true)
 
     -- Возврат из мастера в главное меню (создание можно продолжить позже).

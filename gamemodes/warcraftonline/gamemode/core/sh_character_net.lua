@@ -75,6 +75,10 @@ WO.Net.Register("Character.Sync", {
 WO.Net.Register("Character.OpenMenu", {
     direction = "toclient",
     handler = function()
+        local previousCharacter = WO.Character.Local
+
+        WO.Character.Local = nil
+        WO.Hook.Run("CharacterMenuOpening", previousCharacter)
         WO.Hook.Run("OpenCharacterMenu")
     end,
 })

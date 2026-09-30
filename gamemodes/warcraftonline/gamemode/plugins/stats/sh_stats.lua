@@ -53,6 +53,32 @@ function WO.Stats.IsStats(obj)
 end
 
 ---------------------------------------------------------------------------
+-- Синхронизация финальных статов
+---------------------------------------------------------------------------
+
+WO.Net.Register("Stats.Sync", {
+    direction = "toclient",
+    write = function(statsTable)
+        net.WriteTable(statsTable)
+    end,
+    read = function()
+        return net.ReadTable()
+    end,
+    handler = function(_, statsTable)
+        if not istable(statsTable) then return end
+
+        WO.Stats.Networked = statsTable
+        WO.Hook.Run("StatsSynced", statsTable)
+    end,
+})
+
+if CLIENT then
+    WO.Hook.Add("CharacterMenuOpening", "stats_client_clear", function()
+        WO.Stats.Networked = nil
+    end)
+end
+
+---------------------------------------------------------------------------
 -- Модификаторы
 ---------------------------------------------------------------------------
 

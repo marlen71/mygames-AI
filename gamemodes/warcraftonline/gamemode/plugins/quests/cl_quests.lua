@@ -199,11 +199,16 @@ end)
 
 -- Клавиша J — журнал квестов
 if WO.UI and WO.UI.BindKey then
-    WO.UI.BindKey(KEY_J, function()
-        if IsValid(questFrame) then
-            CloseLog()
-        else
-            WO.Quests.OpenLog()
-        end
-    end, "quests_log")
+WO.UI.BindKey(KEY_J, function()
+    if IsValid(questFrame) then
+        CloseLog()
+    else
+        WO.Quests.OpenLog()
+    end
+end, "quests_log")
 end
+
+WO.Hook.Add("CharacterMenuOpening", "quest_ui_close", function()
+    CloseLog()
+    WO.Quests.LocalStates = {}
+end)

@@ -52,3 +52,9 @@ WO.Net.Register("Currency.Sync", {
         WO.Hook.Run("CurrencySynced", amount)
     end,
 })
+
+if CLIENT then
+    WO.Hook.Add("CharacterMenuOpening", "currency_client_clear", function()
+        WO.Currency.ClientAmount = nil
+    end)
+end
