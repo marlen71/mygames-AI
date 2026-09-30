@@ -80,6 +80,7 @@ color_white = Color(255, 255, 255, 255)
 
 -- Клавиши/константы движка (используются в UI/физике)
 KEY_J = 74
+KEY_ESCAPE = 70
 KEY_C = 67
 KEY_F1 = 98
 KEY_E = 69
@@ -1262,7 +1263,20 @@ function vgui.GetControlTable(name)
 end
 
 local function NewPanel(class)
-    local p = { __panel = true, __class = class, __children = {} }
+    local p = { __panel = true, __class = class, __children = {}, __enabled = true, __visible = true }
+
+    p.SetText = function(tt, text) tt.__text = text end
+    p.GetText = function(tt) return tt.__text or "" end
+    p.SetEnabled = function(tt, enabled) tt.__enabled = enabled == true end
+    p.IsEnabled = function(tt) return tt.__enabled end
+    p.SetVisible = function(tt, visible) tt.__visible = visible == true end
+    p.IsVisible = function(tt) return tt.__visible end
+    p.Remove = function(tt)
+        tt.__removed = true
+        for _, child in ipairs(tt.__children) do
+            if child.Remove then child:Remove() end
+        end
+    end
 
     local meta = {}
     meta.__index = function(t, k)
@@ -1329,6 +1343,18 @@ function vgui.Create(class, parent)
 end
 
 function vgui.CreateX(class, parent) return vgui.Create(class, parent) end
+
+function MOCK.FindPanelByText(text)
+    for i = #MOCK.createdPanels, 1, -1 do
+        local panel = MOCK.createdPanels[i]
+
+        if rawget(panel, "__removed") ~= true and rawget(panel, "__text") == text then
+            return panel
+        end
+    end
+
+    return nil
+end
 
 function vgui.GetKeyboardFocus() return nil end
 function vgui.CursorPos() return 0, 0 end
@@ -1581,7 +1607,10 @@ end
 
 GetConVarNumber = function(name) return 0 end
 GetConVarString = function(name) return "0" end
-RunConsoleCommand = function() end
+MOCK.consoleCommands = MOCK.consoleCommands or {}
+RunConsoleCommand = function(command, ...)
+    MOCK.consoleCommands[#MOCK.consoleCommands + 1] = { command, ... }
+end
 LocalPlayer = function()
     MOCK.localPlayer = MOCK.localPlayer or MOCK.NewEntity("player")
     return MOCK.localPlayer

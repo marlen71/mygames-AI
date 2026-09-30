@@ -18,6 +18,13 @@ local function CreateFonts()
         antialias = true,
     })
 
+    surface.CreateFont("WO.MenuButton", {
+        font = "Roboto",
+        size = 21,
+        weight = 600,
+        antialias = true,
+    })
+
     surface.CreateFont("WO.Body", {
         font = "Roboto",
         size = 15,

@@ -16,9 +16,12 @@ AccessorFunc(MODEL, "yaw", "Yaw", FORCE_NUMBER)
 AccessorFunc(MODEL, "zoom", "Zoom", FORCE_NUMBER)
 
 function MODEL:Init()
-    self.yaw = 30
-    self.zoom = 70
-    self:SetFOV(35)
+    self.yaw = 0
+    -- zoom — множитель относительно рассчитанной по bounds дистанции, а не
+    -- фиксированные Source units (фиксированные 70 обрезали ростовые модели).
+    self.zoom = 1
+    self.previewFOV = 32
+    self:SetFOV(self.previewFOV)
     self:SetAnimated(true)
 
     self.spin = false
@@ -27,15 +30,21 @@ end
 
 function MODEL:LayoutEntity(ent)
     if self.spin and not self.dragging then
-        self.yaw = self.yaw + FrameTime() * 12
+        self.yaw = (self.yaw + FrameTime() * 12) % 360
     end
 
-    ent:SetAngles(Angle(0, self.yaw, 0))
+    -- Камера находится со стороны -Forward(), поэтому лицо должно смотреть
+    -- туда же: разворачиваем исходную ориентацию модели на 180 градусов.
+    ent:SetAngles(Angle(0, self.yaw + 180, 0))
 
     -- Не проигрывать анимации — статичная поза
     if self:GetAnimated() then
         ent:FrameAdvance(0)
     end
+end
+
+function MODEL:RotateBy(degrees)
+    self.yaw = (self.yaw + (tonumber(degrees) or 0)) % 360
 end
 
 function MODEL:OnMousePressed(code)
@@ -64,7 +73,8 @@ function MODEL:OnCursorMoved(x, y)
 end
 
 function MODEL:OnMouseWheeled(delta)
-    self.zoom = math.Clamp(self.zoom - delta * 6, 20, 160)
+    -- Колесо вверх — приблизить, вниз — отдалить.
+    self.zoom = math.Clamp(self.zoom + delta * 0.08, 0.6, 1.8)
 
     return true
 end
@@ -74,15 +84,24 @@ function MODEL:Think()
 
     if not IsValid(ent) then return end
 
-    -- Камера: дистанция zoom, прицел по центру модели
     local mins, maxs = ent:GetModelBounds()
-    local center = (mins + maxs) / 2
+    local size = maxs - mins
+    local height = math.max(size.z, 32)
+    local center = Vector((mins.x + maxs.x) * 0.5, (mins.y + maxs.y) * 0.5,
+        mins.z + height * 0.52)
+    local halfFOV = math.rad(self.previewFOV * 0.5)
+    local tangent = math.max(math.tan(halfFOV), 0.01)
+    local verticalDistance = (height * 0.5) / tangent
+    local diagonal = math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z)
+    local fitDistance = math.max(verticalDistance, diagonal * 1.08) * 1.18
+    local distance = fitDistance / self.zoom
 
-    self:SetLookAt(center + Vector(0, 0, 10))
+    self:SetLookAt(center)
 
-    local campos = center + Vector(0, 0, 8) + Angle(5, self.yaw, 0):Forward() * -self.zoom
+    local cameraDirection = Angle(6, self.yaw, 0):Forward()
+    local cameraPos = center - cameraDirection * distance + Vector(0, 0, height * 0.025)
 
-    self:SetCamPos(campos)
+    self:SetCamPos(cameraPos)
 end
 
 --[[

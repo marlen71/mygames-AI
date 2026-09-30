@@ -21,12 +21,15 @@ local uuidCounter = 0
 function WO.Util.UUID()
     uuidCounter = uuidCounter + 1
 
+    -- UUID is shared/server-authoritative; LocalPlayer() is client-only and
+    -- must never be referenced here (character creation runs on the server).
     local seed = table.concat({
         tostring(SysTime()),
         tostring(RealTime()),
         tostring(math.random(0, 0x7FFFFFFF)),
         tostring(uuidCounter),
-        tostring(IsValid(LocalPlayer()) and LocalPlayer():SteamID() or "srv"),
+        tostring(game and game.GetMap and game.GetMap() or "unknown_map"),
+        SERVER and "server" or "client",
     }, ":")
 
     local h1 = util.CRC(seed)

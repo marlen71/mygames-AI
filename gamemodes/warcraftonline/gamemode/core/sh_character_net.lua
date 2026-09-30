@@ -71,7 +71,15 @@ WO.Net.Register("Character.Sync", {
     end,
 })
 
--- Открыть экран создания персонажа
+-- Открыть главное меню персонажа (создать / загрузить / отключиться)
+WO.Net.Register("Character.OpenMenu", {
+    direction = "toclient",
+    handler = function()
+        WO.Hook.Run("OpenCharacterMenu")
+    end,
+})
+
+-- Открыть экран создания персонажа (совместимость / прямой вызов)
 WO.Net.Register("Character.OpenCreate", {
     direction = "toclient",
     handler = function()
@@ -148,6 +156,9 @@ WO.Net.Register("Character.Create", {
     validate = function(ply, data)
         if not IsValid(ply) then return false, "invalid_player" end
         if ply:HasCharacter() then return false, "already_has_character" end
+        if ply.wo_character_creation_pending or ply.wo_character_selection_pending then
+            return false, "creation_pending"
+        end
         if not istable(data) then return false, "invalid_data" end
 
         -- Быстрая проверка размера (подробная валидация — в WO.Character.Create)
@@ -156,20 +167,56 @@ WO.Net.Register("Character.Create", {
         return true
     end,
     handler = function(ply, data)
-        local success, result = WO.Character.Create(ply, data)
+        -- Дополнительная защита от повторного клика/параллельного net-запроса.
+        if ply.wo_character_creation_pending or ply.wo_character_selection_pending then return end
 
-        if success then
-            WO.Net.Send("Character.CreateResult", ply, true, "")
+        ply.wo_character_creation_pending = true
 
-            -- Автоматически выбираем созданного персонажа
-            timer.Simple(0.5, function()
-                if IsValid(ply) then
-                    WO.Character.Select(ply, result.id)
-                end
-            end)
-        else
-            WO.Net.Send("Character.CreateResult", ply, false, tostring(result))
+        local ok, success, result = pcall(WO.Character.Create, ply, data)
+
+        if not ok then
+            ply.wo_character_creation_pending = nil
+            WO.Error("Character.Create crashed for " .. ply:Nick() .. ": " .. tostring(success))
+            WO.Net.Send("Character.CreateResult", ply, false, "internal_error")
+            return
         end
+
+        if not success then
+            ply.wo_character_creation_pending = nil
+            WO.Net.Send("Character.CreateResult", ply, false, tostring(result))
+            return
+        end
+
+        ply.wo_character_creation_pending = nil
+        ply.wo_character_selection_pending = true
+        WO.Net.Send("Character.CreateResult", ply, true, "")
+
+        -- Автоматически загружаем только что созданного персонажа.
+        timer.Simple(0.5, function()
+            if not IsValid(ply) then return end
+
+            if not ply:HasCharacter() then
+                local callOK, selected, selectResult = pcall(WO.Character.Select, ply, result.id)
+
+                if not callOK then
+                    WO.Error("Auto-select after character creation crashed for " .. ply:Nick() ..
+                        ": " .. tostring(selected))
+                    WO.Net.Send("Character.SelectResult", ply, false, "load_failed")
+                elseif not selected then
+                    WO.Warn("Auto-select after character creation failed for " .. ply:Nick() ..
+                        ": " .. tostring(selectResult))
+                end
+            end
+
+            if not ply:HasCharacter() then
+                -- Персонаж уже сохранён: если авто-загрузка не удалась, игрок
+                -- возвращается в меню и может выбрать его вручную.
+                WO.Net.Send("Character.List", ply, WO.Character.LoadList(ply))
+                WO.Net.Send("Character.OpenMenu", ply)
+            end
+
+            ply.wo_character_selection_pending = nil
+        end)
     end,
 })
 
@@ -265,6 +312,6 @@ WO.Net.Register("Character.Logout", {
         local list = WO.Character.LoadList(ply)
 
         WO.Net.Send("Character.List", ply, list)
-        WO.Net.Send("Character.OpenSelect", ply)
+        WO.Net.Send("Character.OpenMenu", ply)
     end,
 })

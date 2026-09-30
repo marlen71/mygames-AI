@@ -6,8 +6,14 @@
 WO.CharacterUI = WO.CharacterUI or {}
 
 local frame = nil
+local currentScreen = nil
 
 local SELECTED_COLOR = WO.UI.Colors.accent
+
+local function SetScreen(screen)
+    currentScreen = screen
+    WO.CharacterUI.CurrentScreen = screen
+end
 
 local function CloseAllCharacterUI()
     if IsValid(frame) then
@@ -15,9 +21,95 @@ local function CloseAllCharacterUI()
         frame = nil
     end
 
+    SetScreen(nil)
+
     if WO.CharacterUI.CloseCreate then
         WO.CharacterUI.CloseCreate()
     end
+end
+
+WO.CharacterUI.CloseMenus = CloseAllCharacterUI
+
+---------------------------------------------------------------------------
+-- Главное меню: создать / загрузить / выйти (disconnect)
+---------------------------------------------------------------------------
+
+function WO.CharacterUI.OpenMainMenu()
+    CloseAllCharacterUI()
+
+    local list = WO.Character.GetList()
+    local panelWidth = math.min(520, ScrW() - 48)
+    local panelHeight = 380
+    local panelX = (ScrW() - panelWidth) / 2
+    local panelY = (ScrH() - panelHeight) / 2
+
+    frame = vgui.Create("DFrame")
+    frame:SetSize(ScrW(), ScrH())
+    frame:SetPos(0, 0)
+    frame:SetTitle("")
+    frame:ShowCloseButton(false)
+    frame:SetDraggable(false)
+    frame:MakePopup()
+    SetScreen("main")
+    frame.OnKeyCodePressed = function(_, key)
+        -- Не даём закрыть главное меню и оставить игрока в лимбо.
+        if key == KEY_ESCAPE then return end
+    end
+
+    frame.Paint = function(_, w, h)
+        draw.RoundedBox(0, 0, 0, w, h, Color(8, 11, 18, 248))
+        draw.SimpleText("Warcraft Online", "WO.Title", w / 2, panelY - 58,
+            WO.UI.Colors.accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    end
+
+    local panel = vgui.Create("DPanel", frame)
+    panel:SetPos(panelX, panelY)
+    panel:SetSize(panelWidth, panelHeight)
+    panel.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, WO.UI.Colors.borderLight)
+        draw.SimpleText(WO.Lang:Get("character.main_menu"), "WO.Subtitle", w / 2, 32,
+            WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    end
+
+    local buttonWidth = math.min(420, panelWidth - 56)
+    local buttonHeight = 54
+    local buttonX = (panelWidth - buttonWidth) / 2
+
+    local createButton = WO.UI.Button(panel, WO.Lang:Get("character.menu.create"), function()
+        WO.CharacterUI.OpenCreate()
+    end)
+    createButton:SetPos(buttonX, 82)
+    createButton:SetSize(buttonWidth, buttonHeight)
+    createButton:SetAccent(true)
+    createButton:SetFont("WO.MenuButton")
+
+    local loadButton = WO.UI.Button(panel, WO.Lang:Get("character.menu.load"), function()
+        if #WO.Character.GetList() > 0 then
+            WO.CharacterUI.OpenSelect()
+        else
+            if WO.Notify and WO.Notify.Show then
+                WO.Notify.Show("info", WO.Lang:Get("character.no_saved_characters"))
+            end
+        end
+    end)
+    loadButton:SetPos(buttonX, 154)
+    loadButton:SetSize(buttonWidth, buttonHeight)
+    loadButton:SetEnabled(#list > 0)
+    loadButton:SetFont("WO.MenuButton")
+
+    local emptyLabel = WO.UI.Label(panel, WO.Lang:Get("character.no_saved_characters"),
+        "WO.Small", WO.UI.Colors.textDim)
+    emptyLabel:SetPos(0, 218)
+    emptyLabel:SetSize(panelWidth, 24)
+    emptyLabel:SetContentAlignment(5)
+    emptyLabel:SetVisible(#list == 0)
+
+    local exitButton = WO.UI.Button(panel, WO.Lang:Get("character.menu.exit"), function()
+        RunConsoleCommand("disconnect")
+    end)
+    exitButton:SetPos(buttonX, 278)
+    exitButton:SetSize(buttonWidth, 48)
+    exitButton:SetFont("WO.MenuButton")
 end
 
 ---------------------------------------------------------------------------
@@ -84,6 +176,12 @@ function WO.CharacterUI.OpenSelect()
     frame:ShowCloseButton(false)
     frame:SetDraggable(false)
     frame:MakePopup()
+    SetScreen("select")
+    frame.OnKeyCodePressed = function(_, key)
+        if key == KEY_ESCAPE then
+            WO.CharacterUI.OpenMainMenu()
+        end
+    end
 
     frame.Paint = function(_, w, h)
         draw.RoundedBox(0, 0, 0, w, h, Color(10, 12, 18, 250))
@@ -139,7 +237,11 @@ function WO.CharacterUI.OpenSelect()
     end
 
     -- Кнопки
-    local buttonY = ScrH() - 110
+    local buttonY = ScrH() - 112
+    local buttonWidth = math.min(190, math.floor((ScrW() - 80) / 4))
+    local buttonGap = 12
+    local rowWidth = buttonWidth * 4 + buttonGap * 3
+    local buttonX = (ScrW() - rowWidth) / 2
 
     local playButton = WO.UI.Button(frame, WO.Lang:Get("ui.confirm"), function()
         if selectedEntry then
@@ -147,16 +249,17 @@ function WO.CharacterUI.OpenSelect()
         end
     end)
 
-    playButton:SetPos(ScrW() / 2 - 220, buttonY)
-    playButton:SetSize(200, 40)
+    playButton:SetPos(buttonX, buttonY)
+    playButton:SetSize(buttonWidth, 42)
     playButton:SetAccent(true)
+    playButton:SetEnabled(selectedEntry ~= nil)
 
-    local createButton = WO.UI.Button(frame, WO.Lang:Get("ui.create"), function()
+    local createButton = WO.UI.Button(frame, WO.Lang:Get("character.menu.create"), function()
         WO.CharacterUI.OpenCreate()
     end)
 
-    createButton:SetPos(ScrW() / 2 + 20, buttonY)
-    createButton:SetSize(200, 40)
+    createButton:SetPos(buttonX + buttonWidth + buttonGap, buttonY)
+    createButton:SetSize(buttonWidth, 42)
 
     local deleteButton = WO.UI.Button(frame, WO.Lang:Get("ui.delete"), function()
         if not selectedEntry then return end
@@ -171,8 +274,15 @@ function WO.CharacterUI.OpenSelect()
         )
     end)
 
-    deleteButton:SetPos(ScrW() / 2 - 100, buttonY + 52)
-    deleteButton:SetSize(200, 32)
+    deleteButton:SetPos(buttonX + (buttonWidth + buttonGap) * 2, buttonY)
+    deleteButton:SetSize(buttonWidth, 42)
+    deleteButton:SetEnabled(selectedEntry ~= nil)
+
+    local backButton = WO.UI.Button(frame, WO.Lang:Get("character.back_to_menu"), function()
+        WO.CharacterUI.OpenMainMenu()
+    end)
+    backButton:SetPos(buttonX + (buttonWidth + buttonGap) * 3, buttonY)
+    backButton:SetSize(buttonWidth, 42)
 
     WO.CharacterUI.CloseSelect = function()
         if IsValid(frame) then
@@ -186,13 +296,20 @@ end
 -- События
 ---------------------------------------------------------------------------
 
+WO.Hook.Add("OpenCharacterMenu", "character_ui", function()
+    WO.CharacterUI.OpenMainMenu()
+end)
+
 WO.Hook.Add("OpenCharacterSelect", "character_ui", function()
     WO.CharacterUI.OpenSelect()
 end)
 
-WO.Hook.Add("CharacterListReceived", "character_ui", function(list)
-    -- Если экран открыт — перестраиваем
-    if IsValid(frame) then
+WO.Hook.Add("CharacterListReceived", "character_ui", function()
+    -- При повторной синхронизации остаёмся на текущем экране, не перескакиваем
+    -- из главного меню в список выбора автоматически.
+    if currentScreen == "main" then
+        WO.CharacterUI.OpenMainMenu()
+    elseif currentScreen == "select" then
         WO.CharacterUI.OpenSelect()
     end
 end)

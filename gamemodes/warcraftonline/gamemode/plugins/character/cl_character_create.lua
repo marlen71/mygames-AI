@@ -13,6 +13,8 @@
 WO.CharacterUI = WO.CharacterUI or {}
 
 local createFrame = nil
+local submitButton = nil
+local submitPending = false
 
 ---------------------------------------------------------------------------
 -- Состояние черновика
@@ -59,6 +61,10 @@ local function CloseCreate()
         createFrame:Remove()
         createFrame = nil
     end
+
+    submitButton = nil
+    submitPending = false
+    WO.CharacterUI.PreviewModel = nil
 end
 
 WO.CharacterUI.CloseCreate = CloseCreate
@@ -514,7 +520,15 @@ stepBuilders[9] = function(parent)
     label:DockMargin(0, 20, 0, 10)
     label:SetTall(30)
 
-    local confirmButton = WO.UI.Button(parent, WO.Lang:Get("ui.confirm"), function()
+    local confirmButton
+
+    confirmButton = WO.UI.Button(parent, WO.Lang:Get("ui.confirm"), function()
+        if submitPending then return end
+
+        submitPending = true
+        submitButton = confirmButton
+        confirmButton:SetEnabled(false)
+
         WO.Character.RequestCreate({
             name = draft.name,
             surname = draft.surname,
@@ -531,6 +545,7 @@ stepBuilders[9] = function(parent)
     confirmButton:DockMargin(0, 16, 0, 0)
     confirmButton:SetTall(44)
     confirmButton:SetAccent(true)
+    confirmButton:SetFont("WO.Subtitle")
 
     local hint = WO.UI.Label(parent, WO.Lang:Get("character.create"), "WO.Small", WO.UI.Colors.textDim)
 
@@ -560,8 +575,14 @@ local function BuildStep(parent, modelPanel)
 end
 
 function WO.CharacterUI.OpenCreate()
-    CloseCreate()
+    if WO.CharacterUI.CloseMenus then
+        WO.CharacterUI.CloseMenus()
+    else
+        CloseCreate()
+    end
 
+    CloseCreate()
+    WO.CharacterUI.CurrentScreen = "create"
     draft = NewDraft()
 
     createFrame = vgui.Create("DFrame")
@@ -571,6 +592,11 @@ function WO.CharacterUI.OpenCreate()
     createFrame:ShowCloseButton(false)
     createFrame:SetDraggable(false)
     createFrame:MakePopup()
+    createFrame.OnKeyCodePressed = function(_, key)
+        if key == KEY_ESCAPE then
+            WO.CharacterUI.OpenMainMenu()
+        end
+    end
 
     createFrame.Paint = function(_, w, h)
         draw.RoundedBox(0, 0, 0, w, h, Color(10, 12, 18, 252))
@@ -586,10 +612,36 @@ function WO.CharacterUI.OpenCreate()
 
     -- Правая панель: 3D preview
     local modelPanel = WO.UI.CreateCharacterModel(createFrame, "models/player/group01/male_01.mdl")
+    WO.CharacterUI.PreviewModel = modelPanel
 
-    modelPanel:SetPos(ScrW() * 0.42, 70)
-    modelPanel:SetSize(ScrW() * 0.52, ScrH() - 170)
-    modelPanel.spin = true
+    local modelX = ScrW() * 0.42
+    local modelWidth = ScrW() * 0.52
+
+    modelPanel:SetPos(modelX, 70)
+    modelPanel:SetSize(modelWidth, ScrH() - 170)
+    modelPanel.spin = false
+
+    local rotateButtonY = ScrH() - 128
+    local rotateButtonWidth = 190
+    local modelCenterX = modelX + modelWidth / 2
+
+    local rotateLeftButton = WO.UI.Button(createFrame, WO.Lang:Get("character.rotate_left"), function()
+        modelPanel:RotateBy(-20)
+    end)
+    rotateLeftButton:SetPos(modelCenterX - rotateButtonWidth - 8, rotateButtonY)
+    rotateLeftButton:SetSize(rotateButtonWidth, 34)
+
+    local rotateRightButton = WO.UI.Button(createFrame, WO.Lang:Get("character.rotate_right"), function()
+        modelPanel:RotateBy(20)
+    end)
+    rotateRightButton:SetPos(modelCenterX + 8, rotateButtonY)
+    rotateRightButton:SetSize(rotateButtonWidth, 34)
+
+    local rotateHint = WO.UI.Label(createFrame, WO.Lang:Get("character.rotate_hint"),
+        "WO.Small", WO.UI.Colors.textDim)
+    rotateHint:SetPos(modelCenterX - 240, rotateButtonY - 24)
+    rotateHint:SetSize(480, 20)
+    rotateHint:SetContentAlignment(5)
 
     -- Навигация
     local navY = ScrH() - 80
@@ -630,13 +682,10 @@ function WO.CharacterUI.OpenCreate()
     nextButton:SetSize(150, 40)
     nextButton:SetAccent(true)
 
-    -- Закрыть (возврат к выбору, если есть персонажи)
+    -- Возврат из мастера в главное меню (создание можно продолжить позже).
     local closeButton = WO.UI.Button(createFrame, "✕", function()
         CloseCreate()
-
-        if #WO.Character.GetList() > 0 then
-            WO.CharacterUI.OpenSelect()
-        end
+        WO.CharacterUI.OpenMainMenu()
     end)
 
     closeButton:SetPos(ScrW() - 70, 20)
@@ -651,4 +700,16 @@ end
 
 WO.Hook.Add("OpenCharacterCreate", "character_ui", function()
     WO.CharacterUI.OpenCreate()
+end)
+
+WO.Hook.Add("CharacterCreateResult", "character_create_pending", function(success)
+    if success then return end
+
+    submitPending = false
+
+    if IsValid(submitButton) then
+        submitButton:SetEnabled(true)
+    end
+
+    submitButton = nil
 end)

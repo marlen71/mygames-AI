@@ -6,6 +6,15 @@
 
 local MOCK = MOCK
 
+local function FindLatestLiveFrame()
+    for i = #MOCK.createdPanels, 1, -1 do
+        local panel = MOCK.createdPanels[i]
+        if rawget(panel, "__class") == "DFrame" and rawget(panel, "__removed") ~= true then
+            return panel
+        end
+    end
+end
+
 print("[scenario] loading gamemode (client)...")
 
 include("gamemodes/warcraftonline/gamemode/cl_init.lua")
@@ -46,26 +55,57 @@ MOCK.Assert(WO.Character.StateReceived == true, "StateReceived выставле�
 print("[scenario] Character.List OK")
 
 ---------------------------------------------------------------------------
--- 2. Открытие экрана создания персонажа
+-- 2. Главное меню: создать / загрузить / disconnect
 ---------------------------------------------------------------------------
 
-local panelsBefore = #MOCK.createdPanels
+local panelsBeforeMenu = #MOCK.createdPanels
+MOCK.NetDeliver({ name = "Character.OpenMenu", args = {} }, 8, nil)
 
-MOCK.NetDeliver({ name = "Character.OpenCreate", args = {} }, 8, nil)
+MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "открылось главное меню персонажей")
+MOCK.Assert(#MOCK.createdPanels > panelsBeforeMenu, "главное меню создало UI")
 
-local panelsAfter = #MOCK.createdPanels
+local createButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.create"))
+local loadButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.load"))
+local exitButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.exit"))
 
-MOCK.Assert(panelsAfter > panelsBefore, "панели создания созданы: " ..
-    (panelsAfter - panelsBefore))
+MOCK.Assert(createButton ~= nil, "в главном меню есть кнопка создания")
+MOCK.Assert(loadButton ~= nil and loadButton:IsEnabled() == false,
+    "загрузка отключена, когда персонажей ещё нет")
+MOCK.Assert(exitButton ~= nil, "в главном меню есть выход")
+
+local mainFrame = FindLatestLiveFrame()
+MOCK.Assert(mainFrame and mainFrame.OnKeyCodePressed, "главное меню обрабатывает Escape")
+mainFrame:OnKeyCodePressed(KEY_ESCAPE)
+MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "Escape не закрывает главное меню")
+
+exitButton:DoClick()
+MOCK.Assert(MOCK.consoleCommands[#MOCK.consoleCommands][1] == "disconnect",
+    "кнопка выхода вызывает disconnect")
+
+createButton:DoClick()
+MOCK.Assert(WO.CharacterUI.CurrentScreen == "create", "кнопка создания открывает мастер")
 MOCK.Assert(WO.CharacterUI.OpenCreate ~= nil, "OpenCreate доступна")
 
--- Повторное открытие (например, по ретраю) не должно падать
+local rotateRightButton = MOCK.FindPanelByText(WO.Lang:Get("character.rotate_right"))
+MOCK.Assert(rotateRightButton ~= nil and WO.CharacterUI.PreviewModel ~= nil,
+    "в мастере есть управление поворотом превью")
+local yawBeforeButton = WO.CharacterUI.PreviewModel:GetYaw()
+rotateRightButton:DoClick()
+MOCK.Assert(WO.CharacterUI.PreviewModel:GetYaw() == (yawBeforeButton + 20) % 360,
+    "кнопка поворачивает 3D-модель")
+
+local createFrame = FindLatestLiveFrame()
+MOCK.Assert(createFrame and createFrame.OnKeyCodePressed, "мастер создания обрабатывает Escape")
+createFrame:OnKeyCodePressed(KEY_ESCAPE)
+MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "Escape из мастера возвращает в главное меню")
+
+-- Повторное открытие через net (например, при retry) не должно падать.
 MOCK.NetDeliver({ name = "Character.OpenCreate", args = {} }, 8, nil)
 
-print("[scenario] OpenCreate OK")
+print("[scenario] Main menu and OpenCreate OK")
 
 ---------------------------------------------------------------------------
--- 3. Экран выбора
+-- 3. Загрузка существующего персонажа
 ---------------------------------------------------------------------------
 
 MOCK.NetDeliver({ name = "Character.List", args = {
@@ -74,7 +114,26 @@ MOCK.NetDeliver({ name = "Character.List", args = {
     "models/player/group01/male_01.mdl", 0,
 } }, 8, nil)
 
+MOCK.NetDeliver({ name = "Character.OpenMenu", args = {} }, 8, nil)
+local loadSavedButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.load"))
+MOCK.Assert(loadSavedButton ~= nil and loadSavedButton:IsEnabled(),
+    "загрузка доступна при наличии персонажа")
+loadSavedButton:DoClick()
+MOCK.Assert(WO.CharacterUI.CurrentScreen == "select", "загрузка открывает список персонажей")
+local selectFrame = FindLatestLiveFrame()
+MOCK.Assert(selectFrame and selectFrame.OnKeyCodePressed, "список персонажей обрабатывает Escape")
+selectFrame:OnKeyCodePressed(KEY_ESCAPE)
+MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "Escape из списка возвращает в главное меню")
+
+local preview = WO.UI.CreateCharacterModel(nil, "models/player/group01/male_01.mdl")
+preview:RotateBy(30)
+local previewEntity = MOCK.NewEntity("preview")
+preview:LayoutEntity(previewEntity)
+MOCK.Assert(previewEntity:GetAngles().y == 210,
+    "превью развёрнуто лицом к камере и вращается кнопками")
+
 MOCK.NetDeliver({ name = "Character.OpenSelect", args = {} }, 8, nil)
+MOCK.Assert(WO.CharacterUI.CurrentScreen == "select", "экран выбора персонажа")
 
 print("[scenario] OpenSelect OK")
 

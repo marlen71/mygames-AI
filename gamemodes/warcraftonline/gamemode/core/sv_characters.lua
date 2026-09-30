@@ -542,11 +542,9 @@ function WO.Character.SendState(ply)
         return
     end
 
-    if #list == 0 then
-        WO.Net.Send("Character.OpenCreate", ply)
-    else
-        WO.Net.Send("Character.OpenSelect", ply)
-    end
+    -- Всегда открываем главное меню: игрок сам выбирает создать нового,
+    -- загрузить сохранённого или отключиться. Список уже отправлен выше.
+    WO.Net.Send("Character.OpenMenu", ply)
 end
 
 function WO.Character.SyncToClient(ply)

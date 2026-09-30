@@ -50,12 +50,14 @@ vgui.Register("WO_ProgressBar", PROGRESS, "DPanel")
 local BUTTON = {}
 
 AccessorFunc(BUTTON, "accent", "Accent", FORCE_BOOL)
+AccessorFunc(BUTTON, "font", "Font")
 
 function BUTTON:Init()
     self:SetText("")
     self:SetTall(32)
     self.hovered = false
     self.accent = false
+    self.font = "WO.Body"
 end
 
 function BUTTON:OnCursorEntered()
@@ -99,7 +101,7 @@ function BUTTON:Paint(w, h)
         textColor = WO.UI.Colors.textDark
     end
 
-    draw.SimpleText(self:GetText(), "WO.Body", w / 2, h / 2, textColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    draw.SimpleText(self:GetText(), self.font or "WO.Body", w / 2, h / 2, textColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 end
 
 vgui.Register("WO_Button", BUTTON, "DButton")

@@ -29,6 +29,11 @@ MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
     "плагины персонажа и HUD загрузились")
 MOCK.Assert(MOCK.clientFilesAdded["warcraftonline/gamemode/plugins/character/sh_plugin.lua"],
     "сервер отправил клиенту метаданные character через AddCSLuaFile")
+local savedLocalPlayer = LocalPlayer
+LocalPlayer = nil
+local serverUUID = WO.Util.UUID()
+LocalPlayer = savedLocalPlayer
+MOCK.Assert(WO.Util.IsUUID(serverUUID), "UUID создаётся на сервере без LocalPlayer")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы зарегистрированы: " ..
     (WO.Races.GetIDs and #WO.Races.GetIDs() or 0))
 MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() >= 4, "классы зарегистрированы")
@@ -54,9 +59,9 @@ MOCK.RunTimers(3.5)
 local outbox = MOCK.TakeOutbox()
 
 MOCK.Assert(#MOCK.FindInbox(outbox, "Character.List") >= 1, "Character.List отправлен")
-MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenCreate") >= 1, "Character.OpenCreate отправлен")
+MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenMenu") >= 1, "Character.OpenMenu отправлен")
 
-print("[scenario] join OK: OpenCreate доставлен")
+print("[scenario] join OK: главное меню доставлено")
 
 ---------------------------------------------------------------------------
 -- 3. Хендшейк Client.Ready
@@ -66,7 +71,7 @@ MOCK.NetDeliver({ name = "Client.Ready", args = {} }, 8, ply)
 MOCK.RunTimers(0.1)
 
 outbox = MOCK.TakeOutbox()
-MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenCreate") >= 1, "SendState по Client.Ready")
+MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenMenu") >= 1, "SendState по Client.Ready")
 
 print("[scenario] handshake OK")
 
@@ -89,6 +94,11 @@ local createData = {
     customization = { skin = 0, bodygroups = {}, color = nil },
 }
 
+local mockedLocalPlayer = LocalPlayer
+LocalPlayer = nil -- На dedicated server LocalPlayer() не существует.
+MOCK.NetDeliver({ name = "Character.Create", args = { createData } }, 8, ply)
+LocalPlayer = mockedLocalPlayer
+-- Повторный клик до автоматического выбора не должен создать второй персонаж.
 MOCK.NetDeliver({ name = "Character.Create", args = { createData } }, 8, ply)
 MOCK.RunTimers(1)
 
@@ -99,6 +109,7 @@ MOCK.Assert(char.name == "Тест", "имя сохранено: " .. tostring(c
 MOCK.Assert(char.race == "human" and char.class == "warrior", "раса/класс сохранены")
 MOCK.Assert(char.model == models[1], "модель сохранена")
 MOCK.Assert(ply:HasCharacter(), "HasCharacter() == true")
+MOCK.Assert(#WO.Character.LoadList(ply) == 1, "повторный net-запрос не создал дубликат")
 
 print("[scenario] create OK: " .. char:GetFullName() .. " lvl " .. char:GetLevel())
 
@@ -112,8 +123,8 @@ outbox = MOCK.TakeOutbox()
 
 MOCK.Assert(#MOCK.FindInbox(outbox, "Character.List") >= 1,
     "при повторном входе сервер отправляет список персонажей")
-MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenSelect") >= 1,
-    "при повторном входе сервер открывает выбор существующего персонажа")
+MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenMenu") >= 1,
+    "при повторном входе сервер открывает главное меню персонажей")
 MOCK.Assert(WO.Character.Select(ply, savedCharID), "загрузка сохранённого персонажа")
 char = ply:GetCharacter()
 MOCK.Assert(char and char.id == savedCharID, "загружен тот же персонаж без дубликата")
