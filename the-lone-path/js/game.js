@@ -889,6 +889,7 @@
     hide(prompt);
     hide(toast);
     hide(hud);
+    hide(hud);
     TLP.Audio.quiet(false);
     TLP.Audio.setFire(true, 0.45);
   }
@@ -929,8 +930,11 @@
 
     if (S.finalDrive) {
       /* B: the drive. C: whoever is standing in it. */
-      var vt = Math.min(340, 40 + (ft - 2.6) * 150);
-      TLP.Audio.engine(true, T.clamp((vt - 40) / 390, 0.2, 1));
+      var vt;
+      if (!S._fig) vt = Math.min(340, 40 + (ft - 2.6) * 150);
+      else if (!S._figPass) vt = 74;       /* the glide past the house */
+      else vt = 340;
+      if (!S._gone) TLP.Audio.engine(true, T.clamp((vt - 40) / 390, 0.2, 1));
       var rem = vt * dt;
       while (rem > 0.001 && c.segI < CAR_PATH.length - 1) {
         var tp = CAR_PATH[c.segI + 1];
@@ -977,7 +981,11 @@
     if (ft > 6.9) S.darkness = T.smooth(S.darkness, 1, dt, 0.045);
     else S.darkness = T.smooth(S.darkness, S.targetDark, dt, 0.05);
 
-    if (ft > 7.9) { black(true); hide(hud); }
+    if (ft > 7.9 && !S._gone) {
+      S._gone = true;
+      black(true);
+      TLP.Audio.engine(false, 0);
+    }
     if (ft > 8.9 && !S._t1) {
       S._t1 = true;
       show(bigtext);
