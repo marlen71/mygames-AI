@@ -1,0 +1,197 @@
+--[[
+    Warcraft Online — HUD (client): скрытие стандартного HUD + каркас.
+    Каждый элемент — отдельная функция (WO.HUD.*).
+]]
+
+WO.HUD = WO.HUD or {}
+
+---------------------------------------------------------------------------
+-- Скрытие стандартного HUD
+---------------------------------------------------------------------------
+
+local HIDE = {
+    CHudHealth = true,
+    CHudBattery = true,
+    CHudAmmo = true,
+    CHudSecondaryAmmo = true,
+    CHudWeaponSelection = true,
+    CHudCrosshair = true,
+}
+
+hook.Add("HUDShouldDraw", "wo_hud_hide", function(name)
+    if HIDE[name] then
+        return false
+    end
+end)
+
+-- Стандартный target ID (имя над игроком) — заменяем своим target frame
+hook.Add("HUDDrawTargetID", "wo_hud_hide_targetid", function()
+    return true -- возвращаем true = стандартный рисовать НЕ нужно? (false = не рисовать)
+end)
+
+---------------------------------------------------------------------------
+-- Портрет/кадр персонажа (левый нижний угол)
+---------------------------------------------------------------------------
+
+function WO.HUD.DrawPlayerFrame()
+    local ply = LocalPlayer()
+
+    if not IsValid(ply) or not ply:HasCharacter() then return end
+
+    local char = WO.Character.GetLocal()
+
+    if not char then return end
+
+    local x, y = 24, ScrH() - 172
+    local w, h = 300, 148
+
+    WO.UI.DrawPanelOutlined(x, y, w, h, WO.UI.Colors.panel, WO.UI.Colors.accentDark)
+
+    -- Имя и уровень
+    local name = char:GetFullName()
+    local level = (WO.Leveling.ClientData and WO.Leveling.ClientData.level) or char.level or 1
+
+    draw.SimpleText(name, "WO.HUDName", x + 14, y + 16, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+
+    draw.SimpleText(WO.Lang:Get("character.level") .. " " .. level, "WO.Small",
+        x + w - 14, y + 18, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+
+    -- HP
+    local hp = ply:Health()
+    local maxHp = ply:GetMaxHealth()
+
+    WO.UI.DrawBar(x + 14, y + 42, w - 28, 18, maxHp > 0 and hp / maxHp or 0,
+        WO.UI.Colors.health, WO.UI.Colors.healthBg, hp .. " / " .. maxHp)
+
+    -- Mana
+    local mana = ply:GetMana()
+    local maxMana = ply:GetNW2Int("wo_maxmana", 0)
+
+    WO.UI.DrawBar(x + 14, y + 66, w - 28, 14, maxMana > 0 and mana / maxMana or 0,
+        WO.UI.Colors.mana, WO.UI.Colors.manaBg, maxMana > 0 and (mana .. " / " .. maxMana) or nil)
+
+    -- Stamina
+    local stamina = ply:GetStamina()
+    local maxStamina = ply:GetNW2Int("wo_maxstamina", 0)
+
+    WO.UI.DrawBar(x + 14, y + 86, w - 28, 14, maxStamina > 0 and stamina / maxStamina or 0,
+        WO.UI.Colors.stamina, WO.UI.Colors.staminaBg, maxStamina > 0 and (stamina .. " / " .. maxStamina) or nil)
+
+    -- XP
+    local xpData = WO.Leveling.ClientData
+    local xp = xpData and xpData.experience or 0
+    local xpNeeded = xpData and xpData.needed or 1
+
+    WO.UI.DrawBar(x + 14, y + 106, w - 28, 12, xpNeeded > 0 and xp / xpNeeded or 0,
+        WO.UI.Colors.xp, WO.UI.Colors.xpBg, xp .. " / " .. xpNeeded)
+
+    -- Валюта
+    local money = WO.Currency.ClientAmount or 0
+
+    draw.SimpleText(WO.Currency.Format and WO.Currency.Format(money) or tostring(money), "WO.Small",
+        x + 14, y + 126, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+end
+
+---------------------------------------------------------------------------
+-- Target frame (верхний центр)
+---------------------------------------------------------------------------
+
+function WO.HUD.DrawTargetFrame()
+    local target = WO.Target and WO.Target.Get and WO.Target.Get()
+
+    if not IsValid(target) then return end
+
+    local w, h = 280, 64
+    local x = ScrW() / 2 - w / 2
+    local y = 28
+
+    WO.UI.DrawPanelOutlined(x, y, w, h, WO.UI.Colors.panel, WO.UI.Colors.border)
+
+    local name
+    local level = 1
+    local hp, maxHp
+
+    if target:IsPlayer() then
+        name = target:GetNW2String("wo_name", target:Nick())
+        level = target:GetNW2Int("wo_level", 1)
+        hp = target:Health()
+        maxHp = target:GetMaxHealth()
+    else
+        name = target:GetNW2String("wo_name", target.PrintName or target:GetClass())
+        level = target:GetNW2Int("wo_level", 1)
+        hp = target:Health()
+        maxHp = target:GetMaxHealth()
+    end
+
+    draw.SimpleText(name, "WO.HUD", x + w / 2, y + 12, WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+    draw.SimpleText(WO.Lang:Get("character.level") .. " " .. level, "WO.Tiny",
+        x + w / 2, y + 32, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+
+    WO.UI.DrawBar(x + 14, y + 46, w - 28, 12, maxHp > 0 and hp / maxHp or 0,
+        WO.UI.Colors.health, WO.UI.Colors.healthBg, nil)
+end
+
+---------------------------------------------------------------------------
+-- Death UI (экран смерти)
+---------------------------------------------------------------------------
+
+local deathInfo = nil
+
+WO.Hook.Add("CharacterDeath", "hud", function(data)
+    deathInfo = {
+        killer = data.killer,
+        respawnTime = data.respawnTime or 5,
+        diedAt = SysTime(),
+    }
+
+    WO.Sound.PlayLocal("death")
+end)
+
+function WO.HUD.DrawDeathScreen()
+    if not deathInfo then return end
+
+    local ply = LocalPlayer()
+
+    -- Выход из состояния смерти
+    if IsValid(ply) and ply:Alive() then
+        deathInfo = nil
+        return
+    end
+
+    local w, h = ScrW(), ScrH()
+
+    -- Затемнение
+    draw.RoundedBox(0, 0, 0, w, h, Color(60, 0, 0, 150))
+
+    draw.SimpleText(WO.Lang:Get("death.title"), "WO.Title", w / 2, h * 0.35, color_white, TEXT_ALIGN_CENTER)
+
+    if deathInfo.killer then
+        draw.SimpleText(deathInfo.killer, "WO.Subtitle", w / 2, h * 0.35 + 36, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER)
+    end
+
+    local remaining = math.max(0, deathInfo.respawnTime - (SysTime() - deathInfo.diedAt))
+
+    draw.SimpleText(string.format(WO.Lang:Get("death.respawn"), math.ceil(remaining)), "WO.Body",
+        w / 2, h * 0.35 + 70, WO.UI.Colors.accent, TEXT_ALIGN_CENTER)
+end
+
+---------------------------------------------------------------------------
+-- Отрисовка
+---------------------------------------------------------------------------
+
+hook.Add("HUDPaint", "wo_hud_paint", function()
+    local ply = LocalPlayer()
+
+    if not IsValid(ply) then return end
+
+    -- Экран смерти
+    if deathInfo then
+        WO.HUD.DrawDeathScreen()
+    end
+
+    -- В меню персонажа HUD скрываем
+    if ply:GetNW2Bool("wo_inmenu", false) then return end
+
+    WO.HUD.DrawPlayerFrame()
+    WO.HUD.DrawTargetFrame()
+end)
