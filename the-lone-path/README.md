@@ -56,6 +56,10 @@ a point ahead of the player in movement mode. It brightens near what you can tou
 `START` opens the **part picker**: Part I — *The Lone Path* — is ready; parts II–V of the
 planned five‑part story are greyed out with a padlock until they exist.
 
+After picking a part, the game asks **how you will play**: *Computer* (WASD/F/E, optional
+mouse aim) or *Phone* (on‑screen joystick, big E and F buttons, tap the world to look). The
+choice is remembered. A discreet ⛶ button in the corner toggles fullscreen (menu, play, pause).
+
 ## The five mechanics (and nothing else)
 
 1. **Movement** — smooth free walking on one small map.

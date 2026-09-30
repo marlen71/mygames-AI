@@ -13,6 +13,7 @@ of an old car and drive away from the place. Strict chapter-gated progression, p
 procedural art, dark-cinematic lighting with a lantern cone that starts in the player's hand.
 Look aiming is a choice: the lantern follows your steps or the mouse cursor, with a small reticle in both modes. Story planned as five parts — this game is Part I; parts II–V wait behind a padlock in the
 part picker. Locked chapters are also sealed in the world with visible fallen-log barricades.
+Playable with keyboard+mouse or touch (virtual joystick & buttons, picked on a device screen before the run); fullscreen toggle included.
 Fully localized (EN/RU/UK via clickable flags). Pure HTML5 Canvas + JS, zero dependencies,
 runs from a single folder — even from `file://`.
 

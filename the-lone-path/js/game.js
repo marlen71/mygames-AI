@@ -38,7 +38,7 @@
     if (S.mode !== 'play') { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
     var x, y;
-    if (S.aimMode === 'mouse') {
+    if (S.aimMode === 'mouse' && S.inputKind !== 'phone') {
       x = (S.mx * 0.5 + 0.5) * CW;
       y = (S.my * 0.5 + 0.5) * CH;
     } else {
@@ -113,6 +113,7 @@
     figA: 0, figTarget: 0, figX: 402, figY: 1250, flick: 0,
     mx: 0, my: 0, emx: 0, emy: 0,
     aimMode: 'keys',
+    inputKind: 'pc', lookT: -99,
     rain: [],
     promptHide: -1, interactTarget: null,
     hints: null, introStep: -1,
@@ -168,7 +169,13 @@
   function audioClick(deep) { TLP.Audio.ui(deep); }
 
   /* ---------- helpers ---------- */
-  function setMode(m) { S.mode = m; S.modeT = 0; }
+  function setMode(m) {
+    S.mode = m; S.modeT = 0;
+    var fsb = $('btn-fs');
+    if (fsb) fsb.classList.toggle('gone', !(m === 'menu' || m === 'play' || m === 'pause'));
+    var tu = $('touch-ui');
+    if (tu) tu.style.visibility = m === 'play' ? 'visible' : 'hidden';
+  }
   function show(el) { el.classList.remove('hidden'); }
   function hide(el) { el.classList.add('hidden'); }
   function black(on) { fadeEl.style.opacity = on ? 1 : 0; }
@@ -184,7 +191,7 @@
 
   /* ---------- screens ---------- */
   function hideScreenAll() {
-    [menuEl, $('ep-screen'), $('controls-screen'), $('credits-screen'), $('pause-screen'), $('end-screen')].forEach(hide);
+    [menuEl, $('ep-screen'), $('dev-screen'), $('controls-screen'), $('credits-screen'), $('pause-screen'), $('end-screen')].forEach(hide);
   }
   function showScreen(el) { show(el); }
 
@@ -256,9 +263,10 @@
     computeChapter(true);
     updateNotesHud();
     prompt.classList.remove('vis');
+    var ph = S.inputKind === 'phone';
     S.hints = [
-      { t: 1.8, k: 'hint_flash', dur: 2300 },
-      { t: 4.8, k: 'hint_move', dur: 2300 },
+      { t: 1.8, k: ph ? 'hint_btns' : 'hint_flash', dur: 2300 },
+      { t: 4.8, k: ph ? 'hint_stick' : 'hint_move', dur: 2300 },
       { t: 8.2, k: 'obj_first', dur: 3200 }
     ];
   }
@@ -759,6 +767,11 @@
     if (keys['KeyD'] || keys['ArrowRight']) ax += 1;
     var len = Math.hypot(ax, ay);
     if (len > 0) { ax /= len; ay /= len; }
+    var touch = T.touch;
+    if (S.inputKind === 'phone' && touch && touch.active) {
+      /* the stick is analog: the further you push, the faster you walk */
+      ax = touch.x; ay = touch.y; len = Math.hypot(ax, ay);
+    }
     var speed = S.world === 'in' ? 128 : 150;
     player.vx = T.smooth(player.vx, ax * speed, dt, 0.22);
     player.vy = T.smooth(player.vy, ay * speed, dt, 0.22);
@@ -770,12 +783,13 @@
     player.moving = len > 0 && Math.hypot(player.vx, player.vy) > 12;
     if (player.moving) {
       player.walk = (player.walk + dt * (S.world === 'in' ? 2.4 : 2.6)) % 1;
-      if (S.aimMode === 'keys') {
+      if (S.aimMode === 'keys' || S.inputKind === 'phone') {
         /* keys mode: the eyes and the lantern follow the stride */
         player.fa = T.angleLerp(player.fa, Math.atan2(ay, ax), 1 - Math.pow(0.000001, dt));
       }
     }
-    if (S.aimMode === 'mouse') {
+    var touchLook = S.inputKind === 'phone' && !player.moving && (S.t - S.lookT) < 1.5;
+    if ((S.aimMode === 'mouse' && S.inputKind !== 'phone') || touchLook) {
       /* mouse mode: the player looks at the cursor; movement still runs on keys */
       var zz = S.world === 'in' ? zoom * 1.22 : zoom;
       var ax2 = S.mx * CW * 0.5 - (player.x - cam.x) * zz;
@@ -1091,7 +1105,7 @@
     }
 
     /* the figure: first by the sign tree, then, at the end, on the road */
-    if (S.figA > 0.01 && !inside) T.Assets.figure(ctx, S._fig ? S.figX : 722, S._fig ? S.figY : 622, S.figA * 0.94);
+    if (S.figA > 0.01 && !inside) T.Assets.figure(ctx, S._fig ? S.figX : 722, S._fig ? S.figY : 622, S.figA * 0.94, t, S._fig ? 1.45 : 1);
 
     /* fog in world space (only outdoors) */
     if (!inside) {
@@ -1273,6 +1287,10 @@
     }
     ctx.globalAlpha = 1;
 
+    /* he does not need light to be seen */
+    if (S.finalDrive && S._fig && S.figA > 0.01)
+      T.Assets.figure(ctx, S.figX, S.figY, S.figA * 0.66, t, 1.45, true);
+
     /* what the hand can reach right now, drawn over the dark */
     if (S.mode === 'play' && S.interactTarget && !S.finalStarted) {
       var itg = S.interactTarget, tx = itg.data.x, ty = itg.data.y, tr = 15, tw = true;
@@ -1444,7 +1462,27 @@
   /* ---------- UI wiring ---------- */
   $('btn-start').addEventListener('click', function () { audioClick(false); showScreen($('ep-screen')); });
   $('ep-screen').addEventListener('click', function () { audioClick(false); hideScreenAll(); show(menuEl); });
-  $('ep-1').addEventListener('click', function (ev) { ev.stopPropagation(); startGame(); });
+  $('ep-1').addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    audioClick(false);
+    showScreen($('dev-screen'));
+    S.screenBack = 'ep';
+  });
+  $('dev-screen').addEventListener('click', function () {
+    audioClick(false);
+    hideScreenAll();
+    show(S.screenBack === 'pause' ? $('pause-screen') : $('ep-screen'));
+  });
+  $('dev-pc').addEventListener('click', function (ev) { ev.stopPropagation(); chooseDevice('pc'); });
+  $('dev-phone').addEventListener('click', function (ev) { ev.stopPropagation(); chooseDevice('phone'); });
+  $('btn-device').addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    audioClick(false);
+    hideScreenAll();
+    showScreen($('dev-screen'));
+    S.screenBack = 'pause';
+  });
+  $('btn-fs').addEventListener('click', function (ev) { ev.stopPropagation(); toggleFS(); });
   var lockedEps = $('ep-screen').querySelectorAll('.ep.lock');
   for (var li = 0; li < lockedEps.length; li++)
     lockedEps[li].addEventListener('click', function (ev) {
@@ -1487,6 +1525,101 @@
   function resumePause() {
     hideScreenAll();
     setMode('play');
+  }
+
+  /* ---------- device: input kind, on-screen controls, fullscreen ---------- */
+  function setInputKind(k, silent) {
+    S.inputKind = k === 'phone' ? 'phone' : 'pc';
+    try { localStorage.setItem('tlp_dev', S.inputKind); } catch (e) { }
+    document.documentElement.classList.toggle('touch', S.inputKind === 'phone');
+    var dp = $('dev-pc'), dph = $('dev-phone');
+    if (dp) dp.classList.toggle('active', S.inputKind === 'pc');
+    if (dph) dph.classList.toggle('active', S.inputKind === 'phone');
+    if (!silent) TLP.Audio.ui(false);
+  }
+  function chooseDevice(k) {
+    setInputKind(k);
+    if (S.mode === 'pause') { hideScreenAll(); resumePause(); }
+    else startGame();
+  }
+  function toggleFS() {
+    var d = document, el = d.documentElement;
+    var isFS = d.fullscreenElement || d.webkitFullscreenElement;
+    if (isFS) {
+      var x = d.exitFullscreen || d.webkitExitFullscreen;
+      if (x) { var xp = x.call(d); if (xp && xp['catch']) xp['catch'](function () { }); }
+      el.classList.remove('fs-on');
+      return;
+    }
+    var rq = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!rq) { TLP.Audio.ui(false); showToast(I.t('fs_nope')); return; }
+    try {
+      var p = rq.call(el);
+      if (p && p['catch']) p['catch'](function () { TLP.Audio.ui(false); showToast(I.t('fs_nope')); });
+    } catch (e) { TLP.Audio.ui(false); showToast(I.t('fs_nope')); }
+  }
+  document.addEventListener('fullscreenchange', function () {
+    document.documentElement.classList.toggle('fs-on', !!document.fullscreenElement);
+  });
+  document.addEventListener('webkitfullscreenchange', function () {
+    document.documentElement.classList.toggle('fs-on', !!document.webkitFullscreenElement);
+  });
+  document.addEventListener('contextmenu', function (e) {
+    if (document.documentElement.classList.contains('touch')) e.preventDefault();
+  });
+  /* any tap skips the intro; on the phone a tap on the world turns the head */
+  window.addEventListener('pointerdown', function (ev) {
+    if (S.mode === 'intro') { skipIntro = true; return; }
+    if (S.inputKind !== 'phone' || S.mode !== 'play') return;
+    var el = ev.target;
+    if (!el || el.id !== 'scene') return;
+    S.mx = (ev.clientX / Math.max(CW, 1) - 0.5) * 2;
+    S.my = (ev.clientY / Math.max(CH, 1) - 0.5) * 2;
+    S.lookT = S.t;
+  });
+  function initStick() {
+    var js = $('stick'), knob = $('stick-knob');
+    if (!js) return;
+    var touch = T.touch = { active: false, x: 0, y: 0 };
+    var base = null, R = 40;
+    function setStick(ev) {
+      var dx = ev.clientX - base[0], dy = ev.clientY - base[1];
+      var l = Math.hypot(dx, dy);
+      if (l > R) { dx = dx / l * R; dy = dy / l * R; l = R; }
+      touch.x = dx / R; touch.y = dy / R;
+      touch.active = l > 8;
+      knob.style.transform = 'translate(' + Math.round(dx) + 'px,' + Math.round(dy) + 'px)';
+    }
+    function release() {
+      if (base === null) return;
+      base = null; touch.active = false; touch.x = 0; touch.y = 0;
+      knob.style.transform = 'translate(0px,0px)';
+    }
+    js.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      var r = js.getBoundingClientRect();
+      base = [r.left + r.width / 2, r.top + r.height / 2];
+      try { js.setPointerCapture(ev.pointerId); } catch (e) { }
+      touch.active = true;
+      setStick(ev);
+    });
+    js.addEventListener('pointermove', function (ev) { if (base !== null) { ev.preventDefault(); setStick(ev); } });
+    js.addEventListener('pointerup', release);
+    js.addEventListener('pointercancel', release);
+  }
+  function tapKey(code) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: code }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: code }));
+  }
+  function bindTBtn(id, code) {
+    var b = $(id);
+    if (!b) return;
+    b.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      b.classList.add('press');
+      setTimeout(function () { b.classList.remove('press'); }, 160);
+      tapKey(code);
+    });
   }
 
   /* ---------- language flags ---------- */
@@ -1541,6 +1674,13 @@
     I.load();
     var __am = null; try { __am = localStorage.getItem('tlp_aim'); } catch (e) {}
     if (__am === 'mouse') setAimMode('mouse', true);
+    initStick();
+    bindTBtn('tbtn-e', 'KeyE');
+    bindTBtn('tbtn-f', 'KeyF');
+    bindTBtn('tbtn-pause', 'Escape');
+    var __dev = null; try { __dev = localStorage.getItem('tlp_dev'); } catch (e) {}
+    if (!__dev) __dev = (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0) ? 'phone' : 'pc';
+    setInputKind(__dev, true);
     updateMenuFoot();
     requestAnimationFrame(loop);
   }

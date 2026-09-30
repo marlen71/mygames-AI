@@ -1,0 +1,1 @@
+{"name":"tlp-tools","private":true,"version":"1.0.0","dependencies":{"@napi-rs/canvas":"^1.0.9","jsdom":"^30.1.1"}}

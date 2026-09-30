@@ -1294,32 +1294,41 @@
   };
 
   /* ---------- the figure ---------- */
-  A.figure = function (ctx, x, y, alpha, t) {
+  A.figure = function (ctx, x, y, alpha, t, sc, flat) {
+    sc = sc || 1;
     ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(sc, sc);
     ctx.globalAlpha = alpha;
-    shadow(ctx, x, y, 9, 4, 0.55);
+    if (!flat) shadow(ctx, 0, 0, 9, 4, 0.55);
     ctx.fillStyle = '#04070a';
-    ctx.fillRect(x - 3.4, y - 13, 2.8, 13);
-    ctx.fillRect(x + 0.6, y - 13, 2.8, 13);
+    ctx.fillRect(-3.4, -13, 2.8, 13);
+    ctx.fillRect(0.6, -13, 2.8, 13);
     ctx.beginPath();
-    ctx.moveTo(x - 5.4, y - 11);
-    ctx.quadraticCurveTo(x - 5.0, y - 30, x - 2.6, y - 34);
-    ctx.lineTo(x + 2.6, y - 34);
-    ctx.quadraticCurveTo(x + 5.0, y - 30, x + 5.4, y - 11);
+    ctx.moveTo(-5.4, -11);
+    ctx.quadraticCurveTo(-5.0, -30, -2.6, -34);
+    ctx.lineTo(2.6, -34);
+    ctx.quadraticCurveTo(5.0, -30, 5.4, -11);
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(x, y - 39, 4.4, 0, T.TAU);
+    ctx.arc(0, -39, 4.4, 0, T.TAU);
     ctx.fill();
-    /* rim from the firelight */
-    ctx.strokeStyle = 'rgba(214,150,80,0.28)';
-    ctx.lineWidth = 1;
+    /* rim from the firelight — or from the headlights, when he is close */
+    ctx.strokeStyle = flat ? 'rgba(240,224,176,0.55)' : 'rgba(214,150,80,0.28)';
+    ctx.lineWidth = flat ? 1.4 : 1;
     ctx.beginPath();
-    ctx.arc(x, y - 39, 4.6, -0.6, 1.2);
+    ctx.arc(0, -39, flat ? 5.0 : 4.6, -0.6, 1.2);
     ctx.stroke();
-    ctx.fillStyle = 'rgba(215,208,183,0.16)';
-    ctx.fillRect(x - 1.8, y - 40, 1, 0.9);
-    ctx.fillRect(x + 0.8, y - 40, 1, 0.9);
+    if (flat) {
+      ctx.beginPath();
+      ctx.moveTo(-5.9, -12);
+      ctx.quadraticCurveTo(-5.5, -31, -3.0, -35);
+      ctx.stroke();
+    }
+    ctx.fillStyle = flat ? 'rgba(226,220,196,0.7)' : 'rgba(215,208,183,0.16)';
+    ctx.fillRect(-1.8, -40, 1, 0.9);
+    ctx.fillRect(0.8, -40, 1, 0.9);
     ctx.restore();
   };
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>THE LONE PATH — Small steps. Big silence.</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
@@ -11,6 +11,15 @@
 <!-- ============ GAME ============ -->
 <canvas id="scene"></canvas>
 <div id="xhair" class="hidden" aria-hidden="true"><i></i></div>
+<button id="btn-fs" title="FULLSCREEN" aria-label="fullscreen"><span></span></button>
+<div id="touch-ui" aria-hidden="true">
+  <div id="stick"><span id="stick-knob"></span></div>
+  <div id="tbtns">
+    <div class="tbtn" id="tbtn-pause">II</div>
+    <div class="tbtn small" id="tbtn-f">F</div>
+    <div class="tbtn big" id="tbtn-e">E</div>
+  </div>
+</div>
 
 <!-- HUD -->
 <div id="hud" class="hidden">
@@ -78,6 +87,17 @@
   </div>
 </div>
 
+<div id="dev-screen" class="screen hidden">
+  <div class="screen-inner small">
+    <div class="sub-title" data-i18n="dev_pick">HOW WILL YOU PLAY?</div>
+    <div id="dev-list">
+      <div class="dev active" id="dev-pc"><span class="dev-ico ico-pc"></span><div class="dev-mid"><b data-i18n="dev_pc">COMPUTER</b><span data-i18n="dev_pc_d">WASD to walk · F flashlight · E act · optional mouse aim</span></div><span class="dmd"></span></div>
+      <div class="dev" id="dev-phone"><span class="dev-ico ico-ph"></span><div class="dev-mid"><b data-i18n="dev_phone">PHONE</b><span data-i18n="dev_phone_d">joystick at the left · E and F buttons at the right · tap the world to look</span></div><span class="dmd"></span></div>
+    </div>
+    <div class="click-here" data-i18n="click_return">CLICK TO RETURN</div>
+  </div>
+</div>
+
 <div id="ep-screen" class="screen hidden">
   <div class="screen-inner small">
     <div class="sub-title" data-i18n="ep_pick">CHOOSE YOUR PART</div>
@@ -135,6 +155,7 @@
     <div class="sub-title" data-i18n="paused">PAUSED</div>
     <button class="mbtn" id="btn-resume" data-i18n="btn_resume">RESUME</button>
     <button class="mbtn" id="btn-pcontrols" data-i18n="btn_controls">CONTROLS</button>
+    <button class="mbtn" id="btn-device" data-i18n="btn_dev">DEVICE</button>
     <button class="mbtn" id="btn-restart" data-i18n="btn_restart">RESTART</button>
     <button class="mbtn" id="btn-tomenu" data-i18n="btn_menu">MAIN MENU</button>
     <div class="flags">
