@@ -56,7 +56,8 @@ a point ahead of the player in movement mode. It brightens near what you can tou
 `START` opens the **part picker**: Part I — *The Lone Path* — is ready; parts II–V of the
 planned five‑part story are greyed out with a padlock until they exist.
 
-After picking a part, the game asks **how you will play**: *Computer* (WASD/F/E, optional
+After picking a part — **every time you enter a run** — the game asks **how you will play**:
+*Computer* (WASD/F/E, optional
 mouse aim) or *Phone* (on‑screen joystick, big E and F buttons, tap the world to look). The
 choice is remembered. A discreet ⛶ button in the corner toggles fullscreen (menu, play, pause).
 
@@ -91,8 +92,9 @@ The story runs as five soft chapters on a single hand‑made 1600×1600 map plus
 | V | **The Foggy Lake** | the pier, the lamp lit this evening, the last note — and a spare wheel in the mud |
 
 With 5/5 notes and 3/3 parts the compass turns to **the car**: fix it and drive out of the forest.
-Three seconds after the car starts rolling, someone will be standing in your headlights —
-*you were never alone.* Then the credits roll.
+The escape route sweeps right past the house — and there he stands in your headlights,
+between the porch and the fire. *You were never alone.* The credits then scroll down the
+screen (click to skip); the author block was removed from the menu CREDITS on purpose.
 
 Two more things the forest does for the story:
 

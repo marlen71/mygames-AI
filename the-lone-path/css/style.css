@@ -513,3 +513,31 @@ html.touch #touch-ui{ display:block; }
 .tbtn.press, .tbtn:active{ background:rgba(233,196,106,.18); }
 /* on the phone the aim-control rows are meaningless */
 html.touch .aim-cap, html.touch .aim-opt{ display:none; }
+
+/* ============ SCROLLING CREDITS ============ */
+#roll-screen{ background:#050607; cursor:pointer; }
+#roll-flow{ position:absolute; inset:0; overflow:hidden; }
+.roll-in{
+  position:absolute; left:0; right:0; top:0;
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  padding:0 14vw; text-align:center;
+  transform:translateY(-104%);
+}
+.roll-in.run{ animation:rollFlow 12.4s linear forwards; }
+@keyframes rollFlow{
+  from{ transform:translateY(-104%); }
+  to{ transform:translateY(104%); }
+}
+.roll-in .r-big{
+  font-size:30px; letter-spacing:.4em; text-indent:.4em; color:var(--paper); margin-bottom:8px;
+}
+.roll-in .r-end{ margin-top:34px; font-size:22px; color:var(--lamp); letter-spacing:.5em; text-indent:.5em; }
+.roll-in .r-story{ font-size:12.5px; letter-spacing:.14em; line-height:2; color:#8b928c; max-width:520px; }
+.roll-in .r-gap{ height:20px; }
+.roll-in .r-thanks{ font-size:11.5px; letter-spacing:.16em; color:#a7aca8; margin-top:6px; }
+.roll-in .ec-row{ width:min(420px, 74vw); }
+#roll-skip{
+  position:absolute; left:0; right:0; bottom:26px; text-align:center;
+  font-size:9px; letter-spacing:.4em; text-indent:.4em; color:#454b46;
+  animation:breathe 3.4s ease infinite;
+}

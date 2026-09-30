@@ -87,17 +87,6 @@
   </div>
 </div>
 
-<div id="dev-screen" class="screen hidden">
-  <div class="screen-inner small">
-    <div class="sub-title" data-i18n="dev_pick">HOW WILL YOU PLAY?</div>
-    <div id="dev-list">
-      <div class="dev active" id="dev-pc"><span class="dev-ico ico-pc"></span><div class="dev-mid"><b data-i18n="dev_pc">COMPUTER</b><span data-i18n="dev_pc_d">WASD to walk · F flashlight · E act · optional mouse aim</span></div><span class="dmd"></span></div>
-      <div class="dev" id="dev-phone"><span class="dev-ico ico-ph"></span><div class="dev-mid"><b data-i18n="dev_phone">PHONE</b><span data-i18n="dev_phone_d">joystick at the left · E and F buttons at the right · tap the world to look</span></div><span class="dmd"></span></div>
-    </div>
-    <div class="click-here" data-i18n="click_return">CLICK TO RETURN</div>
-  </div>
-</div>
-
 <div id="ep-screen" class="screen hidden">
   <div class="screen-inner small">
     <div class="sub-title" data-i18n="ep_pick">CHOOSE YOUR PART</div>
@@ -111,6 +100,34 @@
     <div class="click-here" data-i18n="click_return">CLICK TO RETURN</div>
   </div>
 </div>
+
+<div id="dev-screen" class="screen hidden">
+  <div class="screen-inner small">
+    <div class="sub-title" data-i18n="dev_pick">HOW WILL YOU PLAY?</div>
+    <div id="dev-list">
+      <div class="dev active" id="dev-pc"><span class="dev-ico ico-pc"></span><div class="dev-mid"><b data-i18n="dev_pc">COMPUTER</b><span data-i18n="dev_pc_d">WASD to walk · F flashlight · E act · optional mouse aim</span></div><span class="dmd"></span></div>
+      <div class="dev" id="dev-phone"><span class="dev-ico ico-ph"></span><div class="dev-mid"><b data-i18n="dev_phone">PHONE</b><span data-i18n="dev_phone_d">joystick at the left · E and F buttons at the right · tap the world to look</span></div><span class="dmd"></span></div>
+    </div>
+    <div class="click-here" data-i18n="click_return">CLICK TO RETURN</div>
+  </div>
+</div>
+<div id="roll-screen" class="screen hidden">
+  <div id="roll-flow"><div class="roll-in">
+    <div class="r-big" data-i18n="end_title">THE&nbsp;LONE&nbsp;PATH</div>
+    <div class="r-story" data-i18n="car_drive">The engine catches on the third cough.</div>
+    <div class="r-gap"></div>
+    <div class="ec-row"><span data-i18n="cr_creator_t">GAME CREATOR</span><b data-i18n="cr_creator_v">MARLEN</b></div>
+    <div class="ec-row"><span data-i18n="cr_writer_t">SCREENWRITER</span><b>CHATGPT</b></div>
+    <div class="ec-row"><span data-i18n="cr_designer_t">GAME DESIGNER</span><b>CHATGPT</b></div>
+    <div class="ec-row"><span data-i18n="cr_agent_t">GAME CREATION</span><b data-i18n="cr_agent_v">AGENTS CLAUDE &amp; CHATGPT</b></div>
+    <div class="r-gap"></div>
+    <div class="r-thanks" data-i18n="end_thanks">Thank you for playing this game.</div>
+    <div class="r-big r-end" data-i18n="the_end">THE END</div>
+  </div></div>
+  <div id="roll-skip" data-i18n="roll_skip">CLICK TO SKIP</div>
+</div>
+
+<!-- ============ ROLL ============ -->
 
 <!-- ============ CONTROLS ============ -->
 <div id="controls-screen" class="screen hidden clickback">
@@ -138,13 +155,7 @@
     <p data-i18n="cr_l3">Art, world and sound are generated in code &mdash;</p>
     <p data-i18n="cr_l3b">no external assets, no engines.</p>
     <p class="dim" data-i18n="cr_l4">Made with HTML5 Canvas.</p>
-    <div id="cr-authors">
-      <div class="ec-row"><span data-i18n="cr_creator_t">GAME CREATOR</span><b data-i18n="cr_creator_v">MARLEN</b></div>
-      <div class="ec-row"><span data-i18n="cr_writer_t">SCREENWRITER</span><b>CHATGPT</b></div>
-      <div class="ec-row"><span data-i18n="cr_designer_t">GAME DESIGNER</span><b>CHATGPT</b></div>
-      <div class="ec-row"><span data-i18n="cr_agent_t">GAME CREATION</span><b data-i18n="cr_agent_v">AGENTS CLAUDE &amp; CHATGPT</b></div>
-    </div>
-    <p data-i18n="end_thanks">Thank you for playing this game — expect the next part.</p>
+    
     <div class="click-here" data-i18n="click_return">CLICK TO RETURN</div>
   </div>
 </div>
@@ -180,13 +191,7 @@
     <div id="end-notes" data-i18n="found_notes">5 / 5 NOTES FOUND</div>
     <div id="end-things" data-i18n="found_things">3 / 3 THINGS FOUND</div>
     <div id="end-parts" data-i18n="end_parts">3 / 3 CAR PARTS FOUND</div>
-    <div id="end-credits">
-      <div class="ec-row"><span data-i18n="cr_creator_t">GAME CREATOR</span><b data-i18n="cr_creator_v">MARLEN</b></div>
-      <div class="ec-row"><span data-i18n="cr_writer_t">SCREENWRITER</span><b>CHATGPT</b></div>
-      <div class="ec-row"><span data-i18n="cr_designer_t">GAME DESIGNER</span><b>CHATGPT</b></div>
-      <div class="ec-row"><span data-i18n="cr_agent_t">GAME CREATION</span><b data-i18n="cr_agent_v">AGENTS CLAUDE &amp; CHATGPT</b></div>
-    </div>
-    <div id="end-thanks" data-i18n="end_thanks">Thank you for playing this game — expect the next part.</div>
+    
     <div id="end-btns">
       <button class="mbtn" id="btn-again" data-i18n="btn_again">PLAY AGAIN</button>
       <button class="mbtn" id="btn-endmenu" data-i18n="btn_menu">MAIN MENU</button>

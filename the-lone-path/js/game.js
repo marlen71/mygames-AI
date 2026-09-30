@@ -191,7 +191,7 @@
 
   /* ---------- screens ---------- */
   function hideScreenAll() {
-    [menuEl, $('ep-screen'), $('dev-screen'), $('controls-screen'), $('credits-screen'), $('pause-screen'), $('end-screen')].forEach(hide);
+    [menuEl, $('ep-screen'), $('dev-screen'), $('controls-screen'), $('credits-screen'), $('pause-screen'), $('end-screen'), $('roll-screen')].forEach(hide);
   }
   function showScreen(el) { show(el); }
 
@@ -869,13 +869,15 @@
   }
 
   /* ---------- final sequence: fix the car, drive out of the forest ---------- */
-  var CAR_PATH = [[1152, 982], [1040, 1060], [840, 1140], [660, 1170], [470, 1215], [260, 1265], [-60, 1310]];
+  var CAR_PATH = [[1152, 982], [1010, 1000], [880, 920], [792, 846], [640, 900], [470, 1010], [260, 1110], [-60, 1180]];
   function startFinal() {
     S.finalStarted = true;
     S.finalT = 0;
     S.finalDrive = false;
     S.figA = 0; S.figTarget = 0; S.flick = 0;
     S._fig = S._figPass = S._gone = S._f1 = S._f2 = false;
+    S._roll = false;
+    clearTimeout(rollTimer);
     S.sparks = []; S.ratIdx = 0;
     var c = WS.out.carObj;
     c.x = CAR_PATH[0][0]; c.y = CAR_PATH[0][1]; c.rot = -0.45; c.segI = 0; c.lighted = false;
@@ -942,16 +944,16 @@
       player.x = c.x; player.y = c.y;
       cam.x = T.smooth(cam.x, c.x + Math.cos(c.rot) * 92, dt, 0.07);
       cam.y = T.smooth(cam.y, c.y + Math.sin(c.rot) * 92 - 14, dt, 0.07);
-      if (!S._fig && ft > 5.6) {
-        /* three seconds after the roll starts, he is standing in the road */
+      if (!S._fig && c.x < 935 && c.y < 1010) {
+        /* he waits in front of the house, right in the path of the headlights */
         S._fig = true;
-        S.figX = c.x - 240; S.figY = c.y + 60;
+        S.figX = 828; S.figY = 814;
         S.figTarget = 1;
         S.figA = 0.9;               /* no gentle fade-in — he just IS there */
         TLP.Audio.sting();
         TLP.Audio.heartbeat();
       }
-      if (S._fig && !S._figPass && c.x < S.figX + 10) { S._figPass = true; TLP.Audio.sting(); }
+      if (S._fig && !S._figPass && c.x < 640) { S._figPass = true; TLP.Audio.sting(); }
       if (S._figPass) S.figTarget = 0;
       if (c.segI >= CAR_PATH.length - 1 && !S._gone) {
         S._gone = true;
@@ -983,35 +985,38 @@
       bigtextInner.classList.add('warn');
       setTimeout(function () { bigtextInner.classList.add('vis'); }, 150);
     }
-    if (ft > 13.9 && S._t1) { bigtextInner.classList.remove('vis'); }
-    if (ft > 15.5 && S._t1 && !S._t2) {
-      S._t2 = true;
-      setTimeout(function () {
-        bigtextInner.textContent = I.t('car_drive');
-        bigtextInner.classList.remove('warn');
-        bigtextInner.classList.add('vis');
-      }, 400);
-    }
-    if (ft > 19.2 && S._t2 && !S._t3) {
-      S._t3 = true;
+    if (ft > 13.9 && S._t1 && !S._roll) {
+      S._roll = true;
       bigtextInner.classList.remove('vis');
-      setTimeout(function () {
-        hide(bigtext);
-        black(false);
-        bigtextInner.classList.remove('warn');
-        showScreen($('end-screen'));
-        try { localStorage.setItem('tlp_done', '1'); } catch (e) { }
-        I.applyDom();
-        $('end-credits').classList.remove('vis');
-        $('end-thanks').classList.remove('vis');
-        setTimeout(function () {
-          $('end-credits').classList.add('vis');
-          $('end-thanks').classList.add('vis');
-        }, 1400);
-        setTimeout(function () { endBtns.classList.add('vis'); }, 2600);
-        setMode('end');
-      }, 1600);
+      setTimeout(startRoll, 450);
     }
+  }
+
+  var rollTimer = null;
+  function startRoll() {
+    hide(bigtext);
+    bigtextInner.classList.remove('warn');
+    hideScreenAll();
+    show($('roll-screen'));
+    setMode('roll');
+    var flow = $('roll-screen').querySelector('.roll-in');
+    flow.classList.remove('run');
+    void flow.offsetWidth;
+    flow.classList.add('run');
+    clearTimeout(rollTimer);
+    rollTimer = setTimeout(endFromRoll, 13400);
+  }
+  function endFromRoll() {
+    clearTimeout(rollTimer);
+    hide($('roll-screen'));
+    hideScreenAll();
+    endBtns.classList.remove('vis');
+    showScreen($('end-screen'));
+    try { localStorage.setItem('tlp_done', '1'); } catch (e) { }
+    I.applyDom();
+    setTimeout(function () { endBtns.classList.add('vis'); }, 900);
+    black(false);
+    setMode('end');
   }
 
   /* ---------- render ---------- */
@@ -1194,6 +1199,13 @@
       var fs = scr(fr.x, fr.y);
       lctx.globalAlpha = fr.kind === 'fire' ? 0.95 : 0.8;
       lctx.drawImage(T.Assets.circleSprite, fs[0] - frr, fs[1] - frr * 0.74, frr * 2, frr * 1.48);
+    }
+    /* the house lights up as the car sweeps past: his face, the porch, the door */
+    if (S.finalDrive && S.figA > 0.12) {
+      var hh = scr(800, 780);
+      var hhr = (120 + 70 * Math.min(1, S.figA)) * zI;
+      lctx.globalAlpha = 0.55 * Math.min(1, S.figA);
+      lctx.drawImage(T.Assets.circleSprite, hh[0] - hhr, hh[1] - hhr * 0.8, hhr * 2, hhr * 1.6);
     }
     lctx.globalAlpha = 1;
 
@@ -1465,7 +1477,8 @@
   $('ep-1').addEventListener('click', function (ev) {
     ev.stopPropagation();
     audioClick(false);
-    showScreen($('dev-screen'));
+    hideScreenAll();
+    show($('dev-screen'));
     S.screenBack = 'ep';
   });
   $('dev-screen').addEventListener('click', function () {
@@ -1483,6 +1496,7 @@
     S.screenBack = 'pause';
   });
   $('btn-fs').addEventListener('click', function (ev) { ev.stopPropagation(); toggleFS(); });
+  $('roll-screen').addEventListener('click', function () { endFromRoll(); });
   var lockedEps = $('ep-screen').querySelectorAll('.ep.lock');
   for (var li = 0; li < lockedEps.length; li++)
     lockedEps[li].addEventListener('click', function (ev) {

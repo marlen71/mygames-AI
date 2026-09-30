@@ -348,7 +348,7 @@
     };
 
     /* pines along the escape route: the last drive runs through woods, not void */
-    var DRIVE = [[1040, 1060], [840, 1140], [660, 1170], [470, 1215], [260, 1265], [-60, 1310]];
+    var DRIVE = [[1010, 1000], [880, 920], [792, 846], [640, 900], [470, 1010], [260, 1110], [-60, 1180]];
     var dr = T.rng(4242);
     for (var di = 0; di < DRIVE.length - 1; di++) {
       var pa = DRIVE[di], pb = DRIVE[di + 1];
@@ -362,7 +362,9 @@
           var tx = qx + nxx * off * side, ty = qy + nyy * off * side;
           if (tx < 34 || tx > W - 34 || ty < 34 || ty > H - 34) continue;
           if (Math.hypot(tx - 556, ty - 995) < 210) continue;      /* the camp keeps its clearing */
+          if (Math.hypot(tx - 800, ty - 762) < 185) continue;       /* the house front is his stage */
           if (ty < 1010 && tx > 930) continue;                      /* keep the quarry wall free */
+          if (Math.hypot(tx - 1152, ty - 982) < 95) continue;       /* the car sits in its own clearing */
           var ts = 1.05 + dr() * 0.55;
           world.objs.push(mk(dr() < 0.55 ? 'pine' : 'fir', tx, ty, ts));
           world.colliders.push({ x: tx, y: ty, r: 9 * ts });
