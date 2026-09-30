@@ -46,6 +46,43 @@
 
 ---
 
+## Модели WoW из Steam Workshop
+
+Гейммод автоматически использует настоящие модели World of Warcraft из аддонов
+автора **Mailer** (колекция «[WoW] Playable Races Collection»,
+<https://steamcommunity.com/sharedfiles/filedetails/?id=1911409335>).
+Списки моделей строятся в `gamemode/config/sh_models.lua`: из путей-шаблонов
+каталога оставляются только реально установленные файлы (`file.Exists`, `"GAME"`),
+в конце — стоковый fallback GMod. Ничего не сломается, даже если аддоны не
+подписаны: расы просто получат стоковые модели.
+
+**Паки и пути (извлечены из описаний самих аддонов):**
+
+| Раса / пол | Workshop ID (база / exp / exp2) | Базовая модель |
+|---|---|---|
+| Человек, муж. | 1930795899 / 1930800507 / 1930805571 | `models/mailer/character/human/male/humanmale00_00.mdl` |
+| Человек, жен. | 1930787430 / 1930791858 | `models/mailer/character/human/female/humanfemale00_00.mdl` |
+| Ночной эльф, муж. | 1944399771 / 1944404675 / 1944409769 | `models/mailer/character/nightelf/male/nightelfmale00_00.mdl` |
+| Ночной эльф, жен. | «[WoW] Night Elf Female» / 1944390645 / 1944395669 | `models/mailer/character/nightelf/female/nightelffemale00_00.mdl` |
+| Орк, муж. | 1950316295 / 1950319321 | `models/mailer/character/orc/male/orcmale00_00.mdl` |
+| Орк, жен. | 1950310689 | `models/mailer/character/orc/female/orcfemale00_00.mdl` |
+| Гном, муж. | 1907948872 / 1907951439 / 1907954262 | `models/mailer/character/gnome/male/gnomemale00_00.mdl` |
+| Гном, жен. | 1907944015 / 1907946461 | `models/mailer/character/gnome/female/gnomefemale00_00.mdl` |
+
+Expansion-паки добавляют варианты-файлы с суффиксами (сетка из описаний аддонов):
+например, exp2 для человека — `humanmale00_XX_YY.mdl` (XX = 00…09, YY = 00…07).
+Все существующие варианты попадают в выбор модели при создании персонажа
+(переключатель «◀ ▶» на шаге «Модель»), а bodygroups (Hair / Facial Hair /
+Clothes / Piercings и т.д.) настраиваются на шаге кастомизации.
+
+Проверить, что видит сервер: `wo_models` (сводка) и `wo_models human male`
+(полный список с пометками «есть/нет»).
+
+Пути и диапазоны хранятся только в `config/sh_models.lua` — добавить новую расу
+или пак можно одной записью в каталог (см. комментарии в файле).
+
+---
+
 ## Управление
 
 | Клавиша | Действие |
@@ -170,6 +207,7 @@ PLUGIN.priority = 45
 | `wo_setstat <stat> <n>` | Временный модификатор стата |
 | `wo_reloadconfig` | Hot-reload конфигов и схем |
 | `wo_info` | Информация о загруженных системах |
+| `wo_models [race] [gender]` | Каталог моделей WoW: что установлено (Mailer/Workshop + fallback) |
 
 ---
 

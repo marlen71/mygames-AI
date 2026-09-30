@@ -8,17 +8,9 @@ WO.Races.Register({
     name = "Орк",
     description = "Воинственная раса с огромной силой. Магия даётся тяжело.",
 
-    models = {
-        male = {
-            "models/player/Combine_Soldier.mdl",
-            "models/player/Combine_Super_Soldier.mdl",
-            "models/player/group03/male_07.mdl",
-        },
-        female = {
-            "models/player/Combine_Soldier.mdl",
-            "models/player/Group03/female_04.mdl",
-        },
-    },
+    -- Модели орков WoW (Mailer, Steam Workshop) + стоковый fallback.
+    -- Список строится в config/sh_models.lua (WO.Models.GetRace).
+    models = WO.Models.GetRace("orc"),
 
     genders = { "male", "female" },
     modelScale = 1.05,

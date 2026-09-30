@@ -233,3 +233,32 @@ concommand.Add("wo_info", function(ply)
             " | money " .. char.money)
     end
 end)
+
+-- wo_models [race] [gender] — каталог моделей (Mailer/Workshop + fallback)
+concommand.Add("wo_models", function(ply, _, args)
+    if not CheckAdmin(ply, "debug") then return end
+
+    local raceId = args[1]
+    local gender = args[2]
+
+    if raceId and WO.Models.Catalog[raceId] then
+        local genders = gender and { gender } or { "male", "female" }
+
+        for _, g in ipairs(genders) do
+            for _, line in ipairs(WO.Models.DebugDump(raceId, g)) do
+                Reply(ply, line)
+            end
+        end
+    else
+        for _, id in ipairs(WO.Races.GetIDs()) do
+            local ws = WO.Models.GetWorkshopModels(id, "male")
+            local wf = WO.Models.GetWorkshopModels(id, "female")
+
+            Reply(ply, ("%s: workshop male=%d female=%d | всего male=%d female=%d"):format(
+                id, #ws, #wf,
+                #WO.Models.GetRace(id).male,
+                #WO.Models.GetRace(id).female
+            ))
+        end
+    end
+end)

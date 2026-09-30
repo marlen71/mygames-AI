@@ -8,21 +8,9 @@ WO.Races.Register({
     name = "Эльф",
     description = "Грациозные существа, мастера магии и стрельбы. Слабее в ближнем бою.",
 
-    models = {
-        male = {
-            "models/player/group03/male_01.mdl",
-            "models/player/group03/male_02.mdl",
-            "models/player/group03/male_03.mdl",
-            "models/player/group03/male_04.mdl",
-        },
-        female = {
-            "models/player/group03/female_01.mdl",
-            "models/player/group03/female_02.mdl",
-            "models/player/group03/female_03.mdl",
-            "models/player/mossman.mdl",
-            "models/player/alyx.mdl",
-        },
-    },
+    -- Модели ночных эльфов WoW (Mailer, Steam Workshop) + стоковый fallback.
+    -- Список строится в config/sh_models.lua (WO.Models.GetRace).
+    models = WO.Models.GetRace("elf"),
 
     genders = { "male", "female" },
     modelScale = 1,

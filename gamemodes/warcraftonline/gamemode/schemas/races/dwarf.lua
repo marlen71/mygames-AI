@@ -8,13 +8,9 @@ WO.Races.Register({
     name = "Гном",
     description = "Крепкие горняки и кузнецы. Высокая выносливость, низкий рост.",
 
-    models = {
-        male = {
-            "models/player/barney.mdl",
-            "models/player/group03/male_05.mdl",
-            "models/player/group03/male_06.mdl",
-        },
-    },
+    -- Модели гномов WoW (Mailer, Steam Workshop) + стоковый fallback.
+    -- Список строится в config/sh_models.lua (WO.Models.GetRace).
+    models = WO.Models.GetRace("dwarf"),
 
     genders = { "male" },
     modelScale = 0.85,

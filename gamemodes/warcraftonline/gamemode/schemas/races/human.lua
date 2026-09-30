@@ -8,23 +8,9 @@ WO.Races.Register({
     name = "Человек",
     description = "Универсальная раса: сильные воины, мудрые маги и ловкие разбойники.",
 
-    models = {
-        male = {
-            "models/player/group01/male_01.mdl",
-            "models/player/group01/male_02.mdl",
-            "models/player/group01/male_03.mdl",
-            "models/player/group01/male_04.mdl",
-            "models/player/group01/male_05.mdl",
-            "models/player/group01/male_06.mdl",
-            "models/player/group01/male_07.mdl",
-        },
-        female = {
-            "models/player/group01/female_01.mdl",
-            "models/player/group01/female_02.mdl",
-            "models/player/group01/female_03.mdl",
-            "models/player/group01/female_04.mdl",
-        },
-    },
+    -- Модели WoW (Mailer, Steam Workshop) + стоковый fallback.
+    -- Список строится в config/sh_models.lua (WO.Models.GetRace).
+    models = WO.Models.GetRace("human"),
 
     genders = { "male", "female" },
     modelScale = 1,
