@@ -518,57 +518,70 @@ end
 
 MOCK.currentDir = "gamemodes/warcraftonline/gamemode"
 MOCK.loadedFiles = {}
+MOCK.clientFilesAdded = {}
 
-local real_include = include
+local function ResolveMockIncludePath(path)
+    path = string.gsub(path, "\\", "/")
+
+    if string.sub(path, 1, 10) == "gamemodes/" or string.sub(path, 1, 4) == "lua/" then
+        return path
+    end
+
+    -- Документированный абсолютный путь для gamemode: <FolderName>/gamemode/.
+    local gamemodePrefix = (GM.FolderName or "warcraftonline") .. "/gamemode/"
+
+    if string.sub(path, 1, #gamemodePrefix) == gamemodePrefix then
+        return "gamemodes/" .. path
+    end
+
+    -- Обычный относительный include разрешается только от активного файла.
+    return MOCK.currentDir .. "/" .. path
+end
 
 function include(path)
-    local candidates = {}
+    local candidate = ResolveMockIncludePath(path)
 
-    if string.find(path, "^gamemodes/") or string.find(path, "^lua/") then
-        candidates[#candidates + 1] = path
-    else
-        candidates[#candidates + 1] = MOCK.currentDir .. "/" .. path
-        candidates[#candidates + 1] = "gamemodes/warcraftonline/gamemode/" .. path
-        candidates[#candidates + 1] = path
+    if not py.file_exists(candidate) then
+        error("include: file not found: " .. path .. " (resolved to " .. candidate .. ")")
     end
 
-    for _, candidate in ipairs(candidates) do
-        if py.file_exists(candidate) then
-            local src = py.file_read(candidate)
+    local src = py.file_read(candidate)
 
-            if not src or src == "" then
-                error("include: empty file " .. candidate)
-            end
-
-            local prevDir = MOCK.currentDir
-            MOCK.currentDir = string.match(candidate, "^(.*)/[^/]+$") or candidate
-
-            local chunk, err = loadstring(src, "@" .. candidate)
-
-            if not chunk then
-                MOCK.currentDir = prevDir
-                error("include: syntax error in " .. candidate .. ": " .. tostring(err))
-            end
-
-            local ok, runtimeErr = pcall(chunk)
-
-            MOCK.currentDir = prevDir
-
-            if not ok then
-                error("include: runtime error in " .. candidate .. ": " .. tostring(runtimeErr))
-            end
-
-            MOCK.loadedFiles[#MOCK.loadedFiles + 1] = candidate
-
-            return
-        end
+    if not src or src == "" then
+        error("include: empty file " .. candidate)
     end
 
-    error("include: file not found: " .. path)
+    local prevDir = MOCK.currentDir
+    MOCK.currentDir = string.match(candidate, "^(.*)/[^/]+$") or candidate
+
+    local chunk, err = loadstring(src, "@" .. candidate)
+
+    if not chunk then
+        MOCK.currentDir = prevDir
+        error("include: syntax error in " .. candidate .. ": " .. tostring(err))
+    end
+
+    local ok, result = pcall(chunk)
+
+    MOCK.currentDir = prevDir
+
+    if not ok then
+        error("include: runtime error in " .. candidate .. ": " .. tostring(result))
+    end
+
+    MOCK.loadedFiles[#MOCK.loadedFiles + 1] = candidate
+
+    return result
 end
 
 function AddCSLuaFile(path)
-    -- no-op: в тесте все файлы доступны
+    local candidate = ResolveMockIncludePath(path)
+
+    if not py.file_exists(candidate) then
+        error("AddCSLuaFile: file not found: " .. path .. " (resolved to " .. candidate .. ")")
+    end
+
+    MOCK.clientFilesAdded[path] = true
 end
 
 file = file or {}

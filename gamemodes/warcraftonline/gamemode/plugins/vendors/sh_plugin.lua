@@ -3,9 +3,11 @@
     Покупка/продажа через NPC-торговца: серверный авторитет денег и товаров.
 ]]
 
-PLUGIN.name = "Vendors"
-PLUGIN.id = "vendors"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = { "npcs", "items", "inventory", "currency" }
-PLUGIN.priority = 62
+return {
+    name = "Vendors",
+    id = "vendors",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = { "npcs", "items", "inventory", "currency" },
+    priority = 62,
+}

@@ -7,9 +7,11 @@
         Entity:Interact(ply)
 ]]
 
-PLUGIN.name = "Interaction"
-PLUGIN.id = "interaction"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = {}
-PLUGIN.priority = 65
+return {
+    name = "Interaction",
+    id = "interaction",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = {},
+    priority = 65,
+}

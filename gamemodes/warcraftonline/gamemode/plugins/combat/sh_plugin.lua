@@ -3,9 +3,11 @@
     Damage pipeline: PreDamage → Calculate → Resistance → Critical → Modifiers → Final → Post.
 ]]
 
-PLUGIN.name = "Combat"
-PLUGIN.id = "combat"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = { "stats" }
-PLUGIN.priority = 60
+return {
+    name = "Combat",
+    id = "combat",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = { "stats" },
+    priority = 60,
+}

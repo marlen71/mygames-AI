@@ -21,7 +21,14 @@ MOCK.RunTimers(0.1)
 ---------------------------------------------------------------------------
 
 MOCK.Assert(WO.Core.IsLoaded, "WO.Core.IsLoaded после загрузки")
-MOCK.Assert(table.Count(WO.Plugins.GetAll()) >= 15, "плагины загружены: " .. table.Count(WO.Plugins.GetAll()))
+MOCK.Assert(WO.GamemodeIncludeFolder == "warcraftonline/gamemode",
+    "абсолютный include-root GMod: " .. tostring(WO.GamemodeIncludeFolder))
+MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 24,
+    "загружены все 24 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
+MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
+    "плагины персонажа и HUD загрузились")
+MOCK.Assert(MOCK.clientFilesAdded["warcraftonline/gamemode/plugins/character/sh_plugin.lua"],
+    "сервер отправил клиенту метаданные character через AddCSLuaFile")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы зарегистрированы: " ..
     (WO.Races.GetIDs and #WO.Races.GetIDs() or 0))
 MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() >= 4, "классы зарегистрированы")
@@ -94,6 +101,24 @@ MOCK.Assert(char.model == models[1], "модель сохранена")
 MOCK.Assert(ply:HasCharacter(), "HasCharacter() == true")
 
 print("[scenario] create OK: " .. char:GetFullName() .. " lvl " .. char:GetLevel())
+
+-- Повторный вход: сервер должен открыть список сохранённых персонажей, а не создать дубликат.
+local savedCharID = char.id
+
+MOCK.TakeOutbox()
+WO.Character.Unload(ply)
+WO.Character.SendState(ply)
+outbox = MOCK.TakeOutbox()
+
+MOCK.Assert(#MOCK.FindInbox(outbox, "Character.List") >= 1,
+    "при повторном входе сервер отправляет список персонажей")
+MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenSelect") >= 1,
+    "при повторном входе сервер открывает выбор существующего персонажа")
+MOCK.Assert(WO.Character.Select(ply, savedCharID), "загрузка сохранённого персонажа")
+char = ply:GetCharacter()
+MOCK.Assert(char and char.id == savedCharID, "загружен тот же персонаж без дубликата")
+
+print("[scenario] existing character selection OK")
 
 ---------------------------------------------------------------------------
 -- 5. Стартовые предметы, инвентарь, валюта

@@ -3,9 +3,11 @@
     Слоты, требования, визуальное отображение (оружие в руках, bonemerge).
 ]]
 
-PLUGIN.name = "Equipment"
-PLUGIN.id = "equipment"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = { "items", "inventory" }
-PLUGIN.priority = 50
+return {
+    name = "Equipment",
+    id = "equipment",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = { "items", "inventory" },
+    priority = 50,
+}

@@ -14,11 +14,11 @@
 
 GM.Name = "Warcraft Online"
 GM.Author = "Warcraft Online Team"
-GM.Version = "1.0.0"
+GM.Version = "2.0.1"
 
 WO = WO or {}
 WO.Name = "Warcraft Online"
-WO.Version = "1.0.0"
+WO.Version = "2.0.1"
 
 ---------------------------------------------------------------------------
 -- Определение корневой папки гейммода (для file.Find)
@@ -59,6 +59,38 @@ end
 
 WO.GamemodeFolder = ResolveGamemodeFolder()
 
+-- include/AddCSLuaFile принимают абсолютный путь относительно lua/, но для
+-- gamemode он должен начинаться с <FolderName>/gamemode/, НЕ gamemodes/.
+local function ResolveGamemodeIncludeFolder()
+    local gm = GAMEMODE or GM
+    local folderName = gm and gm.FolderName
+
+    if not isstring(folderName) or folderName == "" then
+        local folder = gm and gm.Folder
+
+        if isstring(folder) then
+            folderName = string.match(string.gsub(folder, "\\", "/"), "^gamemodes/([^/]+)")
+        end
+    end
+
+    if (not isstring(folderName) or folderName == "") and engine and isfunction(engine.ActiveGamemode) then
+        folderName = engine.ActiveGamemode()
+    end
+
+    if not isstring(folderName) or folderName == "" then
+        folderName = "warcraftonline"
+    end
+
+    folderName = string.gsub(folderName, "\\", "/")
+    folderName = string.gsub(folderName, "^gamemodes/", "")
+    folderName = string.gsub(folderName, "/gamemode/?$", "")
+    folderName = string.gsub(folderName, "/+$", "")
+
+    return folderName .. "/gamemode"
+end
+
+WO.GamemodeIncludeFolder = ResolveGamemodeIncludeFolder()
+
 ---------------------------------------------------------------------------
 -- Загрузка файлов
 ---------------------------------------------------------------------------
@@ -77,31 +109,70 @@ local function GuessRealm(path)
     return "shared"
 end
 
+-- Пути include/AddCSLuaFile должны быть абсолютными относительно lua/.
+-- В GMod для gamemode это "<FolderName>/gamemode/..."; относительный путь
+-- из загруженного core/plugins-файла разрешался бы относительно вложенной папки.
+local function ResolveIncludePath(path)
+    if not isstring(path) or path == "" then
+        error("WO.Include expects a non-empty path", 2)
+    end
+
+    path = string.gsub(path, "\\", "/")
+
+    local diskRoot = string.gsub(WO.GamemodeFolder, "\\", "/")
+    diskRoot = string.gsub(diskRoot, "^gamemodes/", "")
+    local includeRoot = WO.GamemodeIncludeFolder
+
+    if string.sub(path, 1, 10) == "gamemodes/" then
+        path = string.sub(path, 11)
+    end
+
+    if path == includeRoot or string.sub(path, 1, #includeRoot + 1) == includeRoot .. "/" then
+        return path
+    end
+
+    if path == diskRoot then
+        return includeRoot
+    end
+
+    if string.sub(path, 1, #diskRoot + 1) == diskRoot .. "/" then
+        path = string.sub(path, #diskRoot + 2)
+    end
+
+    return includeRoot .. "/" .. path
+end
+
 --[[
     WO.Include(path, realm)
     Загружает файл гейммода. Путь указывается относительно папки gamemode/.
     realm: "shared" | "server" | "client" (по умолчанию определяется по префиксу файла).
+    Результаты include() возвращаются вызывающему коду.
 ]]
 function WO.Include(path, realm)
     realm = realm or GuessRealm(path)
+    local resolvedPath = ResolveIncludePath(path)
 
     if realm == "server" then
         if SERVER then
-            include(path)
-        end
-    elseif realm == "client" then
-        if SERVER then
-            AddCSLuaFile(path)
-        else
-            include(path)
-        end
-    else
-        if SERVER then
-            AddCSLuaFile(path)
+            return include(resolvedPath)
         end
 
-        include(path)
+        return
+    elseif realm == "client" then
+        if SERVER then
+            AddCSLuaFile(resolvedPath)
+
+            return
+        end
+
+        return include(resolvedPath)
     end
+
+    if SERVER then
+        AddCSLuaFile(resolvedPath)
+    end
+
+    return include(resolvedPath)
 end
 
 --[[
@@ -140,6 +211,8 @@ end
 
 -- Ядро
 WO.Include("core/sh_core.lua")
+WO.Log("Gamemode Lua include root: " .. WO.GamemodeIncludeFolder ..
+    " (file search root: " .. WO.GamemodeFolder .. ")")
 WO.Include("core/sh_enums.lua")
 WO.Include("core/sh_util.lua")
 WO.Include("core/sh_hooks.lua")

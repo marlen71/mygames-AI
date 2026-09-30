@@ -3,12 +3,14 @@
 
     Каждый плагин — папка в gamemode/plugins/ с файлом sh_plugin.lua:
 
-        PLUGIN.name = "Inventory"
-        PLUGIN.id = "inventory"
-        PLUGIN.author = "Warcraft Online Team"
-        PLUGIN.version = "1.0.0"
-        PLUGIN.dependencies = { "character", "items" }
-        PLUGIN.priority = 50
+        return {
+            name = "Inventory",
+            id = "inventory",
+            author = "Warcraft Online Team",
+            version = "1.0.0",
+            dependencies = { "character", "items" },
+            priority = 50,
+        }
 
     Загрузчик:
         1. находит плагины;
@@ -30,20 +32,16 @@ WO.Plugins.Order = WO.Plugins.Order or {}
 ---------------------------------------------------------------------------
 
 local function ReadMetadata(folder)
-    PLUGIN = {}
-
-    local ok, err = pcall(WO.Include, "plugins/" .. folder .. "/sh_plugin.lua", "shared")
-
-    local meta = PLUGIN
-    PLUGIN = nil
+    local path = "plugins/" .. folder .. "/sh_plugin.lua"
+    local ok, meta = pcall(WO.Include, path, "shared")
 
     if not ok then
-        WO.Error("Plugin '" .. folder .. "': failed to read metadata — " .. tostring(err))
+        WO.Error("Plugin '" .. folder .. "': failed to read metadata — " .. tostring(meta))
         return nil
     end
 
     if not istable(meta) or not isstring(meta.id) or meta.id == "" then
-        WO.Error("Plugin '" .. folder .. "': sh_plugin.lua must set PLUGIN.id")
+        WO.Error("Plugin '" .. folder .. "': sh_plugin.lua must return a metadata table with a non-empty id")
         return nil
     end
 

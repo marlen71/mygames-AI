@@ -3,9 +3,11 @@
     Все команды проверяют права через WO.Admin.
 ]]
 
-PLUGIN.name = "Debug"
-PLUGIN.id = "debug"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = { "admin" }
-PLUGIN.priority = 95
+return {
+    name = "Debug",
+    id = "debug",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = { "admin" },
+    priority = 95,
+}

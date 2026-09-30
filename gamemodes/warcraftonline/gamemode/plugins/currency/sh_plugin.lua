@@ -3,9 +3,11 @@
     Сервер контролирует все операции с деньгами.
 ]]
 
-PLUGIN.name = "Currency"
-PLUGIN.id = "currency"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = {}
-PLUGIN.priority = 25
+return {
+    name = "Currency",
+    id = "currency",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = {},
+    priority = 25,
+}

@@ -3,9 +3,11 @@
     Минимальный API прав (интеграция с ULX/ServerGuard — в будущем).
 ]]
 
-PLUGIN.name = "Admin"
-PLUGIN.id = "admin"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = {}
-PLUGIN.priority = 90
+return {
+    name = "Admin",
+    id = "admin",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = {},
+    priority = 90,
+}

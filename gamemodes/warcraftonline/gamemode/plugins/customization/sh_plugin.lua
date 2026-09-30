@@ -3,9 +3,11 @@
     У каждой модели — СВОИ bodygroups; конфигурация регистрируется на модель.
 ]]
 
-PLUGIN.name = "Customization"
-PLUGIN.id = "customization"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = { "races" }
-PLUGIN.priority = 17
+return {
+    name = "Customization",
+    id = "customization",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = { "races" },
+    priority = 17,
+}

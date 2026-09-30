@@ -3,9 +3,11 @@
     Weapon Base: все оружие наследуется от базовых классов (weapons/).
 ]]
 
-PLUGIN.name = "Weapons"
-PLUGIN.id = "weapons"
-PLUGIN.author = "Warcraft Online Team"
-PLUGIN.version = "1.0.0"
-PLUGIN.dependencies = { "combat", "items" }
-PLUGIN.priority = 61
+return {
+    name = "Weapons",
+    id = "weapons",
+    author = "Warcraft Online Team",
+    version = "1.0.0",
+    dependencies = { "combat", "items" },
+    priority = 61,
+}
