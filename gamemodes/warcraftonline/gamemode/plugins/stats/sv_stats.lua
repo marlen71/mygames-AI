@@ -37,9 +37,11 @@ function WO.Stats.ApplyVitals(ply)
         ply:SetHealth(maxHealth)
     end
 
-    -- При первом применении/повышении уровня — полное здоровье
+    -- Новый персонаж/полное восстановление получает полные HP, ману и выносливость.
     if ply._woFullHeal then
         ply:SetHealth(maxHealth)
+        ply:SetNW2Int("wo_mana", maxMana)
+        ply:SetNW2Int("wo_stamina", maxStamina)
         ply._woFullHeal = nil
     end
 

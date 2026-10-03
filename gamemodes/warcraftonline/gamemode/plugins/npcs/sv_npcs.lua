@@ -22,8 +22,42 @@ function WO.NPCs.SpawnOne(def, pos, ang)
     return ent
 end
 
---- Спавнит только NPC с явными точками, подходящими текущей карте.
--- Позиции не вычисляются автоматически: пустая схема означает «не размещать».
+--- Разрешает только явные координаты или явный map entity anchor.
+-- Никаких случайных/вычисленных по игрокам точек.
+function WO.NPCs.ResolveSpawnPoint(spawn)
+    if not istable(spawn) then return nil end
+
+    if isvector(spawn.pos) then
+        return spawn.pos, spawn.ang or Angle(0, 0, 0)
+    end
+
+    if not isstring(spawn.anchor) or spawn.anchor == "" then
+        return nil
+    end
+
+    local anchors = ents.FindByClass(spawn.anchor) or {}
+
+    table.sort(anchors, function(a, b)
+        local first = IsValid(a) and a:EntIndex() or math.huge
+        local second = IsValid(b) and b:EntIndex() or math.huge
+
+        return first < second
+    end)
+
+    local index = math.max(1, math.floor(tonumber(spawn.anchorIndex) or 1))
+    local anchor = anchors[index]
+
+    if not IsValid(anchor) then return nil end
+
+    local offset = isvector(spawn.offset) and spawn.offset or vector_origin
+    local position = anchor:GetPos() + offset
+    local angle = spawn.ang or anchor:GetAngles() or Angle(0, 0, 0)
+
+    return position, angle
+end
+
+--- Спавнит NPC только по явным координатам/map-anchor из схемы или конфига.
+-- Пустой список или отсутствующий anchor означает «не размещать».
 function WO.NPCs.SpawnAll()
     -- Убираем остатки (например, после cleanup).
     for _, ent in ipairs(WO.NPCs.Spawned) do
@@ -41,11 +75,18 @@ function WO.NPCs.SpawnAll()
         local spawnedForDefinition = false
 
         for _, spawn in ipairs(def.spawns or {}) do
-            if (not spawn.map or spawn.map == map) and spawn.pos ~= nil then
-                local ent = WO.NPCs.SpawnOne(def, spawn.pos, spawn.ang)
+            if not spawn.map or spawn.map == map then
+                local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
 
-                if IsValid(ent) then
-                    spawnedForDefinition = true
+                if pos then
+                    local ent = WO.NPCs.SpawnOne(def, pos, ang)
+
+                    if IsValid(ent) then
+                        spawnedForDefinition = true
+                    end
+                elseif spawn.anchor then
+                    WO.Debug("NPC spawn anchor not found: " .. tostring(spawn.anchor) ..
+                        " for '" .. tostring(def.id) .. "' on map '" .. tostring(map) .. "'")
                 end
             end
         end
@@ -86,6 +127,15 @@ WO.Hook.Add("NPCAttack", "npcs", function(npcDef, ent, ply)
             canCrit = false,
         })
     end
+end)
+
+-- Переводит общий combat death в доменное событие NPC; Quest-плагин подписан
+-- только на NPCKilled и не зависит от конкретных SWEP/Workshop-моделей.
+WO.Hook.Add("EntityKilled", "npcs", function(ent, attacker)
+    if not IsValid(ent) or not ent.npcDef or not ent.npcDef.hostile then return end
+    if not IsValid(attacker) or not attacker:IsPlayer() or not attacker:HasCharacter() then return end
+
+    WO.Hook.Run("NPCKilled", ent.npcDef, attacker)
 end)
 
 ---------------------------------------------------------------------------

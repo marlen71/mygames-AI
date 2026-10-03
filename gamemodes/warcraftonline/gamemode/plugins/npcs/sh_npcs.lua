@@ -39,7 +39,8 @@ function WO.NPCs.Register(def)
     def.name = def.name or def.id
     def.type = def.type or "talker"
     def.model = def.model or "models/player/Group01/male_01.mdl"
-    def.interactRange = def.interactRange or 140
+    def.level = math.max(1, math.floor(tonumber(def.level) or 1))
+    def.interactRange = tonumber(def.interactRange) or 140
     def.spawns = def.spawns or {}
 
     WO.NPCs.List[def.id] = def

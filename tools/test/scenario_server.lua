@@ -7,6 +7,38 @@
 
 local MOCK = MOCK
 
+-- Монтируемые Workshop-файлы/реестры тестируют только discovery; gameplay-классы
+-- всё равно остаются собственными WO-weapon, а не сторонними TFA SWEP.
+MOCK.mountedFiles = {
+    ["models/wow_creatures/wolf_level_1.mdl"] = true,
+    ["models/wow_creatures/innkeeper_female.mdl"] = true,
+    ["models/weapons/tfa_cso/v_knife.mdl"] = true,
+    ["models/weapons/tfa_cso/w_knife.mdl"] = true,
+}
+
+list.Set("NPC", "wow_wolf_level_1", {
+    Name = "Wolf - Level 1",
+    Category = "World of Warcraft Creatures",
+    Class = "npc_wow_creature",
+    Level = 1,
+    Model = "models/wow_creatures/wolf_level_1.mdl",
+})
+list.Set("NPC", "wow_innkeeper", {
+    Name = "Innkeeper",
+    Category = "World of Warcraft Creatures",
+    Class = "npc_wow_creature",
+    Level = 5,
+    Model = "models/wow_creatures/innkeeper_female.mdl",
+})
+
+weapons.Register({
+    PrintName = "TFA CS:O Knife",
+    Category = "TFA CS:O",
+    Base = "weapon_base",
+    ViewModel = "models/weapons/tfa_cso/v_knife.mdl",
+    WorldModel = "models/weapons/tfa_cso/w_knife.mdl",
+}, "tfa_cso_test_knife")
+
 print("[scenario] loading gamemode (server)...")
 
 include("gamemodes/warcraftonline/gamemode/init.lua")
@@ -23,8 +55,8 @@ MOCK.RunTimers(0.1)
 MOCK.Assert(WO.Core.IsLoaded, "WO.Core.IsLoaded после загрузки")
 MOCK.Assert(WO.GamemodeIncludeFolder == "warcraftonline/gamemode",
     "абсолютный include-root GMod: " .. tostring(WO.GamemodeIncludeFolder))
-MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 26,
-    "загружены все 26 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
+MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 27,
+    "загружены все 27 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
 MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
     "плагины персонажа и HUD загрузились")
 MOCK.Assert(MOCK.clientFilesAdded["warcraftonline/gamemode/plugins/character/sh_plugin.lua"],
@@ -37,9 +69,33 @@ MOCK.Assert(WO.Util.IsUUID(serverUUID), "UUID создаётся на серве
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы зарегистрированы: " ..
     (WO.Races.GetIDs and #WO.Races.GetIDs() or 0))
 MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() >= 4, "классы зарегистрированы")
-MOCK.Assert(WO.Items.GetAll and table.Count(WO.Items.GetAll()) >= 10, "предметы зарегистрированы: " ..
-    (WO.Items.GetAll and table.Count(WO.Items.GetAll()) or 0))
+MOCK.Assert(WO.Items.GetAll and table.Count(WO.Items.GetAll()) >= 12,
+    "предметы зарегистрированы: " .. (WO.Items.GetAll and table.Count(WO.Items.GetAll()) or 0))
 MOCK.Assert(WO.Models ~= nil and WO.Models.Catalog ~= nil, "каталог моделей Mailer на месте")
+MOCK.Assert(WO.Plugins.IsLoaded("workshop") and WO.Workshop.ModelOr ~= nil,
+    "Workshop adapter загружен отдельным плагином")
+MOCK.Assert(WO.NPCs.Get("black_wolf").model == "models/wow_creatures/wolf_level_1.mdl" and
+    WO.NPCs.Get("black_wolf").level == 1,
+    "выбран реально смонтированный волк уровня 1 из NPC registry")
+MOCK.Assert(WO.NPCs.Get("trader_marla").model == "models/wow_creatures/innkeeper_female.mdl",
+    "торговец использует обнаруженную Workshop-модель")
+local starterKnifeDef = WO.Items.Get("starter_knife")
+local starterKnifeSWEP = weapons.GetStored("wo_knife_starter")
+local arcaneHandsDef = WO.Items.Get("arcane_hands")
+MOCK.Assert(starterKnifeDef and starterKnifeDef.weapon.damage == 6 and
+    starterKnifeDef.model == "models/weapons/tfa_cso/w_knife.mdl" and
+    starterKnifeSWEP and starterKnifeSWEP.WODamage == 6,
+    "слабый WO-нож использует проверенную TFA-модель, не сторонний урон")
+MOCK.Assert(arcaneHandsDef and arcaneHandsDef.requirements.class[1] == "mage" and
+    weapons.GetStored("wo_arcane_hands") ~= nil,
+    "магические руки зарегистрированы и доступны только классу мага")
+MOCK.Assert(WO.Classes.Get("warrior").startingItems[1].class == "starter_knife" and
+    WO.Classes.Get("rogue").startingItems[1].class == "starter_knife" and
+    WO.Classes.Get("ranger").startingItems[1].class == "starter_knife" and
+    WO.Classes.Get("mage").startingItems[1].class == "arcane_hands" and
+    WO.Classes.Get("warrior").startingEquipment.main_hand == "starter_knife" and
+    WO.Classes.Get("mage").startingEquipment.main_hand == "arcane_hands",
+    "стартовые оружия классов слабые, data-driven и заранее экипированы")
 
 -- Проверяем приоритет SAM над встроенными GMod-флагами администратора.
 local previousSAM = rawget(_G, "sam")
@@ -142,6 +198,8 @@ MOCK.Assert(char.name == "Тест", "имя сохранено: " .. tostring(c
 MOCK.Assert(char.race == "human" and char.class == "warrior", "раса/класс сохранены")
 MOCK.Assert(char.model == models[1], "модель сохранена")
 MOCK.Assert(ply:HasCharacter(), "HasCharacter() == true")
+MOCK.Assert(ply:GetStamina() > 0,
+    "персонаж входит в мир с полной выносливостью для стартового оружия")
 MOCK.Assert(#WO.Character.LoadList(ply) == 1, "повторный net-запрос не создал дубликат")
 
 print("[scenario] create OK: " .. char:GetFullName() .. " lvl " .. char:GetLevel())
@@ -161,6 +219,10 @@ MOCK.Assert(#MOCK.FindInbox(outbox, "Character.OpenMenu") >= 1,
 MOCK.Assert(WO.Character.Select(ply, savedCharID), "загрузка сохранённого персонажа")
 char = ply:GetCharacter()
 MOCK.Assert(char and char.id == savedCharID, "загружен тот же персонаж без дубликата")
+MOCK.Assert(WO.Equipment.Get(char).startingEquipmentApplied == true and
+    WO.Equipment.Get(char):Get("main_hand").class == "starter_knife" and
+    WO.Inventory.GetContainer(char):CountItem("starter_knife") == 0,
+    "автоэкипировка сохраняется и не создаёт копию стартового оружия")
 
 print("[scenario] existing character selection OK")
 
@@ -179,6 +241,14 @@ for _ in pairs(inv.items or {}) do
 end
 
 MOCK.Assert(itemCount > 0, "стартовые предметы выданы: " .. itemCount)
+
+local mainHand = WO.Equipment.Get(char):Get("main_hand")
+local equippedKnife = ply:GetWeapon("wo_knife_starter")
+
+MOCK.Assert(mainHand and mainHand.class == "starter_knife" and
+    IsValid(equippedKnife) and equippedKnife.WODamage == 6 and
+    ply:GetActiveWeapon() == equippedKnife,
+    "воин получает автоматически экипированный слабый нож в активный слот")
 
 local money = WO.Currency.Get(ply)
 
@@ -228,13 +298,16 @@ MOCK.RunTimers(1)
 MOCK.Assert(dummy:HasCharacter(), "второй персонаж создан")
 
 local hpBefore = dummy:Health()
-
-WO.Combat.Damage(ply, dummy, {
+local combatInfo = {
     amount = 15,
-    damageType = "physical",
+    type = WO.Enums.DamageType.PHYSICAL,
     canCrit = false,
-})
+}
 
+WO.Combat.Damage(ply, dummy, combatInfo)
+
+MOCK.Assert(combatInfo.critical == false,
+    "canCrit=false отключает повторный critical roll в общем damage pipeline")
 print("[scenario] combat OK: pipeline executed (hp " .. tostring(hpBefore) .. ")")
 
 ---------------------------------------------------------------------------
@@ -270,6 +343,14 @@ print("[scenario] persistence OK")
 
 MOCK.Assert(#WO.NPCs.Spawned == 0,
     "NPC без map-specific spawn-точек не появляются автоматически")
+
+local anchorPosition = WO.NPCs.ResolveSpawnPoint({
+    anchor = "info_player_start",
+    anchorIndex = 1,
+    offset = Vector(12, 0, 4),
+})
+MOCK.Assert(isvector(anchorPosition) and anchorPosition.x == 12 and anchorPosition.z == 20,
+    "map anchor разрешается детерминированно с явным смещением")
 
 -- Добавляем явные map-specific точки, чтобы проверить обычный жизненный цикл NPC.
 for _, def in pairs(WO.NPCs.List) do
@@ -366,20 +447,57 @@ MOCK.Assert(WO.Currency.Get(ply) > moneyBeforeSell, "продажа принес
 
 print("[scenario] vendor OK")
 
--- Kill-квест: принимаем и «убиваем» волков через хук NPCKilled
+-- Базовый игровой цикл: принять квест и атаковать реального wo_npc стартовым SWEP.
 local acceptQuest = WO.Quests.Accept(ply, "wolves_of_elwynn")
 
-MOCK.Assert(acceptQuest == true, "kill-квест принят")
+MOCK.Assert(acceptQuest == true, "kill-квест первого уровня принят")
 
-for _ = 1, 3 do
-    WO.Hook.Run("NPCKilled", WO.NPCs.Get("black_wolf"), ply)
+local activeWolf = FindNPC("black_wolf")
+MOCK.Assert(IsValid(activeWolf), "цель test quest заспавнена")
+activeWolf:SetHealth(1)
+
+local equippedWeapon = weapons.GetStored("wo_knife_starter")
+local currentMainHand = WO.Equipment.Get(ply:GetCharacter()):Get("main_hand")
+local durabilityBeforeAttack = currentMainHand.durability
+local attackWeapon = setmetatable({
+    WOItemUID = currentMainHand.uid,
+    WODamage = equippedWeapon.WODamage,
+    WODurability = currentMainHand.durability,
+    GetOwner = function() return ply end,
+    GetClass = function() return "wo_knife_starter" end,
+    SetNextPrimaryFire = function(self, time) self.nextPrimaryFire = time end,
+    SendWeaponAnim = function() end,
+    EmitSound = function() end,
+}, { __index = equippedWeapon })
+local originalTraceLine = util.TraceLine
+local originalGetShootPos = ply.GetShootPos
+
+ply.GetShootPos = function(self) return self:GetPos() + Vector(0, 0, 64) end
+util.TraceLine = function(trace)
+    return {
+        Entity = activeWolf,
+        Hit = true,
+        HitPos = activeWolf:GetPos(),
+        StartPos = trace.start,
+        Fraction = 0.5,
+    }
 end
+
+attackWeapon:PrimaryAttack()
+
+util.TraceLine = originalTraceLine
+ply.GetShootPos = originalGetShootPos
+
+MOCK.Assert(not IsValid(activeWolf), "PrimaryAttack WO-ножа убил NPC через серверный damage pipeline")
+MOCK.Assert(currentMainHand.durability == durabilityBeforeAttack - 1,
+    "атака стартовым ножом списала прочность экипированного экземпляра")
 
 local wolfQuest = ply:GetCharacter().quests["wolves_of_elwynn"]
 
-MOCK.Assert(wolfQuest.status == "completed", "kill-квест завершён: " .. tostring(wolfQuest.status))
+MOCK.Assert(wolfQuest.status == "completed" and wolfQuest.progress[1] == 1,
+    "смерть из SWEP/combat hook завершила стартовый квест ровно один раз: " .. tostring(wolfQuest.status))
 
-print("[scenario] kill quest OK")
+print("[scenario] first-level wolf quest / starter SWEP / combat death OK")
 
 ---------------------------------------------------------------------------
 -- 9. Выход

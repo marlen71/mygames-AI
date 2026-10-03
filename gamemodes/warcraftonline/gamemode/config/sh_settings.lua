@@ -56,6 +56,52 @@ WO.Config.InventoryHeight = 6
 WO.Config.DefaultHandsModel = "models/weapons/c_arms.mdl"
 
 ---------------------------------------------------------------------------
+-- Стартовое оружие (баланс остаётся в конфиге, а предметы — в schemas/items)
+---------------------------------------------------------------------------
+
+WO.Config.StarterKnife = {
+    damage = 6,
+    range = 62,
+    attackSpeed = 1.1,
+    staminaCost = 2,
+    durability = 55,
+    durabilityLoss = 1,
+    fallbackViewModel = "models/weapons/c_crowbar.mdl",
+    fallbackWorldModel = "models/weapons/w_crowbar.mdl",
+}
+
+WO.Config.ArcaneHands = {
+    damage = 7,
+    range = 480,
+    manaCost = 5,
+    cooldown = 1.15,
+    spellPowerScale = 0.2,
+    fallbackViewModel = "models/weapons/c_arms.mdl",
+    fallbackWorldModel = "models/weapons/w_physics.mdl",
+}
+
+---------------------------------------------------------------------------
+-- Явные точки тестового квест-хаба (никакого поиска случайной позиции).
+-- По умолчанию хаб есть только на gm_construct; для другой карты добавьте
+-- её собственные map-specific записи в соответствующую схему NPC.
+---------------------------------------------------------------------------
+
+WO.Config.NPCSpawnPoints = {
+    marshal_dughal = {
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(170, 0, 8), ang = Angle(0, 180, 0) },
+    },
+    trader_marla = {
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(0, 170, 8), ang = Angle(0, 90, 0) },
+    },
+    black_wolf = {
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(-190, 0, 8), ang = Angle(0, 0, 0) },
+    },
+}
+
+---------------------------------------------------------------------------
 -- Характеристики в бою
 ---------------------------------------------------------------------------
 

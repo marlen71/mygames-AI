@@ -1,25 +1,27 @@
 --[[
-    Warcraft Online — NPC: чёрный волк (враждебное существо, цель квестов).
+    Warcraft Online — волк первого уровня, цель стартового kill-квеста.
 
-    Если подписан аддон «Black Wolf PlayerModel» (2080218553) из коллекции
-    сервера и его .mdl указан в config/sh_workshop.lua — используется он.
-    Иначе — временная стоковая модель (зомби-быстрый, HL2-контент GMod).
+    WO.Workshop ищет зарегистрированного NPC уровня 1 из Creature Megapack и
+    принимает только реально смонтированную модель. При отсутствии аддона
+    используется проверенный GMod fallback; права/урон/XP остаются в WO.
 ]]
 
 WO.NPCs.Register({
     id = "black_wolf",
-    name = "Чёрный волк",
+    name = "Волк (уровень 1)",
     type = "creature",
     hostile = true,
+    level = 1,
 
-    model = WO.Workshop.ModelOr("black_wolf", "models/zombie/fast.mdl"),
+    model = WO.Workshop.NPCModelOr("wow_wolf", "models/zombie/fast.mdl"),
     scale = 0.85,
 
-    spawns = {}, -- Configure explicit map positions before enabling this NPC.
+    -- gm_construct имеет явную точку info_player_start; другие карты пусты,
+    -- пока администратор не добавит map-specific spawn в конфигурацию.
+    spawns = WO.Config.NPCSpawnPoints.black_wolf or {},
 
-    health = 120,
-    damage = 8,
-    attackRange = 140,
+    health = 45,
+    damage = 4,
+    attackRange = 110,
     interactRange = 0,
-
 })

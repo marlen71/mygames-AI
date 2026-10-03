@@ -119,17 +119,70 @@ function LABEL:Init()
     self:SetText("")
     self.font = "WO.Body"
     self.col = WO.UI.Colors.text
+    self.woCentered = false
+end
+
+local function WrapLabelText(text, font, maxWidth)
+    local lines = {}
+    local limit = math.max(1, maxWidth)
+
+    surface.SetFont(font)
+
+    for paragraph in string.gmatch(tostring(text or "") .. "\n", "(.-)\n") do
+        local line = ""
+
+        for word in string.gmatch(paragraph, "%S+") do
+            local candidate = line == "" and word or (line .. " " .. word)
+            local width = surface.GetTextSize(candidate)
+
+            if line ~= "" and width > limit then
+                lines[#lines + 1] = line
+                line = word
+            else
+                line = candidate
+            end
+        end
+
+        if line ~= "" or #lines == 0 then
+            lines[#lines + 1] = line
+        end
+    end
+
+    return lines
 end
 
 function LABEL:Paint(w, h)
-    draw.SimpleText(self:GetText(), self.font, 0, h / 2, self.col, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+    -- Единственная точка отрисовки label: перенос по ширине и clip по высоте
+    -- не дают длинным названиям/описаниям залезать на соседние элементы.
+    local font = self.font or "WO.Body"
+    local _, lineHeight = surface.GetTextSize("Ag")
+    lineHeight = math.max(1, lineHeight)
+
+    local lines = WrapLabelText(self:GetText() or "", font, w - 8)
+    local x = self.woCentered and w / 2 or 0
+    local align = self.woCentered and TEXT_ALIGN_CENTER or TEXT_ALIGN_LEFT
+    local y = math.max(0, math.floor((h - math.min(h, #lines * lineHeight)) / 2))
+
+    surface.SetFont(font)
+
+    for _, line in ipairs(lines) do
+        if y + lineHeight > h then break end
+
+        draw.SimpleText(line, font, x, y, self.col or WO.UI.Colors.text,
+            align, TEXT_ALIGN_TOP)
+        y = y + lineHeight
+    end
 end
 
 function LABEL:SetTextColor(col)
     self.col = col
 end
 
-vgui.Register("WO_Label", LABEL, "DPanel")
+function LABEL:SetCentered(centered)
+    self.woCentered = centered == true
+end
+
+vgui.Register("WO_Label", LABEL, "DLabel")
 
 ---------------------------------------------------------------------------
 -- WO.Window — окно с заголовком и перетаскиванием

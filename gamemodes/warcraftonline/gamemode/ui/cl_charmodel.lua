@@ -155,10 +155,14 @@ vgui.Register("WO_CharacterModel", MODEL, "DModelPanel")
 ]]
 function WO.UI.CreateCharacterModel(parent, modelPath)
     local panel = vgui.Create("WO_CharacterModel", parent)
+    local fallbackModel = "models/player/group01/male_01.mdl"
 
-    if modelPath then
-        panel:SetModel(modelPath)
+    if not isstring(modelPath) or modelPath == "" or
+        (util.IsValidModel and not util.IsValidModel(modelPath)) then
+        modelPath = fallbackModel
     end
+
+    panel:SetModel(modelPath)
 
     return panel
 end

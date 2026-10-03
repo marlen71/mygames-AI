@@ -32,6 +32,7 @@ if SERVER then
         self:SetNPCID(npcDef.id or "")
         self:SetNW2String("wo_name", npcDef.name or "NPC")
         self:SetNW2String("wo_role", npcDef.type or "talker")
+        self:SetNW2Int("wo_level", math.max(1, tonumber(npcDef.level) or 1))
 
         local model = npcDef.model or "models/player/Group01/male_01.mdl"
 

@@ -13,7 +13,7 @@ SWEP.WorldModel = "models/weapons/w_physics.mdl"
 SWEP.ViewModel = "models/weapons/c_physics.mdl"
 SWEP.HoldType = "melee"
 
-SWEP.WODamage = 20
+SWEP.WODamage = 10
 SWEP.WOAttackSpeed = 0.9
 SWEP.WORange = 95
 SWEP.WOStaminaCost = 3

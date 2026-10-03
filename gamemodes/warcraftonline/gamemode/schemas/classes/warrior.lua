@@ -17,14 +17,15 @@ WO.Classes.Register({
     },
 
     resource = "stamina",
+    startingEquipment = { main_hand = "starter_knife" },
 
-    allowedWeapons = { "melee", "sword", "axe", "shield" },
+    allowedWeapons = { "melee", "sword", "axe", "dagger", "shield" },
     allowedArmor = { "plate", "mail", "leather", "shield", "misc" },
 
     abilities = {},
 
     startingItems = {
-        { class = "iron_sword", amount = 1 },
+        { class = "starter_knife", amount = 1 },
         { class = "leather_vest", amount = 1 },
         { class = "bread", amount = 3 },
     },

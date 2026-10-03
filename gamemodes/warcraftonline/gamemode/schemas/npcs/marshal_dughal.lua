@@ -1,6 +1,6 @@
 --[[
-    Warcraft Online — NPC: Маршал Дугхал (квестодатель).
-    Добавление NPC = новый файл в schemas/npcs/ (без изменения ядра).
+    Warcraft Online — Маршал Дугхал, стартовый квестодатель.
+    Workshop-модель используется только после проверки смонтированного NPC-ассета.
 ]]
 
 WO.NPCs.Register({
@@ -8,12 +8,11 @@ WO.NPCs.Register({
     name = "Маршал Дугхал",
     type = "questgiver",
 
-    model = "models/player/Group01/male_02.mdl",
+    model = WO.Workshop.NPCModelOr("wow_questgiver", "models/player/Group01/male_02.mdl"),
     skin = 0,
     scale = 1,
 
-    -- Пустой список намеренный: NPC появится только после явной map-точки.
-    spawns = {},
+    spawns = WO.Config.NPCSpawnPoints.marshal_dughal or {},
 
     dialogue = "marshal_intro",
     quests = { "wolves_of_elwynn", "supplies_for_the_road" },

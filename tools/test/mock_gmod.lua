@@ -276,6 +276,10 @@ function Vector(x, y, z)
     return setmetatable({ x = x or 0, y = y or 0, z = z or 0 }, VEC)
 end
 
+function isvector(value)
+    return type(value) == "table" and getmetatable(value) == VEC
+end
+
 function VEC:Length()
     return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
 end
@@ -459,16 +463,47 @@ function MOCK.NewEntity(class)
     e.__methods.SetModel = function(tt, m) tt.__model = m end
     e.__methods.SetNoDraw = function(tt, v) tt.__nodraw = v end
     e.__methods.SetMoveType = function(tt, v) tt.__movetype = v end
-    e.__methods.StripWeapons = function() end
+    e.__methods.StripWeapons = function(tt)
+        for _, weapon in pairs(tt.__weapons or {}) do
+            if IsValid(weapon) then weapon:Remove() end
+        end
+        tt.__weapons = {}
+        tt.__given = {}
+    end
+    e.__methods.StripWeapon = function(tt, class)
+        local weapon = tt.__weapons and tt.__weapons[class]
+        if IsValid(weapon) then weapon:Remove() end
+        if tt.__weapons then tt.__weapons[class] = nil end
+        if tt.__given then tt.__given[class] = nil end
+    end
     e.__methods.SetWalkSpeed = function(tt, v) tt.__walk = v end
     e.__methods.SetRunSpeed = function(tt, v) tt.__run = v end
     e.__methods.SetJumpPower = function(tt, v) tt.__jump = v end
     e.__methods.SetEyeAngles = function(tt, a) tt.__ang = a end
-    e.__methods.Give = function(tt, cls) tt.__given = tt.__given or {} tt.__given[cls] = true end
+    e.__methods.Give = function(tt, cls)
+        tt.__given = tt.__given or {}
+        tt.__weapons = tt.__weapons or {}
+        tt.__given[cls] = true
+
+        if not IsValid(tt.__weapons[cls]) then
+            local weapon = MOCK.NewEntity("weapon")
+            weapon.__weaponClass = cls
+            weapon.__methods.GetClass = function(instance) return instance.__weaponClass end
+            tt.__weapons[cls] = weapon
+        end
+    end
     e.__methods.HasWeapon = function(tt, cls) return tt.__given and tt.__given[cls] == true end
+    e.__methods.GetWeapon = function(tt, cls) return tt.__weapons and tt.__weapons[cls] end
     e.__methods.GetActiveWeapon = function(tt) return tt.__weapon end
     e.__methods.SetActiveWeapon = function(tt, w) tt.__weapon = w end
-    e.__methods.GetWeapons = function(tt) return {} end
+    e.__methods.SelectWeapon = function(tt, class) tt.__weapon = tt.__weapons and tt.__weapons[class] end
+    e.__methods.GetWeapons = function(tt)
+        local out = {}
+        for _, weapon in pairs(tt.__weapons or {}) do
+            if IsValid(weapon) then out[#out + 1] = weapon end
+        end
+        return out
+    end
     e.__methods.Kill = function(tt) tt.__alive = false end
     e.__methods.SetModelScale = function(tt, s) tt.__scale = s end
     e.__methods.GetHull = function(tt) return Vector(-16, -16, 0), Vector(16, 16, 72) end
@@ -631,6 +666,10 @@ function file.Find(pattern, path)
 end
 
 function file.Exists(path, searchPath)
+    if MOCK.mountedFiles and MOCK.mountedFiles[path] == true then
+        return true
+    end
+
     return py.file_exists(path)
 end
 
@@ -1453,8 +1492,22 @@ function surface.GetTextSize(txt) return #(txt or "") * 6, 12 end
 function surface.GetFontName() return "default" end
 
 draw = draw or {}
-function draw.SimpleText() return 0, 0 end
+MOCK.drawTextCalls = MOCK.drawTextCalls or 0
+function draw.SimpleText()
+    MOCK.drawTextCalls = MOCK.drawTextCalls + 1
+    return 0, 0
+end
 function draw.NoTexture() end
+
+render = render or {}
+MOCK.spriteDrawCalls = MOCK.spriteDrawCalls or 0
+function render.SetMaterial() end
+function render.DrawSprite()
+    MOCK.spriteDrawCalls = MOCK.spriteDrawCalls + 1
+end
+function Material(path)
+    return { path = path }
+end
 function draw.RoundedBox() end
 function draw.RoundedBoxEx() end
 function draw.Text() end
@@ -1491,6 +1544,18 @@ function game.SinglePlayer() return true end
 function game.MaxPlayers() return 16 end
 function game.IsDedicated() return true end
 function game.GetSkillLevel() return 1 end
+
+list = list or {}
+MOCK.listData = MOCK.listData or {}
+
+function list.Get(category)
+    return MOCK.listData[category] or {}
+end
+
+function list.Set(category, key, value)
+    MOCK.listData[category] = MOCK.listData[category] or {}
+    MOCK.listData[category][key] = value
+end
 
 ents = ents or {}
 
@@ -1574,12 +1639,22 @@ function player.GetBySteamID(sid)
     return nil
 end
 
-function player_manager() end
+player_manager = player_manager or {}
+MOCK.playerModels = MOCK.playerModels or {}
+
+function player_manager.AllValidModels()
+    return MOCK.playerModels
+end
+
+function player_manager.AddValidModel(name, model)
+    MOCK.playerModels[name] = model
+end
 
 weapons = weapons or {}
 MOCK.weaponList = {}
 
 function weapons.Register(swep, class)
+    swep.ClassName = class
     MOCK.weaponList[class] = swep
 end
 

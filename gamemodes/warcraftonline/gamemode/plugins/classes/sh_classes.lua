@@ -21,6 +21,7 @@
         startingItems = {
             { class = "iron_sword", amount = 1 },
         },
+        startingEquipment = { main_hand = "iron_sword" },
 
         modifiers = {},
     })
@@ -45,6 +46,7 @@ function WO.Classes.Register(def)
     def.allowedWeapons = def.allowedWeapons or {}
     def.allowedArmor = def.allowedArmor or {}
     def.startingItems = def.startingItems or {}
+    def.startingEquipment = def.startingEquipment or {}
     def.abilities = def.abilities or {}
 
     return WO.Classes.Registry:Register(def.id, def)

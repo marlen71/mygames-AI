@@ -21,7 +21,7 @@ WO.Items.Register({
 
     weapon = {
         class = "wo_staff_apprentice",
-        damage = 20,
+        damage = 10,
         range = 95,
         attackSpeed = 0.9,
     },

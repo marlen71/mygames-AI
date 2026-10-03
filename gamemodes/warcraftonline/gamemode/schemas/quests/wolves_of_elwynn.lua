@@ -1,24 +1,25 @@
 --[[
-    Warcraft Online — квест: Волки Элвинна.
-    Добавление квеста = новый файл в schemas/quests/.
+    Warcraft Online — стартовый тестовый квест.
+    Цикл: принять задание у маршала → победить волка уровня 1 → получить награду.
 ]]
 
 WO.Quests.Register({
     id = "wolves_of_elwynn",
-    name = "Волки Элвинна",
-    description = "Чёрные волки терзают путников у дорог. Победи трёх тварей.",
-    level = 2,
+    name = "Первая охота",
+    description = "Победите одного волка первого уровня у дороги и получите награду.",
+    level = 1,
     giver = "marshal_dughal",
 
     steps = {
-        { type = "kill", target = "black_wolf", amount = 3, text = "Победите чёрных волков" },
+        { type = "kill", target = "black_wolf", amount = 1,
+            text = "Победите волка первого уровня" },
     },
 
     rewards = {
-        xp = 250,
-        money = 120,
+        xp = 80,
+        money = 25,
         items = {
-            { class = "health_potion", amount = 2 },
+            { class = "wolf_pelt", amount = 1 },
         },
     },
 

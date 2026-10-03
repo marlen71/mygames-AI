@@ -87,6 +87,8 @@ function WO.Equipment.ApplyWeapons(ply)
     end
 
     -- Выдаём оружие из слотов
+    local mainHandClass = nil
+
     for _, slotId in ipairs({ "main_hand", "off_hand" }) do
         local instance = equipment:Get(slotId)
 
@@ -106,9 +108,17 @@ function WO.Equipment.ApplyWeapons(ply)
                     if instance.durability ~= nil then
                         wep.WODurability = instance.durability
                     end
+
+                    if slotId == "main_hand" then
+                        mainHandClass = def.weapon.class
+                    end
                 end
             end
         end
+    end
+
+    if mainHandClass and isfunction(ply.SelectWeapon) then
+        ply:SelectWeapon(mainHandClass)
     end
 end
 
@@ -410,6 +420,55 @@ function WO.Equipment.ReduceDurability(ply, slotId, amount)
 
     return instance.durability
 end
+
+---------------------------------------------------------------------------
+-- Автоэкипировка стартового оружия (настройка находится в class schema)
+---------------------------------------------------------------------------
+
+local function EquipStartingEquipment(char, ply)
+    if not WO.Character.IsCharacter(char) or not IsValid(ply) or ply:GetCharacter() ~= char then
+        return
+    end
+
+    local equipment = WO.Equipment.Get(char)
+
+    if not equipment or equipment.startingEquipmentApplied then return end
+
+    local classDef = WO.Classes and WO.Classes.Get and WO.Classes.Get(char.class)
+    local startingEquipment = classDef and classDef.startingEquipment or {}
+    local container = WO.Inventory and WO.Inventory.GetContainer and WO.Inventory.GetContainer(char)
+
+    for slotId, itemClass in pairs(startingEquipment) do
+        if isstring(slotId) and isstring(itemClass) and equipment:HasSlot(slotId) and
+            not equipment:Get(slotId) and container then
+            local targetDefinition = WO.Items.Get(itemClass)
+
+            if targetDefinition and targetDefinition.equipment and
+                targetDefinition.equipment.slot == slotId then
+                for _, instance in pairs(container:GetItems()) do
+                    if instance.class == itemClass then
+                        local equipped, reason = WO.Equipment.Equip(ply, instance.uid)
+
+                        if equipped then
+                            WO.Debug("Starting equipment equipped: " .. itemClass .. " -> " .. slotId ..
+                                " for " .. char:GetFullName())
+                        else
+                            WO.Debug("Starting equipment skipped: " .. itemClass .. " (" ..
+                                tostring(reason) .. ")")
+                        end
+
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    equipment.startingEquipmentApplied = true
+    WO.SaveQueue.SaveNow(char)
+end
+
+WO.Hook.Add("CharacterSelected", "equipment_starting", EquipStartingEquipment)
 
 ---------------------------------------------------------------------------
 -- Сохранение / загрузка

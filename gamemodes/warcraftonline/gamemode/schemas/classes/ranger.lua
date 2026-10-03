@@ -16,14 +16,15 @@ WO.Classes.Register({
     },
 
     resource = "stamina",
+    startingEquipment = { main_hand = "starter_knife" },
 
-    allowedWeapons = { "ranged", "bow", "melee", "axe" },
+    allowedWeapons = { "ranged", "bow", "melee", "axe", "dagger" },
     allowedArmor = { "leather", "mail", "misc" },
 
     abilities = {},
 
     startingItems = {
-        { class = "rugged_axe", amount = 1 },
+        { class = "starter_knife", amount = 1 },
         { class = "leather_helmet", amount = 1 },
         { class = "wolf_pelt", amount = 2 },
     },

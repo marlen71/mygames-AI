@@ -67,6 +67,9 @@ WO.Lang.Register("ru", {
     ["character.confirm_required"] = "Подтвердите создание персонажа перед отправкой",
 
     ["menu.title"] = "Warcraft Online",
+    ["menu.fullscreen_subtitle"] = "Приключение начинается с вашего героя",
+    ["menu.character_preview"] = "Ваш персонаж",
+    ["menu.character_start_hint"] = "Создайте героя, выберите расу и класс, затем войдите в мир.",
     ["menu.overview"] = "Обзор и игроки",
     ["menu.overview_subtitle"] = "Состояние персонажа и список игроков на сервере",
     ["menu.characters"] = "Персонажи",

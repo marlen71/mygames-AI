@@ -27,6 +27,9 @@ MOCK.Assert(WO.UI.Scroll ~= nil, "WO.UI.Scroll существует")
 MOCK.Assert(WO.UI.Button ~= nil, "WO.UI.Button существует")
 MOCK.Assert(WO.UI.CreateCharacterModel ~= nil, "WO.UI.CreateCharacterModel существует")
 MOCK.Assert(WO.UI.Colors ~= nil and WO.UI.Metrics ~= nil, "тема загружена")
+MOCK.Assert(MOCK.fonts["WO.Body"].weight >= 600 and MOCK.fonts["WO.Small"].size >= 15 and
+    MOCK.fonts["WO.Tiny"].size >= 13,
+    "глобальные UI-шрифты стали крупнее и плотнее")
 MOCK.Assert(WO.CharacterUI ~= nil and WO.CharacterUI.OpenCreate ~= nil, "экран создания зарегистрирован")
 MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
     "client загрузил плагины персонажа и HUD")
@@ -37,6 +40,16 @@ MOCK.Assert(hudShouldDraw and isfunction(hudShouldDraw.wo_hud_hide) and
     "стандартные HUD и scoreboard скрыты")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы видны на клиенте")
 MOCK.Assert(WO.Models ~= nil and WO.Models.GetRace ~= nil, "каталог моделей виден на клиенте")
+local arcaneHandsSWEP = weapons.GetStored("wo_arcane_hands")
+MOCK.Assert(arcaneHandsSWEP and isfunction(arcaneHandsSWEP.ViewModelDrawn),
+    "магические руки имеют клиентский визуальный эффект")
+local viewModelMock = MOCK.NewEntity("viewmodel")
+viewModelMock.LookupBone = function() return 1 end
+viewModelMock.GetBonePosition = function() return Vector(1, 2, 3), Angle(0, 0, 0) end
+local spritesBefore = MOCK.spriteDrawCalls
+arcaneHandsSWEP:ViewModelDrawn(viewModelMock)
+MOCK.Assert(MOCK.spriteDrawCalls == spritesBefore + 1,
+    "arcane effect рисуется у кисти viewmodel")
 
 print("[scenario] client load OK")
 
@@ -64,10 +77,40 @@ print("[scenario] Character.List OK")
 ---------------------------------------------------------------------------
 
 local panelsBeforeMenu = #MOCK.createdPanels
+local drawCallsBeforeMenu = MOCK.drawTextCalls
 MOCK.NetDeliver({ name = "Character.OpenMenu", args = {} }, 8, nil)
 
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "открылось главное меню персонажей")
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeMenu, "главное меню создало UI")
+MOCK.Assert(MOCK.drawTextCalls == drawCallsBeforeMenu,
+    "текст не рисуется императивно во время сборки панелей")
+local fullscreenMenu = FindLatestLiveFrame()
+local fullscreenWidth, fullscreenHeight = fullscreenMenu:GetSize()
+local fullscreenX, fullscreenY = fullscreenMenu:GetPos()
+MOCK.Assert(fullscreenWidth == ScrW() and fullscreenHeight == ScrH() and
+    fullscreenX == 0 and fullscreenY == 0,
+    "единое игровое меню занимает весь экран")
+local foundHeroPreview = false
+for _, panel in ipairs(MOCK.createdPanels) do
+    if rawget(panel, "__class") == "WO_CharacterModel" and rawget(panel, "__removed") ~= true then
+        foundHeroPreview = true
+        break
+    end
+end
+MOCK.Assert(foundHeroPreview, "главное меню показывает вращающееся 3D-превью персонажа")
+
+MOCK.screenW, MOCK.screenH = 800, 600
+hook.Run("OnScreenSizeChanged", 1920, 1080, 800, 600)
+local compactMenu = FindLatestLiveFrame()
+local compactWidth, compactHeight = compactMenu:GetSize()
+MOCK.Assert(compactWidth == 800 and compactHeight == 600,
+    "полноэкранное меню перестраивается на компактном разрешении")
+MOCK.screenW, MOCK.screenH = 1920, 1080
+hook.Run("OnScreenSizeChanged", 800, 600, 1920, 1080)
+local restoredMenu = FindLatestLiveFrame()
+local restoredWidth, restoredHeight = restoredMenu:GetSize()
+MOCK.Assert(restoredWidth == 1920 and restoredHeight == 1080,
+    "полноэкранное меню восстанавливает исходное разрешение")
 
 GM:ScoreboardShow()
 GM:ScoreboardHide()
@@ -81,7 +124,7 @@ WO.CharacterUI.OpenMainMenu()
 
 local createButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.create"))
 local loadButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.load"))
-local exitButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.exit"))
+local exitButton = MOCK.FindPanelByText(WO.Lang:Get("menu.exit"))
 
 MOCK.Assert(createButton ~= nil, "в главном меню есть кнопка создания")
 MOCK.Assert(loadButton ~= nil and loadButton:IsEnabled() == false,
@@ -216,8 +259,11 @@ MOCK.NetDeliver({ name = "Character.OpenMenu", args = {} }, 8, nil)
 local loadSavedButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.load"))
 MOCK.Assert(loadSavedButton ~= nil and loadSavedButton:IsEnabled(),
     "загрузка доступна при наличии персонажа")
+local drawCallsBeforeSelect = MOCK.drawTextCalls
 loadSavedButton:DoClick()
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "select", "загрузка открывает список персонажей")
+MOCK.Assert(MOCK.drawTextCalls == drawCallsBeforeSelect,
+    "карточки персонажей не рисуют подписи дважды/вне Paint")
 local selectFrame = FindLatestLiveFrame()
 MOCK.Assert(selectFrame and selectFrame.OnKeyCodePressed, "список персонажей обрабатывает Escape")
 selectFrame:OnKeyCodePressed(KEY_ESCAPE)

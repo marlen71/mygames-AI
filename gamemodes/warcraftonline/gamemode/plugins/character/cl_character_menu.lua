@@ -112,7 +112,7 @@ function WO.CharacterUI.OpenMainMenu()
         "WO.Small", WO.UI.Colors.textDim)
     emptyLabel:SetPos(0, 218)
     emptyLabel:SetSize(panelWidth, 24)
-    emptyLabel:SetContentAlignment(5)
+    emptyLabel:SetCentered(true)
     emptyLabel:SetVisible(#list == 0)
 
     local exitButton = WO.UI.Button(panel, WO.Lang:Get("character.menu.exit"), function()
@@ -134,19 +134,10 @@ local function CreateCharacterCard(parent, entry, onSelect)
     card:SetPaintBackground(false)
     card.selected = false
 
-    card.Paint = function(_, w, h)
-        local border = card.selected and SELECTED_COLOR or WO.UI.Colors.border
-
-        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, border)
-    end
-
     -- Модель
     local model = WO.UI.CreateCharacterModel(card, entry.model ~= "" and entry.model or "models/player/group01/male_01.mdl")
     model:SetPos(10, 10)
     model:SetSize(160, 170)
-
-    -- Имя
-    draw.SimpleText(entry.name .. " " .. entry.surname, "WO.Subtitle", 90, 190, WO.UI.Colors.text, TEXT_ALIGN_CENTER)
 
     -- Уровень / раса / класс
     local raceDef = WO.Races.Get(entry.race)

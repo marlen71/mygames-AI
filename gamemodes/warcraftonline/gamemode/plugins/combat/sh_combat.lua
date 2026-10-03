@@ -9,6 +9,7 @@
             amount = 25,
             type = "physical",     -- WO.Enums.DamageType
             critical = false,
+            canCrit = true,        -- false отключает критический roll для данного удара
             ability = nil,         -- id способности (будущее)
             weapon = nil,          -- item class / SWEP
         }
@@ -92,7 +93,7 @@ end
 
     @param attacker Entity|nil
     @param target Entity
-    @param info table { amount, type, critical, ability, weapon }
+    @param info table { amount, type, critical, canCrit, ability, weapon }
     @return boolean applied, number finalDamage
 ]]
 function WO.Combat.Damage(attacker, target, info)
@@ -143,13 +144,22 @@ function WO.Combat.Damage(attacker, target, info)
 
     info.amount = info.amount * multiplier
 
-    -- 4. Critical
-    if not info.critical and IsValid(attacker) then
-        info.critical = WO.Combat.RollCritical(attacker)
+    -- 4. Critical. canCrit=false is authoritative for magic/NPC hits; an explicit
+    -- critical=false must not be re-rolled into a critical strike.
+    if info.canCrit == false then
+        info.critical = false
+    elseif info.critical == nil then
+        info.critical = IsValid(attacker) and WO.Combat.RollCritical(attacker) or false
+    else
+        info.critical = info.critical == true
     end
 
     if info.critical then
-        local critMult = (attacker:IsPlayer() and attacker:GetStat("critMultiplier")) or 1.5
+        local critMult = 1.5
+
+        if IsValid(attacker) and attacker:IsPlayer() then
+            critMult = tonumber(attacker:GetStat("critMultiplier")) or critMult
+        end
 
         info.amount = info.amount * critMult
 
@@ -187,7 +197,13 @@ function WO.Combat.Damage(attacker, target, info)
         if target:IsPlayer() then
             target:Kill() -- вызовет PlayerDeath
         else
-            target:Remove()
+            -- Общий lifecycle-hook позволяет независимым плагинам (NPC, боссам,
+            -- разрушаемым объектам) обработать смерть без связки Combat -> NPC.
+            WO.Hook.Run("EntityKilled", target, attacker, info)
+
+            if IsValid(target) then
+                target:Remove()
+            end
         end
     end
 

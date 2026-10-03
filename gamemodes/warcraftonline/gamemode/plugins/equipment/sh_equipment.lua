@@ -35,6 +35,7 @@ WO.Equipment.Meta = EQUIPMENT
 function WO.Equipment.New()
     return setmetatable({
         slots = {},
+        startingEquipmentApplied = false,
     }, EQUIPMENT)
 end
 
@@ -90,7 +91,9 @@ end
 
 --- Сериализует экипировку (слот → item instance data).
 function EQUIPMENT:Serialize()
-    local out = {}
+    local out = {
+        __startingEquipmentApplied = self.startingEquipmentApplied == true,
+    }
 
     for slotId, instance in pairs(self.slots) do
         out[slotId] = WO.Items.Serialize(instance)
@@ -106,6 +109,8 @@ function WO.Equipment.Deserialize(data)
     local equipment = WO.Equipment.New()
 
     if not istable(data) then return equipment end
+
+    equipment.startingEquipmentApplied = data.__startingEquipmentApplied == true
 
     for slotId, itemData in pairs(data) do
         if equipment:HasSlot(slotId) then

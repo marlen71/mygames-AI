@@ -24,8 +24,8 @@ WO.UI.Colors = {
 
     -- Текст
     text = Color(235, 235, 240),
-    textDim = Color(150, 155, 170),
-    textDark = Color(90, 95, 110),
+    textDim = Color(190, 195, 207),
+    textDark = Color(125, 130, 145),
 
     -- Рамки
     border = Color(58, 64, 82),

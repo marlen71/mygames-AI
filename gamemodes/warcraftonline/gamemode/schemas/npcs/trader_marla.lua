@@ -1,5 +1,7 @@
 --[[
-    Warcraft Online — NPC: торговка Марла.
+    Warcraft Online — торговка Марла.
+    При наличии в Workshop NPC-реестре берётся подходящий merchant/vendor-модель;
+    иначе остаётся стандартная GMod-модель. Экономика описана отдельно от UI.
 ]]
 
 WO.NPCs.Register({
@@ -7,11 +9,11 @@ WO.NPCs.Register({
     name = "Торговка Марла",
     type = "vendor",
 
-    model = "models/player/Group01/female_02.mdl",
+    model = WO.Workshop.NPCModelOr("wow_vendor", "models/player/Group01/female_02.mdl"),
     skin = 0,
     scale = 1,
 
-    spawns = {},
+    spawns = WO.Config.NPCSpawnPoints.trader_marla or {},
 
     dialogue = "trader_marla",
     quests = { "meet_the_trader" },
