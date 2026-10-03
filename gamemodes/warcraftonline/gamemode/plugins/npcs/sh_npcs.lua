@@ -5,7 +5,7 @@
         WO.NPCs.Register({
             id = "marshal_dughal",
             name = "Маршал Дугхал",
-            model = "models/player/Group01/male_02.mdl",
+            model = WO.Models.GetRace("human").male[1], -- смонтированная модель; без citizen fallback
             type = "questgiver",            -- questgiver | vendor | talker
             spawns = { { pos = Vector(200, 0, 16), ang = Angle(0, 180, 0) } },
             dialogue = "marshal_intro",     -- id диалога
@@ -38,10 +38,16 @@ function WO.NPCs.Register(def)
 
     def.name = def.name or def.id
     def.type = def.type or "talker"
-    def.model = def.model or "models/player/Group01/male_01.mdl"
     def.level = math.max(1, math.floor(tonumber(def.level) or 1))
-    def.interactRange = tonumber(def.interactRange) or 140
-    def.spawns = def.spawns or {}
+    def.minLevel = math.max(1, math.floor(tonumber(def.minLevel) or def.level))
+    def.maxLevel = math.max(def.minLevel, math.floor(tonumber(def.maxLevel) or def.level))
+    def.interactRange = tonumber(def.interactRange) or tonumber(WO.Config.InteractDistance) or 100
+    def.spawns = istable(def.spawns) and def.spawns or {}
+
+    if def.workshopClass ~= nil and not isstring(def.workshopClass) then
+        WO.Error("WO.NPCs.Register: invalid workshopClass for '" .. def.id .. "'")
+        return false
+    end
 
     WO.NPCs.List[def.id] = def
 
@@ -58,6 +64,29 @@ end
 --- Все NPC.
 function WO.NPCs.GetAll()
     return WO.NPCs.List
+end
+
+--- Уровень, ограниченный диапазоном конкретной схемы NPC.
+function WO.NPCs.ClampLevel(def, level)
+    if not istable(def) then return 1 end
+
+    return math.Clamp(math.floor(tonumber(level) or def.level or 1),
+        def.minLevel or 1, def.maxLevel or def.level or 1)
+end
+
+--- Серверные характеристики уровня, полностью заданные схемой NPC.
+function WO.NPCs.GetLevelStats(def, level)
+    if not istable(def) then return nil end
+
+    level = WO.NPCs.ClampLevel(def, level)
+    local configured = istable(def.levelStats) and def.levelStats[level] or nil
+
+    if not istable(configured) then return nil end
+
+    return {
+        health = math.max(1, tonumber(configured.health) or 1),
+        damage = math.max(0, tonumber(configured.damage) or 0),
+    }
 end
 
 --- Все NPC-квестодатели указанного квеста.
@@ -82,31 +111,27 @@ end
 
 --- Открыть окно NPC: диалог / квесты / торговля.
 function WO.NPCs.OnInteract(ent, ply)
-    if not IsValid(ent) or not IsValid(ply) then return end
+    if not IsValid(ent) or not IsValid(ply) or not ply:HasCharacter() then return end
+    if ent:GetClass() ~= "wo_npc" then return end
 
     local def = ent.npcDef
 
-    if not def then return end
+    if not def or WO.NPCs.Get(ent:GetNPCID()) ~= def or def.hostile then return end
+    if not WO.Interaction.CanInteract(ent, ply) or
+        ply:GetPos():Distance(ent:GetPos()) > WO.Interaction.GetRange(ent) then return end
 
-    -- Дистанция — финальная проверка (серверный авторитет)
-    if ply:GetPos():Distance(ent:GetPos()) > (def.interactRange or 140) + 24 then
-        return
-    end
-
-    -- Приоритет: диалог (из него доступны квесты и торговля) → торговля → квесты
+    -- Диалог содержит data-driven переходы к выдаче задания и торговле.
     if def.dialogue and WO.Dialogue and WO.Dialogue.Open then
-        WO.Dialogue.Open(ply, def)
-
+        WO.Dialogue.Open(ply, def, ent)
         return
     end
 
     if def.type == "vendor" and WO.Vendors and WO.Vendors.Open then
-        WO.Vendors.Open(ply, def)
-
+        WO.Vendors.Open(ply, def, ent)
         return
     end
 
     if WO.Quests and WO.Quests.OpenNPC then
-        WO.Quests.OpenNPC(ply, def)
+        WO.Quests.OpenNPC(ply, def, ent)
     end
 end

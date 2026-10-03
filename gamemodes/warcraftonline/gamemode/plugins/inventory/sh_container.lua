@@ -170,6 +170,10 @@ function CONTAINER:AddItem(instance, x, y)
         return false, "invalid_instance"
     end
 
+    if not WO.Items.IsInventoryAllowed(instance.class) then
+        return false, "not_inventory_item"
+    end
+
     if self.items[instance.uid] then
         return false, "already_exists"
     end

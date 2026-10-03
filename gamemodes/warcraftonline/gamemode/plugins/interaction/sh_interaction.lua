@@ -14,6 +14,26 @@ WO.Interaction = WO.Interaction or {}
 
     Если методов нет — взаимодействие невозможно.
 ]]
+function WO.Interaction.GetRange(ent)
+    local configured = tonumber(WO.Config.InteractDistance) or 100
+    local npcDef = ent and ent.npcDef
+
+    -- NPC definitions are server-side fields; clients resolve the same schema
+    -- through the networked NPCID so the prompt uses the identical range.
+    if not istable(npcDef) and ent and ent.GetClass and ent:GetClass() == "wo_npc" and
+        isfunction(ent.GetNPCID) and WO.NPCs and isfunction(WO.NPCs.Get) then
+        npcDef = WO.NPCs.Get(ent:GetNPCID())
+    end
+
+    local entityRange = npcDef and tonumber(npcDef.interactRange)
+
+    if entityRange then
+        configured = math.min(configured, entityRange)
+    end
+
+    return math.max(0, configured)
+end
+
 function WO.Interaction.CanInteract(ent, ply)
     if not IsValid(ent) or not IsValid(ply) then return false end
 
@@ -54,8 +74,8 @@ end
 function WO.Interaction.TryInteract(ply, ent)
     if not IsValid(ply) or not IsValid(ent) then return false end
 
-    -- Дистанция (жёсткая серверная проверка)
-    if ply:GetPos():Distance(ent:GetPos()) > (WO.Config.InteractDistance or 100) * 1.25 then
+    -- Единая серверная дальность совпадает с клиентской подсказкой и Use.
+    if ply:GetPos():Distance(ent:GetPos()) > WO.Interaction.GetRange(ent) then
         return false
     end
 

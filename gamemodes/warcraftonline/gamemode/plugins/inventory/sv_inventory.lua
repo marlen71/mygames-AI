@@ -124,6 +124,7 @@ function WO.Inventory.GiveItem(ply, class, amount)
     local def = WO.Items.Get(class)
 
     if not def then return false, "unknown_class" end
+    if not WO.Items.IsInventoryAllowed(def) then return false, "not_inventory_item" end
 
     amount = math.max(1, math.floor(tonumber(amount) or 1))
 
@@ -342,6 +343,7 @@ function WO.Inventory.UseItem(ply, uid)
     local def = WO.Items.Get(instance.class)
 
     if not def then return false, "unknown_class" end
+    if not WO.Items.IsInventoryAllowed(def) then return false, "not_inventory_item" end
 
     -- Оружие/броня экипируются, а не «используются»
     if def.equipment then

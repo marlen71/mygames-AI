@@ -11,7 +11,7 @@ WO.Quests.Register({
     giver = "marshal_dughal",
 
     steps = {
-        { type = "kill", target = "black_wolf", amount = 1,
+        { type = "kill", target = "black_wolf", level = 1, amount = 1,
             text = "Победите волка первого уровня" },
     },
 

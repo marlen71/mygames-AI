@@ -5,11 +5,10 @@
 
 WO.Races.Register({
     id = "orc",
-    name = "Орк",
+    name = WO.Lang:Get("race.orc"),
     description = "Воинственная раса с огромной силой. Магия даётся тяжело.",
 
-    -- Модели орков WoW (Mailer, Steam Workshop) + стоковый fallback.
-    -- Список строится в config/sh_models.lua (WO.Models.GetRace).
+    -- Только смонтированные WoW-модели; гражданского fallback нет.
     models = WO.Models.GetRace("orc"),
 
     genders = { "male", "female" },

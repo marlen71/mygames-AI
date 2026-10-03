@@ -337,7 +337,8 @@ function SLOT:Paint(w, h)
 
     -- Количество (стак)
     if item and item.amount and item.amount > 1 then
-        draw.SimpleText(tostring(item.amount), "WO.Number", w - 3, h - 2, color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM)
+        WO.UI.DrawTextFit(tostring(item.amount), "WO.Number", w - 3, h - 2,
+            color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_BOTTOM, w - 6, math.min(18, h - 4))
     end
 
     -- Прочность (полоска снизу)

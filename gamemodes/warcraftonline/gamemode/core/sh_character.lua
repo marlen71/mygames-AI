@@ -205,6 +205,10 @@ function WO.Character.Validate(data, opts)
         return false, "invalid_model"
     end
 
+    if WO.Models and WO.Models.Exists and not WO.Models.Exists(model) then
+        return false, "model_unavailable"
+    end
+
     -- Кастомизация
     local customization = data.customization or {}
 
@@ -265,11 +269,9 @@ function WO.Character.SanitizeLoaded(data)
 
     data.age = WO.Util.ClampNumber(data.age, WO.Config.AgeMin, WO.Config.AgeMax)
 
-    if WO.Races.Registry and not WO.Races.Registry:Exists(data.race) then
-        local first = WO.Races.Registry and WO.Races.Registry:GetIDs()[1]
-
-        data.race = first or "human"
-        warnings[#warnings + 1] = "race_restored"
+    if not isstring(data.race) or not (WO.Races.Registry and WO.Races.Registry:Exists(data.race)) then
+        warnings[#warnings + 1] = "race_unavailable"
+        return nil, warnings
     end
 
     local genders = WO.Config.Genders or { "male", "female" }
@@ -282,9 +284,16 @@ function WO.Character.SanitizeLoaded(data)
         end
     end
 
-    if not genderOk then
-        data.gender = "male"
-        warnings[#warnings + 1] = "gender_restored"
+    if not genderOk or not WO.Races.IsGenderAllowed(data.race, data.gender) then
+        warnings[#warnings + 1] = "gender_unavailable"
+        return nil, warnings
+    end
+
+    if not isstring(data.model) or data.model == "" or
+        not WO.Races.IsModelAllowed(data.race, data.gender, data.model) or
+        (WO.Models and WO.Models.Exists and not WO.Models.Exists(data.model)) then
+        warnings[#warnings + 1] = "model_unavailable"
+        return nil, warnings
     end
 
     if WO.Classes.Registry and not WO.Classes.Registry:Exists(data.class) then

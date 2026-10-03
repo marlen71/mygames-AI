@@ -10,16 +10,20 @@
 local function SessionValid(ply)
     local session = ply.wo_vendor
 
-    if not session then return false end
+    if not session or not IsValid(ply) or not ply:HasCharacter() then return false end
 
     local ent = session.ent
 
-    if not IsValid(ent) then
+    if not IsValid(ent) or ent:GetClass() ~= "wo_npc" or
+        ent.npcDef ~= session.npcDef or ent.npcDef.type ~= "vendor" or
+        not WO.NPCs or WO.NPCs.Get(ent:GetNPCID()) ~= session.npcDef then
         ply.wo_vendor = nil
         return false
     end
 
-    if ply:GetPos():Distance(ent:GetPos()) > 240 then
+    local range = WO.Interaction.GetRange(ent)
+
+    if ply:GetPos():Distance(ent:GetPos()) > range then
         ply.wo_vendor = nil
         return false
     end
@@ -64,26 +68,20 @@ end
 ---------------------------------------------------------------------------
 
 --- Открывает торговлю NPC (вызывается из WO.NPCs.OnInteract).
-function WO.Vendors.Open(ply, npcDef)
-    if not IsValid(ply) or not ply:HasCharacter() then return end
+function WO.Vendors.Open(ply, npcDef, ent)
+    if not IsValid(ply) or not ply:HasCharacter() or not istable(npcDef) then return end
 
-    if not istable(npcDef.vendor) then
+    if npcDef.type ~= "vendor" or not istable(npcDef.vendor) then
         WO.Error("WO.Vendors.Open: NPC '" .. tostring(npcDef.id) .. "' is not a vendor")
         return
     end
 
-    local ent = nil
-
-    for _, candidate in ipairs(ents.FindByClass("wo_npc")) do
-        if IsValid(candidate) and candidate.npcDef == npcDef then
-            if ply:GetPos():Distance(candidate:GetPos()) <= (npcDef.interactRange or 140) + 64 then
-                ent = candidate
-                break
-            end
-        end
+    if not IsValid(ent) or ent:GetClass() ~= "wo_npc" or ent.npcDef ~= npcDef or
+        WO.NPCs.Get(ent:GetNPCID()) ~= npcDef or
+        not WO.Interaction.CanInteract(ent, ply) or
+        ply:GetPos():Distance(ent:GetPos()) > WO.Interaction.GetRange(ent) then
+        return
     end
-
-    if not IsValid(ent) then return end
 
     ply.wo_vendor = {
         ent = ent,
@@ -162,6 +160,10 @@ function WO.Vendors.Sell(ply, npcId, uid, amount)
 
     if not instance then
         return false, "no_item"
+    end
+
+    if not WO.Items.IsInventoryAllowed(instance.class) then
+        return false, "not_inventory_item"
     end
 
     local sellPrice = WO.Vendors.GetSellPrice(session.npcDef, instance.class)

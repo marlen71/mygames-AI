@@ -21,8 +21,38 @@ WO.Workshop.Collections = {
         id = 3801728890,
         title = "World of Warcraft",
         url = "https://steamcommunity.com/sharedfiles/filedetails/?id=3801728890",
-        includes = { 3798571666 },
+        -- Collection contents are not assumed; verified addon items are listed below.
     },
+}
+
+WO.Workshop.PlayableCharacterPack = {
+    id = 3796529373,
+    title = "World of Warcraft (1.12.1) – Playable Characters Megapack (All Outfits)",
+    url = "https://steamcommunity.com/sharedfiles/filedetails/?id=3796529373",
+}
+
+-- Clients download these addons automatically. The dedicated server must also
+-- subscribe/mount them to pass runtime model/SWEP/NPC-class validation.
+WO.Workshop.RequiredAddons = {
+    { id = 3796529373, title = "Playable Characters Megapack" },
+    { id = 3798571666, title = "Creatures Megapack" },
+    { id = 1847505933, title = "Draconic Base" },
+    { id = 712848264, title = "TFA CS:O / Nexon SWEPs Part 1" },
+    { id = 2840031720, title = "TFA Base" },
+    { id = 1309914309, title = "TFA CS:O Part 2" },
+    { id = 1538229351, title = "TFA CS:O Part 3" },
+    { id = 1845577793, title = "TFA CS:O Part 4" },
+}
+
+WO.Workshop.RequestedNPCClasses = {
+    fang = "wow_npc_14892",
+    boar = "wow_npc_2809",
+}
+
+WO.Workshop.RequestedSWEPs = {
+    hands = WO.Config.StartingWeaponClasses.hands,
+    starterKnife = WO.Config.StartingWeaponClasses.knife,
+    mageStick = WO.Config.StartingWeaponClasses.mage,
 }
 
 WO.Workshop.Catalog = {

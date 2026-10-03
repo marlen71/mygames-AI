@@ -15,6 +15,7 @@ WO.CharacterUI = WO.CharacterUI or {}
 local createFrame = nil
 local submitButton = nil
 local submitPending = false
+local createLayout = nil
 
 ---------------------------------------------------------------------------
 -- Состояние черновика
@@ -56,12 +57,78 @@ local STEP_NAMES = {
     "character.step.confirm",
 }
 
+local function LayoutCreateFrame()
+    if not IsValid(createFrame) or not istable(createFrame.woControls) then return end
+
+    local controls = createFrame.woControls
+    local screenW, screenH = ScrW(), ScrH()
+    local margin = math.max(18, math.min(60, screenW * 0.035))
+    local gap = math.max(16, math.min(48, screenW * 0.025))
+    local top = 72
+    local navY = math.max(top + 190, screenH - 64)
+    local rotateButtonY = navY - 78
+    local panelBottom = rotateButtonY - 44
+    local panelH = math.max(140, panelBottom - top)
+
+    createFrame:SetSize(screenW, screenH)
+    createFrame:SetPos(0, 0)
+    controls.title:SetPos(margin, 16)
+    controls.title:SetSize(math.max(160, screenW - margin * 2 - 56), 40)
+    controls.close:SetPos(screenW - margin - 40, 16)
+    controls.close:SetSize(40, 40)
+    controls.back:SetPos(margin, navY)
+    controls.back:SetSize(150, 40)
+    controls.next:SetPos(math.max(margin + 170, screenW - margin - 190), navY)
+    controls.next:SetSize(190, 40)
+
+    if screenW < 760 then
+        controls.step:SetPos(margin, top)
+        controls.step:SetSize(math.max(1, screenW - margin * 2), panelH)
+        controls.model:SetVisible(false)
+        controls.rotateLeft:SetVisible(false)
+        controls.rotateRight:SetVisible(false)
+        controls.rotateHint:SetVisible(false)
+        return
+    end
+
+    local availableW = screenW - margin * 2 - gap
+    local stepW = math.Clamp(availableW * 0.38, 320, 590)
+
+    if availableW < 650 then
+        stepW = math.max(250, availableW * 0.47)
+    end
+
+    local modelX = margin + stepW + gap
+    local modelW = math.max(180, screenW - margin - modelX)
+
+    controls.step:SetPos(margin, top)
+    controls.step:SetSize(stepW, panelH)
+    controls.model:SetVisible(true)
+    controls.model:SetPos(modelX, top)
+    controls.model:SetSize(modelW, panelH)
+
+    local rotateWidth = math.min(190, math.max(92, (modelW - 30) / 2))
+    local centerX = modelX + modelW / 2
+
+    controls.rotateLeft:SetVisible(true)
+    controls.rotateLeft:SetPos(centerX - rotateWidth - 8, rotateButtonY)
+    controls.rotateLeft:SetSize(rotateWidth, 34)
+    controls.rotateRight:SetVisible(true)
+    controls.rotateRight:SetPos(centerX + 8, rotateButtonY)
+    controls.rotateRight:SetSize(rotateWidth, 34)
+    controls.rotateHint:SetVisible(true)
+    controls.rotateHint:SetPos(centerX - math.min(240, modelW / 2), rotateButtonY - 24)
+    controls.rotateHint:SetSize(math.min(480, modelW), 20)
+    controls.rotateHint:SetContentAlignment(5)
+end
+
 local function CloseCreate()
     if IsValid(createFrame) then
         createFrame:Remove()
         createFrame = nil
     end
 
+    createLayout = nil
     submitButton = nil
     submitPending = false
     WO.CharacterUI.PreviewModel = nil
@@ -72,17 +139,33 @@ WO.CharacterUI.CloseCreate = CloseCreate
 local function PreviewUpdate(modelPanel)
     if not IsValid(modelPanel) then return end
 
-    if draft.model and draft.model ~= modelPanel.currentModel then
-        modelPanel:SetModel(draft.model)
-        modelPanel.currentModel = draft.model
+    local changed = false
 
-        -- Модель сменилась — перестраиваем контролы bodygroups (у каждой модели свои)
-        if isfunction(modelPanel.UpdateBodygroups) then
-            modelPanel.UpdateBodygroups()
+    if draft.model and draft.model ~= modelPanel.currentModel then
+        changed = isfunction(modelPanel.SetPreviewModel)
+            and modelPanel:SetPreviewModel(draft.model) == true
+
+        if not isfunction(modelPanel.SetPreviewModel) then
+            changed = WO.Models.Exists(draft.model)
+
+            if changed then
+                modelPanel:SetModel(draft.model)
+                modelPanel.currentModel = draft.model
+            end
         end
+    elseif not draft.model and isfunction(modelPanel.ClearPreviewModel) then
+        modelPanel:ClearPreviewModel()
+        changed = true
     end
 
-    modelPanel:ApplyCustomization(draft.customization)
+    -- Модель сменилась — перестраиваем контролы bodygroups (у каждой модели свои).
+    if changed and isfunction(modelPanel.UpdateBodygroups) then
+        modelPanel.UpdateBodygroups()
+    end
+
+    if isfunction(modelPanel.ApplyCustomization) then
+        modelPanel:ApplyCustomization(draft.customization)
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -90,9 +173,10 @@ end
 ---------------------------------------------------------------------------
 
 local function ValidateStep(step)
-    if step == 1 and not draft.race then
+    if step == 1 and (not draft.race or #WO.Races.GetAvailableGenders(draft.race) == 0) then
         return false, "character.race"
-    elseif step == 2 and not draft.gender then
+    elseif step == 2 and (not draft.gender or
+        not WO.Races.IsGenderAllowed(draft.race, draft.gender)) then
         return false, "character.gender"
     elseif step == 3 then
         local age = tonumber(draft.age)
@@ -109,8 +193,10 @@ local function ValidateStep(step)
             return false, "character.surname"
         end
     elseif step == 6 then
-        if not draft.model then
-            return false, "character.model"
+        if not draft.model or
+            not WO.Races.IsModelAllowed(draft.race, draft.gender, draft.model) or
+            not WO.Models.Exists(draft.model) then
+            return false, "character.model_unavailable"
         end
     elseif step == 7 and not draft.class then
         return false, "character.class"
@@ -127,62 +213,78 @@ end
 
 local stepBuilders = {}
 
--- Шаг 1: раса
+-- Шаг 1: раса. Недоступные (не смонтированные) модели в выборе не показываются.
 stepBuilders[1] = function(parent, modelPanel)
     local scroll = WO.UI.Scroll(parent)
 
     scroll:Dock(FILL)
     scroll:DockMargin(0, 10, 0, 0)
 
+    local raceButtons = {}
+    local visibleRaces = 0
+
     for _, raceId in ipairs(WO.Races.GetIDs()) do
         local race = WO.Races.Get(raceId)
 
-        local button = WO.UI.Button(scroll, race.name, function()
-            draft.race = raceId
+        if race and #WO.Races.GetAvailableGenders(raceId) > 0 then
+            visibleRaces = visibleRaces + 1
 
-            -- Сбрасываем пол/модель/класс при смене расы
-            draft.gender = nil
-            draft.model = nil
-            draft.class = nil
+            local button = WO.UI.Button(scroll, race.name, function()
+                draft.race = raceId
+                draft.class = nil
 
-            local models = WO.Races.GetModels(raceId, draft.gender or "male")
-
-            if models[1] then
-                draft.model = models[1]
+                local genders = WO.Races.GetAvailableGenders(raceId)
+                draft.gender = genders[1]
+                local models = WO.Races.GetModels(raceId, draft.gender)
                 draft.modelIndex = 1
+                draft.model = models[1]
+
+                for id, raceButton in pairs(raceButtons) do
+                    raceButton:SetAccent(id == raceId)
+                end
+
+                PreviewUpdate(modelPanel)
+            end)
+
+            button:Dock(TOP)
+            button:DockMargin(0, 0, 0, 6)
+            button:SetTall(36)
+            button:SetAccent(draft.race == raceId)
+            raceButtons[raceId] = button
+
+            if race.description then
+                local label = WO.UI.Label(scroll, race.description, "WO.Tiny", WO.UI.Colors.textDim)
+
+                label:Dock(TOP)
+                label:DockMargin(8, -4, 8, 6)
+                label:SetTall(30)
             end
-
-            PreviewUpdate(modelPanel)
-        end)
-
-        button:Dock(TOP)
-        button:DockMargin(0, 0, 0, 6)
-        button:SetTall(36)
-
-        if race.description then
-            local label = WO.UI.Label(scroll, race.description, "WO.Tiny", WO.UI.Colors.textDim)
-
-            label:Dock(TOP)
-            label:DockMargin(8, -4, 8, 6)
-            label:SetTall(16)
         end
+    end
+
+    if visibleRaces == 0 then
+        local unavailable = WO.UI.Label(parent,
+            WO.Lang:Get("character.no_models_available"), "WO.Body", WO.UI.Colors.warn)
+        unavailable:Dock(TOP)
+        unavailable:DockMargin(8, 18, 8, 0)
+        unavailable:SetTall(58)
     end
 end
 
--- Шаг 2: пол
+-- Шаг 2: только полы, для которых сервер/клиент нашли установленные модели.
 stepBuilders[2] = function(parent, modelPanel)
-    local race = WO.Races.Get(draft.race)
+    local buttons = {}
 
-    for _, gender in ipairs((race and race.genders) or WO.Config.Genders or {}) do
+    for _, gender in ipairs(WO.Races.GetAvailableGenders(draft.race)) do
         local button = WO.UI.Button(parent, WO.Lang:Get("gender." .. gender), function()
             draft.gender = gender
 
-            -- Модели по полу
             local models = WO.Races.GetModels(draft.race, gender)
+            draft.modelIndex = 1
+            draft.model = models[1]
 
-            if models[1] then
-                draft.model = models[1]
-                draft.modelIndex = 1
+            for id, genderButton in pairs(buttons) do
+                genderButton:SetAccent(id == gender)
             end
 
             PreviewUpdate(modelPanel)
@@ -191,6 +293,8 @@ stepBuilders[2] = function(parent, modelPanel)
         button:Dock(TOP)
         button:DockMargin(0, 6, 0, 0)
         button:SetTall(36)
+        button:SetAccent(draft.gender == gender)
+        buttons[gender] = button
     end
 end
 
@@ -343,7 +447,8 @@ stepBuilders[6] = function(parent, modelPanel)
             row:SetPaintBackground(false)
 
             row.Paint = function(_, w, h)
-                draw.SimpleText(bg.name, "WO.Small", 0, h / 2, WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+                WO.UI.DrawTextFit(bg.name, "WO.Small", 0, h / 2, WO.UI.Colors.text,
+                    TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 144, h - 2)
             end
 
             local combo = vgui.Create("DComboBox", row)
@@ -483,7 +588,7 @@ stepBuilders[7] = function(parent)
 
             label:Dock(TOP)
             label:DockMargin(8, -4, 8, 6)
-            label:SetTall(16)
+            label:SetTall(30)
         end
     end
 end
@@ -522,7 +627,8 @@ stepBuilders[8] = function(parent)
         { key = "character.gender", value = WO.Lang:Get("gender." .. tostring(draft.gender)) },
         { key = "character.race", value = race and race.name or "—" },
         { key = "character.class", value = class and class.name or "—" },
-        { key = "character.model", value = draft.model or "—" },
+        { key = "character.model", value = isstring(draft.model) and
+            (string.match(draft.model, "([^/]+)$") or "—") or "—" },
     }
 
     local intro = WO.UI.Label(parent, WO.Lang:Get("character.review_instructions"),
@@ -616,11 +722,10 @@ function WO.CharacterUI.OpenCreate()
     draft = NewDraft()
 
     createFrame = vgui.Create("DFrame")
-    createFrame:SetSize(ScrW(), ScrH())
-    createFrame:SetPos(0, 0)
     createFrame:SetTitle("")
     createFrame:ShowCloseButton(false)
     createFrame:SetDraggable(false)
+    createFrame:SetSizable(false)
     createFrame:MakePopup()
     createFrame.OnKeyCodePressed = function(_, key)
         if key == KEY_ESCAPE then
@@ -630,62 +735,37 @@ function WO.CharacterUI.OpenCreate()
 
     createFrame.Paint = function(_, w, h)
         draw.RoundedBox(0, 0, 0, w, h, Color(10, 12, 18, 252))
-        draw.SimpleText(WO.Lang:Get("character.create"), "WO.Title", w / 2, 24, WO.UI.Colors.accent, TEXT_ALIGN_CENTER)
     end
 
-    -- Левая панель: шаги
     local stepPanel = vgui.Create("DPanel", createFrame)
-
-    stepPanel:SetPos(60, 70)
-    stepPanel:SetSize(ScrW() * 0.32, ScrH() - 170)
     stepPanel:SetPaintBackground(false)
+    stepPanel.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, WO.UI.Colors.border,
+            WO.UI.Metrics.radius)
+    end
 
-    -- Правая панель: 3D preview
-    local modelPanel = WO.UI.CreateCharacterModel(createFrame, "models/player/group01/male_01.mdl")
-    WO.CharacterUI.PreviewModel = modelPanel
-
-    local modelX = ScrW() * 0.42
-    local modelWidth = ScrW() * 0.52
-
-    modelPanel:SetPos(modelX, 70)
-    modelPanel:SetSize(modelWidth, ScrH() - 170)
+    -- Без расы из Workshop показывается понятный пустой preview, а не citizen.
+    local modelPanel = WO.UI.CreateCharacterModel(createFrame)
     modelPanel.spin = true
-
-    local rotateButtonY = ScrH() - 128
-    local rotateButtonWidth = 190
-    local modelCenterX = modelX + modelWidth / 2
+    WO.CharacterUI.PreviewModel = modelPanel
 
     local rotateLeftButton = WO.UI.Button(createFrame, WO.Lang:Get("character.rotate_left"), function()
         modelPanel:RotateBy(-20)
     end)
-    rotateLeftButton:SetPos(modelCenterX - rotateButtonWidth - 8, rotateButtonY)
-    rotateLeftButton:SetSize(rotateButtonWidth, 34)
 
     local rotateRightButton = WO.UI.Button(createFrame, WO.Lang:Get("character.rotate_right"), function()
         modelPanel:RotateBy(20)
     end)
-    rotateRightButton:SetPos(modelCenterX + 8, rotateButtonY)
-    rotateRightButton:SetSize(rotateButtonWidth, 34)
 
     local rotateHint = WO.UI.Label(createFrame, WO.Lang:Get("character.rotate_hint"),
         "WO.Small", WO.UI.Colors.textDim)
-    rotateHint:SetPos(modelCenterX - 240, rotateButtonY - 24)
-    rotateHint:SetSize(480, 20)
-    rotateHint:SetContentAlignment(5)
-
-    -- Навигация
-    local navY = ScrH() - 80
 
     local backButton = WO.UI.Button(createFrame, WO.Lang:Get("ui.back"), function()
         if draft.step > 1 then
             draft.step = draft.step - 1
-
             BuildStep(stepPanel, modelPanel)
         end
     end)
-
-    backButton:SetPos(60, navY)
-    backButton:SetSize(150, 40)
 
     local nextButton = WO.UI.Button(createFrame, WO.Lang:Get("ui.next"), function()
         local valid, reason = ValidateStep(draft.step)
@@ -713,8 +793,6 @@ function WO.CharacterUI.OpenCreate()
     end)
 
     createFrame.primaryButton = nextButton
-    nextButton:SetPos(ScrW() * 0.42 + ScrW() * 0.52 - 200, navY)
-    nextButton:SetSize(190, 40)
     nextButton:SetAccent(true)
 
     -- Возврат из мастера в главное меню (создание можно продолжить позже).
@@ -723,9 +801,26 @@ function WO.CharacterUI.OpenCreate()
         WO.CharacterUI.OpenMainMenu()
     end)
 
-    closeButton:SetPos(ScrW() - 70, 20)
-    closeButton:SetSize(40, 40)
+    closeButton:SetAccent(true)
+    createFrame.woControls = {
+        title = vgui.Create("DPanel", createFrame),
+        step = stepPanel,
+        model = modelPanel,
+        rotateLeft = rotateLeftButton,
+        rotateRight = rotateRightButton,
+        rotateHint = rotateHint,
+        back = backButton,
+        next = nextButton,
+        close = closeButton,
+    }
+    createFrame.woControls.title:SetPaintBackground(false)
+    createFrame.woControls.title.Paint = function(_, w, h)
+        WO.UI.DrawTextFit(WO.Lang:Get("character.create"), "WO.Title", w / 2, h / 2,
+            WO.UI.Colors.accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, h - 2)
+    end
 
+    createLayout = LayoutCreateFrame
+    LayoutCreateFrame()
     BuildStep(stepPanel, modelPanel)
 end
 
@@ -747,4 +842,10 @@ WO.Hook.Add("CharacterCreateResult", "character_create_pending", function(succes
     end
 
     submitButton = nil
+end)
+
+WO.Hook.Add("OnScreenSizeChanged", "character_create_layout", function()
+    if createLayout then
+        createLayout()
+    end
 end)

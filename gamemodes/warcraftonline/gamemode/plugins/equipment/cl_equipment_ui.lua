@@ -5,6 +5,8 @@
 
 WO.EquipmentUI = WO.EquipmentUI or {}
 
+local nextPanelId = 0
+
 function WO.EquipmentUI.CreatePanel(parent, options)
     options = options or {}
 
@@ -19,8 +21,8 @@ function WO.EquipmentUI.CreatePanel(parent, options)
 
     panel.Paint = function(_, w, h)
         WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, WO.UI.Colors.border)
-        draw.SimpleText(WO.Lang:Get("equipment.title"), "WO.Subtitle",
-            14, 20, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit(WO.Lang:Get("equipment.title"), "WO.Subtitle",
+            14, 20, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 28, 30)
     end
 
     local slots = {}
@@ -52,9 +54,9 @@ function WO.EquipmentUI.CreatePanel(parent, options)
 
         rowPanel.Paint = function(_, w, h)
             local labelWidth = math.max(0, w - slotSize - 8)
-            draw.SimpleText(WO.Lang:Get(slotDef.nameKey), "WO.Tiny",
+            WO.UI.DrawTextFit(WO.Lang:Get(slotDef.nameKey), "WO.Tiny",
                 labelWidth, h / 2, WO.UI.Colors.textDim,
-                TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+                TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, labelWidth, h - 2)
         end
 
         slot.CanDropItem = function(_, drag)
@@ -90,7 +92,8 @@ function WO.EquipmentUI.CreatePanel(parent, options)
 
     Refresh()
 
-    local hookId = "wo_equip_ui_" .. tostring(panel:EntIndex())
+    nextPanelId = nextPanelId + 1
+    local hookId = "wo_equip_ui_" .. tostring(nextPanelId)
     WO.Hook.Add("EquipmentSynced", hookId, function()
         if IsValid(panel) then
             Refresh()

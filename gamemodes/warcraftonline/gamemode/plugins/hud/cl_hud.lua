@@ -26,6 +26,13 @@ local HIDE = {
 }
 
 hook.Add("HUDShouldDraw", "wo_hud_hide", function(name)
+    local ply = LocalPlayer()
+    local hasCustomHUD = IsValid(ply) and ply:HasCharacter() and
+        WO.Character and WO.Character.GetLocal and WO.Character.GetLocal() ~= nil
+
+    -- Preserve the stock HUD while in limbo / before the character snapshot arrives.
+    if not hasCustomHUD then return nil end
+
     if HIDE[name] then
         return false
     end
@@ -49,8 +56,8 @@ function WO.HUD.DrawPlayerFrame()
 
     if not char then return end
 
-    local x, y = 24, ScrH() - 172
-    local w, h = 300, 148
+    local w, h = math.Clamp(ScrW() * 0.235, 260, 340), 148
+    local x, y = 24, math.max(12, ScrH() - h - 24)
 
     WO.UI.DrawPanelOutlined(x, y, w, h, WO.UI.Colors.panel, WO.UI.Colors.accentDark)
 
@@ -58,10 +65,12 @@ function WO.HUD.DrawPlayerFrame()
     local name = char:GetFullName()
     local level = (WO.Leveling.ClientData and WO.Leveling.ClientData.level) or char.level or 1
 
-    draw.SimpleText(name, "WO.HUDName", x + 14, y + 16, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+    WO.UI.DrawTextFit(name, "WO.HUDName", x + 14, y + 16, WO.UI.Colors.accent,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 98, 26)
 
-    draw.SimpleText(WO.Lang:Get("character.level") .. " " .. level, "WO.Small",
-        x + w - 14, y + 18, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+    WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level, "WO.Small",
+        x + w - 14, y + 18, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP,
+        72, 22)
 
     -- HP
     local hp = ply:Health()
@@ -95,8 +104,9 @@ function WO.HUD.DrawPlayerFrame()
     -- Валюта
     local money = WO.Currency.ClientAmount or 0
 
-    draw.SimpleText(WO.Currency.Format and WO.Currency.Format(money) or tostring(money), "WO.Small",
-        x + 14, y + 126, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+    WO.UI.DrawTextFit(WO.Currency.Format and WO.Currency.Format(money) or tostring(money),
+        "WO.Small", x + 14, y + 126, WO.UI.Colors.accent,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 28, 18)
 end
 
 ---------------------------------------------------------------------------
@@ -130,9 +140,11 @@ function WO.HUD.DrawTargetFrame()
         maxHp = target:GetMaxHealth()
     end
 
-    draw.SimpleText(name, "WO.HUD", x + w / 2, y + 12, WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
-    draw.SimpleText(WO.Lang:Get("character.level") .. " " .. level, "WO.Tiny",
-        x + w / 2, y + 32, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+    WO.UI.DrawTextFit(name, "WO.HUD", x + w / 2, y + 10, WO.UI.Colors.text,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, w - 24, 20)
+    WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level, "WO.Tiny",
+        x + w / 2, y + 30, WO.UI.Colors.textDim,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP, w - 24, 16)
 
     WO.UI.DrawBar(x + 14, y + 46, w - 28, 12, maxHp > 0 and hp / maxHp or 0,
         WO.UI.Colors.health, WO.UI.Colors.healthBg, nil)
@@ -170,16 +182,19 @@ function WO.HUD.DrawDeathScreen()
     -- Затемнение
     draw.RoundedBox(0, 0, 0, w, h, Color(60, 0, 0, 150))
 
-    draw.SimpleText(WO.Lang:Get("death.title"), "WO.Title", w / 2, h * 0.35, color_white, TEXT_ALIGN_CENTER)
+    WO.UI.DrawTextFit(WO.Lang:Get("death.title"), "WO.Title", w / 2, h * 0.35,
+        color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 48, 42)
 
     if deathInfo.killer then
-        draw.SimpleText(deathInfo.killer, "WO.Subtitle", w / 2, h * 0.35 + 36, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit(deathInfo.killer, "WO.Subtitle", w / 2, h * 0.35 + 36,
+            WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 48, 30)
     end
 
     local remaining = math.max(0, deathInfo.respawnTime - (SysTime() - deathInfo.diedAt))
 
-    draw.SimpleText(string.format(WO.Lang:Get("death.respawn"), math.ceil(remaining)), "WO.Body",
-        w / 2, h * 0.35 + 70, WO.UI.Colors.accent, TEXT_ALIGN_CENTER)
+    WO.UI.DrawTextFit(string.format(WO.Lang:Get("death.respawn"), math.ceil(remaining)),
+        "WO.Body", w / 2, h * 0.35 + 70, WO.UI.Colors.accent,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 48, 26)
 end
 
 ---------------------------------------------------------------------------
@@ -193,20 +208,25 @@ function WO.HUD.DrawQuestTracker()
 
     if #lines == 0 then return end
 
-    local x = ScrW() - 320
+    local width = math.min(320, ScrW() - 32)
+    local x = ScrW() - width - 16
     local y = 32
+    local maxRows = math.max(1, math.floor((ScrH() - y - 24) / 20))
+    local visibleRows = math.min(#lines, maxRows)
 
-    WO.UI.DrawPanelOutlined(x - 12, y - 10, 320, #lines * 20 + 20,
+    WO.UI.DrawPanelOutlined(x - 12, y - 10, width, visibleRows * 20 + 20,
         WO.UI.Colors.panel, WO.UI.Colors.border)
 
-    for _, line in ipairs(lines) do
-        if line.header then
-            draw.SimpleText(line.text, "WO.Small", x, y, WO.UI.Colors.accent)
-        else
-            draw.SimpleText(line.text, "WO.Tiny", x + 8, y,
-                line.done and WO.UI.Colors.good or WO.UI.Colors.textDim)
-        end
+    for index = 1, visibleRows do
+        local line = lines[index]
+        local isLast = index == visibleRows and #lines > visibleRows
+        local text = isLast and (tostring(line.text or "") .. " …") or line.text
+        local color = line.header and WO.UI.Colors.accent or
+            (line.done and WO.UI.Colors.good or WO.UI.Colors.textDim)
 
+        WO.UI.DrawTextFit(text, line.header and "WO.Small" or "WO.Tiny",
+            x + (line.header and 0 or 8), y, color, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP,
+            width - 32, 18)
         y = y + 20
     end
 end

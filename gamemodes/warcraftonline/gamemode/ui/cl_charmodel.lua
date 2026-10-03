@@ -21,12 +21,71 @@ function MODEL:Init()
     -- фиксированные Source units (фиксированные 70 обрезали ростовые модели).
     self.zoom = 1
     self.previewFOV = 32
+    self.woModelAvailable = false
     self:SetFOV(self.previewFOV)
     self:SetAnimated(true)
 
     -- Preview cards should visibly rotate without requiring an extra toggle.
     self.spin = true
     self.dragging = false
+end
+
+local function IsPlayableModel(modelPath)
+    if not isstring(modelPath) or modelPath == "" then return false end
+    if WO.Models and WO.Models.Exists and not WO.Models.Exists(modelPath) then return false end
+    if util.IsValidModel and not util.IsValidModel(modelPath) then return false end
+
+    if WO.Races and WO.Races.IsPlayableModel then
+        return WO.Races.IsPlayableModel(modelPath)
+    end
+
+    return true
+end
+
+function MODEL:ClearPreviewModel()
+    if IsValid(self.Entity) then
+        self.Entity:Remove()
+    end
+
+    self.Entity = nil
+    self.currentModel = nil
+    self.woModelAvailable = false
+end
+
+function MODEL:SetPreviewModel(modelPath)
+    if not IsPlayableModel(modelPath) then
+        self:ClearPreviewModel()
+        return false
+    end
+
+    if self.currentModel == modelPath and IsValid(self.Entity) then
+        self.woModelAvailable = true
+        return true
+    end
+
+    if IsValid(self.Entity) then
+        self.Entity:Remove()
+    end
+
+    self.Entity = nil
+    self:SetModel(modelPath)
+    self.currentModel = modelPath
+    self.woModelAvailable = IsValid(self.Entity)
+
+    return self.woModelAvailable
+end
+
+function MODEL:PaintOver(w, h)
+    if not IsValid(self.Entity) then
+        draw.RoundedBox(WO.UI.Metrics.radius, 0, 0, w, h, WO.UI.Colors.panelDark)
+        WO.UI.DrawTextFit(WO.Lang:Get("character.model_preview_unavailable"), "WO.Body",
+            w / 2, h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER,
+            w - 32, h - 24)
+        return
+    end
+
+    surface.SetDrawColor(WO.UI.Colors.borderLight)
+    surface.DrawOutlinedRect(0, 0, w, h, 1)
 end
 
 function MODEL:LayoutEntity(ent)
@@ -155,14 +214,12 @@ vgui.Register("WO_CharacterModel", MODEL, "DModelPanel")
 ]]
 function WO.UI.CreateCharacterModel(parent, modelPath)
     local panel = vgui.Create("WO_CharacterModel", parent)
-    local fallbackModel = "models/player/group01/male_01.mdl"
 
-    if not isstring(modelPath) or modelPath == "" or
-        (util.IsValidModel and not util.IsValidModel(modelPath)) then
-        modelPath = fallbackModel
+    if isfunction(panel.SetPreviewModel) then
+        panel:SetPreviewModel(modelPath)
+    elseif isstring(modelPath) and modelPath ~= "" and IsPlayableModel(modelPath) then
+        panel:SetModel(modelPath)
     end
-
-    panel:SetModel(modelPath)
 
     return panel
 end

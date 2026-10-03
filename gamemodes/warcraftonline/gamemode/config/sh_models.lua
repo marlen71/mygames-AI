@@ -6,13 +6,13 @@
     базовые модели и диапазоны expansion-паков указаны в описаниях каждого пака.
 
     Принцип работы каталога:
-      1) список кандидатов строится из путей-шаблонов ниже;
-      2) оставляются только реально существующие файлы (file.Exists, "GAME") —
-         если expansion-пак не подписан, его варианты просто не попадают в список;
-      3) в конец списка добавляются стоковые запасные модели GMod (fallback).
+      1) список кандидатов строится из подтверждённых путей ниже;
+      2) остаются только реально смонтированные файлы (file.Exists, "GAME");
+      3) остальные расы ищутся в зарегистрированных моделях Workshop-пака
+         3796529373; отсутствие модели означает, что создание такой расы закрыто.
 
-    Схемы рас используют:  models = WO.Models.GetRace("human")  и т.д.
-    Добавить новую расу = новая запись здесь + schemas/races/<id>.lua.
+    GMod-гражданские модели намеренно не используются как fallback.
+    Схемы рас используют: models = WO.Models.GetRace("human") и т.д.
 
     Обозначения в шаблонах (как в описаниях аддонов):
       humanmale00_00.mdl            — базовая модель (вариант "00");
@@ -125,8 +125,8 @@ WO.Models.Catalog = {
         },
     },
 
-    -- Схема "dwarf" в игре — Гном (male-only).
-    dwarf = {
+    -- Схема "gnome" использует проверенные Mailer-модели гномов.
+    gnome = {
         label = "Гном (WoW Gnome)",
         male = {
             workshop = { 1907948872, 1907951439, 1907954262 },
@@ -152,69 +152,23 @@ WO.Models.Catalog = {
 }
 
 --[[--------------------------------------------------------------------------]]
---[[ Стоковые запасные модели (используются всегда — и когда аддонов нет,     ]]
---[[ и как вариант «без паков» в конце списка).                               ]]
---[[----------------------------------------------------------------------------
-    Списки соответствуют прежним моделям из schemas/races/*.lua, чтобы поведение
-    без установленных аддонов Mailer не изменилось.
-------------------------------------------------------------------------------]]
+--[[ Names used to discover the playable-character Workshop pack at runtime.   ]]
+--[[ A missing race/gender model is unavailable; there are no civilian fallbacks. ]]
+--[[----------------------------------------------------------------------------]]
 
-WO.Models.Fallbacks = {
-    human = {
-        male = {
-            "models/player/group01/male_01.mdl",
-            "models/player/group01/male_02.mdl",
-            "models/player/group01/male_03.mdl",
-            "models/player/group01/male_04.mdl",
-            "models/player/group01/male_05.mdl",
-            "models/player/group01/male_06.mdl",
-            "models/player/group01/male_07.mdl",
-        },
-        female = {
-            "models/player/group01/female_01.mdl",
-            "models/player/group01/female_02.mdl",
-            "models/player/group01/female_03.mdl",
-            "models/player/group01/female_04.mdl",
-        },
-    },
-    elf = {
-        male = {
-            "models/player/group03/male_01.mdl",
-            "models/player/group03/male_02.mdl",
-            "models/player/group03/male_03.mdl",
-            "models/player/group03/male_04.mdl",
-        },
-        female = {
-            "models/player/group03/female_01.mdl",
-            "models/player/group03/female_02.mdl",
-            "models/player/group03/female_03.mdl",
-            "models/player/mossman.mdl",
-            "models/player/alyx.mdl",
-        },
-    },
-    orc = {
-        male = {
-            "models/player/Combine_Soldier.mdl",
-            "models/player/Combine_Super_Soldier.mdl",
-            "models/player/group03/male_07.mdl",
-        },
-        female = {
-            "models/player/Combine_Soldier.mdl",
-            "models/player/group03/female_04.mdl",
-        },
-    },
-    dwarf = {
-        male = {
-            "models/player/barney.mdl",
-            "models/player/group03/male_05.mdl",
-            "models/player/group03/male_06.mdl",
-        },
-        female = {
-            "models/player/group03/female_01.mdl",
-            "models/player/group03/female_02.mdl",
-        },
-    },
+WO.Models.PlayerSearchTerms = {
+    human = { "human" },
+    elf = { "night elf", "nightelf", "night_elf" },
+    orc = { "orc" },
+    dwarf = { "dwarf" },
+    gnome = { "gnome" },
+    undead = { "undead", "scourge", "forsaken" },
+    tauren = { "tauren" },
+    troll = { "troll" },
+    goblin = { "goblin" },
 }
+
+WO.Models.PlayableCharactersWorkshopID = 3796529373
 
 --[[--------------------------------------------------------------------------]]
 --[[ API                                                                       ]]
@@ -279,24 +233,42 @@ function WO.Models.GetWorkshopModels(raceId, gender)
     return out
 end
 
---- Итоговый список моделей для схемы расы: воркшоп-модели + стоковый fallback.
+--- Итоговый список реально смонтированных WoW-моделей, без гражданских fallback.
 -- Возвращает { male = {...}, female = {...} } в формате race.models.
 function WO.Models.GetRace(raceId)
     local result = {}
-    local fallbacks = WO.Models.Fallbacks[raceId] or {}
+    local raceTerms = WO.Models.PlayerSearchTerms[raceId] or {}
 
     for _, gender in ipairs({ "male", "female" }) do
         local list, seen = {}, {}
 
-        for _, path in ipairs(WO.Models.GetWorkshopModels(raceId, gender)) do
-            seen[path] = true
-            list[#list + 1] = path
-        end
-
-        for _, path in ipairs(fallbacks[gender] or {}) do
-            if not seen[path] then
+        local function append(path)
+            if isstring(path) and not seen[path] and WO.Models.Exists(path) then
                 seen[path] = true
                 list[#list + 1] = path
+            end
+        end
+
+        for _, path in ipairs(WO.Models.GetWorkshopModels(raceId, gender)) do
+            append(path)
+        end
+
+        -- The all-races addon may expose additional models through player_manager.
+        -- Names are matched by race AND gender; unresolved entries stay unavailable.
+        if #raceTerms > 0 and WO.Workshop and isfunction(WO.Workshop.PlayerModels) then
+            local genderSearch = gender == "female" and {
+                genderTerms = { "female", "woman", "fem" },
+            } or {
+                -- "male" is a substring of "female"; explicitly exclude it.
+                genderTerms = { "male", "man" },
+                excludeTerms = { "female", "woman", "fem" },
+            }
+            genderSearch.nameTerms = raceTerms
+
+            local discovered = WO.Workshop.PlayerModels(genderSearch)
+
+            for _, path in ipairs(discovered) do
+                append(path)
             end
         end
 
@@ -304,6 +276,19 @@ function WO.Models.GetRace(raceId)
     end
 
     return result
+end
+
+--- Обновляет доступные race.models после монтирования Workshop-пака.
+function WO.Models.RefreshRaceLists()
+    if not (WO.Races and WO.Races.GetAll) then return false end
+
+    for _, race in pairs(WO.Races.GetAll()) do
+        if istable(race) and isstring(race.id) then
+            race.models = WO.Models.GetRace(race.id)
+        end
+    end
+
+    return true
 end
 
 --- Путь анимационной модели (если пак установлен), иначе nil.

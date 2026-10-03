@@ -6,6 +6,19 @@
 
 local MOCK = MOCK
 
+MOCK.mountedFiles = {
+    ["models/mailer/character/human/male/humanmale00_00.mdl"] = true,
+    ["models/mailer/character/human/female/humanfemale00_00.mdl"] = true,
+}
+
+for _, class in ipairs({ "drc_unarmed", "tfa_cso_coldsteelblade", "weapon_hpwr_stick" }) do
+    weapons.Register({
+        PrintName = class,
+        Category = "Workshop test fixture",
+        Base = "weapon_base",
+    }, class)
+end
+
 local function FindLatestLiveFrame()
     for i = #MOCK.createdPanels, 1, -1 do
         local panel = MOCK.createdPanels[i]
@@ -35,21 +48,21 @@ MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
     "client загрузил плагины персонажа и HUD")
 local hudShouldDraw = hook.GetTable().HUDShouldDraw
 MOCK.Assert(hudShouldDraw and isfunction(hudShouldDraw.wo_hud_hide) and
-    hudShouldDraw.wo_hud_hide("CHudHealth") == false and
-    hudShouldDraw.wo_hud_hide("CHudScoreboard") == false,
-    "стандартные HUD и scoreboard скрыты")
+    hudShouldDraw.wo_hud_hide("CHudHealth") == nil and
+    hudShouldDraw.wo_hud_hide("CHudScoreboard") == nil,
+    "стандартный HUD не скрывается в лимбо до синхронизации персонажа")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы видны на клиенте")
 MOCK.Assert(WO.Models ~= nil and WO.Models.GetRace ~= nil, "каталог моделей виден на клиенте")
-local arcaneHandsSWEP = weapons.GetStored("wo_arcane_hands")
-MOCK.Assert(arcaneHandsSWEP and isfunction(arcaneHandsSWEP.ViewModelDrawn),
-    "магические руки имеют клиентский визуальный эффект")
-local viewModelMock = MOCK.NewEntity("viewmodel")
-viewModelMock.LookupBone = function() return 1 end
-viewModelMock.GetBonePosition = function() return Vector(1, 2, 3), Angle(0, 0, 0) end
-local spritesBefore = MOCK.spriteDrawCalls
-arcaneHandsSWEP:ViewModelDrawn(viewModelMock)
-MOCK.Assert(MOCK.spriteDrawCalls == spritesBefore + 1,
-    "arcane effect рисуется у кисти viewmodel")
+MOCK.Assert(WO.Config.StartingWeaponClasses.hands == "drc_unarmed" and
+    WO.Config.StartingWeaponClasses.knife == "tfa_cso_coldsteelblade" and
+    WO.Config.StartingWeaponClasses.mage == "weapon_hpwr_stick" and
+    weapons.GetStored("drc_unarmed") and
+    weapons.GetStored("tfa_cso_coldsteelblade") and
+    weapons.GetStored("weapon_hpwr_stick"),
+    "клиент видит точные классы стартовых SWEP из runtime registry")
+MOCK.Assert(not WO.Items.IsInventoryAllowed("starter_knife") and
+    not WO.Items.IsInventoryAllowed("arcane_hands"),
+    "стартовые руки/нож не отображаются как инвентарные предметы")
 
 print("[scenario] client load OK")
 
@@ -168,8 +181,9 @@ local function ClickWizardNext()
     nextButton:DoClick()
 end
 
-local raceIDs = WO.Races.GetIDs()
-local selectedRace = WO.Races.Get(raceIDs[1])
+local selectedRace = WO.Races.Get("human")
+MOCK.Assert(selectedRace and #WO.Races.GetAvailableGenders("human") > 0,
+    "test fixture mounts at least one WoW race")
 local raceButton = MOCK.FindPanelByText(selectedRace.name)
 MOCK.Assert(raceButton ~= nil, "первый шаг содержит варианты рас")
 raceButton:DoClick()
@@ -252,7 +266,7 @@ print("[scenario] Main menu and OpenCreate OK")
 MOCK.NetDeliver({ name = "Character.List", args = {
     1,
     "abc", "Тест", "Герой", 3, "human", "warrior", "male",
-    "models/player/group01/male_01.mdl", 0,
+    "models/mailer/character/human/male/humanmale00_00.mdl", 0,
 } }, 8, nil)
 
 MOCK.NetDeliver({ name = "Character.OpenMenu", args = {} }, 8, nil)
@@ -269,7 +283,8 @@ MOCK.Assert(selectFrame and selectFrame.OnKeyCodePressed, "список перс
 selectFrame:OnKeyCodePressed(KEY_ESCAPE)
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "Escape из списка возвращает в главное меню")
 
-local preview = WO.UI.CreateCharacterModel(nil, "models/player/group01/male_01.mdl")
+local preview = WO.UI.CreateCharacterModel(nil,
+    "models/mailer/character/human/male/humanmale00_00.mdl")
 preview:RotateBy(30)
 local previewEntity = MOCK.NewEntity("preview")
 preview:LayoutEntity(previewEntity)
@@ -298,9 +313,25 @@ print("[scenario] result events OK")
 MOCK.NetDeliver({ name = "Character.Sync", args = { {
     id = "active-test-character", name = "Тест", surname = "Герой", age = 25,
     gender = "male", race = "human", class = "warrior",
-    model = "models/player/group01/male_01.mdl", level = 3, experience = 10, money = 1234,
+    model = "models/mailer/character/human/male/humanmale00_00.mdl", level = 3, experience = 10, money = 1234,
     customization = { skin = 0, bodygroups = {} },
 } } }, 8, nil)
+MOCK.Assert(hudShouldDraw.wo_hud_hide("CHudHealth") == false and
+    hudShouldDraw.wo_hud_hide("CHudScoreboard") == false,
+    "при активном синхронизированном персонаже стандартные элементы HUD скрыты")
+
+MOCK.Assert(scripted_ents.Get("wo_npc").RenderGroup == RENDERGROUP_BOTH,
+    "NPC marker draw hook is enabled for both opaque and translucent passes")
+local merchantNPC = ents.Create("wo_npc")
+merchantNPC:SetNPCID("trader_marla")
+merchantNPC:SetPos(LocalPlayer():GetPos() + Vector(50, 0, 0))
+MOCK.Assert(WO.Interaction.CanInteract(merchantNPC, LocalPlayer()) and
+    WO.Interaction.GetRange(merchantNPC) == WO.Config.InteractDistance and
+    string.find(WO.Interaction.GetText(merchantNPC, LocalPlayer()), "Марла", 1, true),
+    "клиентский trace разрешает ближайшего NPC по сетевому NPCID и общей дальности")
+merchantNPC:SetPos(LocalPlayer():GetPos() + Vector(WO.Config.InteractDistance + 1, 0, 0))
+MOCK.Assert(not WO.Interaction.CanInteract(merchantNPC, LocalPlayer()),
+    "клиентская подсказка скрывается за пределами общей дальности")
 MOCK.Assert(WO.Net.Messages["Stats.Sync"] ~= nil, "Stats.Sync зарегистрирован в клиентском realm")
 MOCK.NetDeliver({ name = "Stats.Sync", args = { {
     strength = 12, agility = 10, intelligence = 8, stamina = 14, spirit = 9,

@@ -37,14 +37,12 @@ local function PanelWidth(panel, fallback)
 end
 
 local function PreviewModelPath(char)
-    if char and isstring(char.model) and char.model ~= "" then
+    if char and isstring(char.model) and char.model ~= "" and
+        WO.Models and WO.Models.Exists and WO.Models.Exists(char.model) then
         return char.model
     end
 
-    local raceModels = WO.Models and WO.Models.GetRace and WO.Models.GetRace("human") or nil
-    local maleModels = raceModels and raceModels.male or nil
-
-    return (maleModels and maleModels[1]) or "models/player/group01/male_01.mdl"
+    return nil
 end
 
 local function AddPageHeader(parent, title, subtitle)
@@ -55,12 +53,12 @@ local function AddPageHeader(parent, title, subtitle)
     header:SetPaintBackground(false)
 
     header.Paint = function(_, w, h)
-        draw.SimpleText(title, "WO.Title", 0, 3, WO.UI.Colors.accent,
-            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+        WO.UI.DrawTextFit(title, "WO.Title", 0, 3, WO.UI.Colors.accent,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 8, 34)
 
         if subtitle then
-            draw.SimpleText(subtitle, "WO.Small", 2, 42, WO.UI.Colors.textDim,
-                TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+            WO.UI.DrawTextFit(subtitle, "WO.Small", 2, 42, WO.UI.Colors.textDim,
+                TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 12, 22)
         end
     end
 
@@ -76,8 +74,8 @@ local function AddPreviewPanel(parent, char, title)
     preview.Paint = function(_, w, h)
         WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panelDark,
             WO.UI.Colors.borderLight)
-        draw.SimpleText(title, "WO.Subtitle", 18, 16, WO.UI.Colors.accent,
-            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+        WO.UI.DrawTextFit(title, "WO.Subtitle", 18, 16, WO.UI.Colors.accent,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 36, 26)
     end
 
     local model = WO.UI.CreateCharacterModel(preview, PreviewModelPath(char))
@@ -188,12 +186,12 @@ local function BuildCharactersPage(parent)
     summary.Paint = function(_, w, h)
         WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panelDark,
             WO.UI.Colors.border)
-        draw.SimpleText(char:GetFullName(), "WO.Title", 16, 16,
-            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
-        draw.SimpleText(WO.Lang:Get("character.level") .. " " .. level .. "  ·  " ..
+        WO.UI.DrawTextFit(char:GetFullName(), "WO.Title", 16, 16,
+            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 32, 32)
+        WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level .. "  ·  " ..
             (race and race.name or char.race) .. "  ·  " ..
             (class and class.name or char.class), "WO.Body", 16, 60,
-            WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+            WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 32, 24)
     end
 
     local logoutButton = WO.UI.Button(details, WO.Lang:Get("character.logout"), function()
@@ -241,20 +239,20 @@ local function BuildOverviewPage(parent)
             local class = WO.Classes.Get(char.class)
             local level = (WO.Leveling.ClientData and WO.Leveling.ClientData.level) or char.level or 1
 
-            draw.SimpleText(char:GetFullName(), "WO.Title", 20, 20,
-                WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
-            draw.SimpleText(WO.Lang:Get("character.level") .. " " .. level .. "  ·  " ..
+            WO.UI.DrawTextFit(char:GetFullName(), "WO.Title", 20, 20,
+                WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 32)
+            WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level .. "  ·  " ..
                 (race and race.name or char.race) .. "  ·  " ..
                 (class and class.name or char.class), "WO.Body", 22, 66,
-                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
-            draw.SimpleText(WO.Lang:Get("menu.server_players") .. ": " .. #player.GetAll(),
+                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 24)
+            WO.UI.DrawTextFit(WO.Lang:Get("menu.server_players") .. ": " .. #player.GetAll(),
                 "WO.Small", 22, 108, WO.UI.Colors.textDim,
-                TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+                TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 20)
         else
-            draw.SimpleText(WO.Lang:Get("menu.no_character"), "WO.Subtitle", 20, 22,
-                WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
-            draw.SimpleText(WO.Lang:Get("menu.character_start_hint"), "WO.Body", 22, 66,
-                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
+            WO.UI.DrawTextFit(WO.Lang:Get("menu.no_character"), "WO.Subtitle", 20, 22,
+                WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 28)
+            WO.UI.DrawTextFit(WO.Lang:Get("menu.character_start_hint"), "WO.Body", 22, 66,
+                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 44)
         end
     end
 
@@ -367,13 +365,13 @@ local function BuildOverviewPage(parent)
             row.Paint = function(_, w, h)
                 WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
                     WO.UI.Colors.border)
-                draw.SimpleText(name .. detailsText, "WO.Body", 14, h / 2,
-                    WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
-                draw.SimpleText(WO.Lang:Get("character.level") .. " " .. level,
-                    "WO.Small", w - 118, h / 2, WO.UI.Colors.textDim,
-                    TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
-                draw.SimpleText(tostring(ply:Ping()) .. " ms", "WO.Small", w - 18,
-                    h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+                WO.UI.DrawTextFit(name .. detailsText, "WO.Body", 14, h / 2,
+                    WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 188, h - 4)
+                WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level,
+                    "WO.Small", w - 84, h / 2, WO.UI.Colors.textDim,
+                    TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 70, h - 4)
+                WO.UI.DrawTextFit(tostring(ply:Ping()) .. " ms", "WO.Small", w - 14,
+                    h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 60, h - 4)
             end
         end
     end
@@ -429,22 +427,26 @@ local function CreateMenuFrame()
         surface.DrawRect(0, HEADER_HEIGHT - 1, w, 1)
         surface.DrawRect(sidebarWidth, HEADER_HEIGHT, 1, h - HEADER_HEIGHT)
 
-        draw.SimpleText(WO.Lang:Get("menu.title"), "WO.Title", 28, 27,
-            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
-        draw.SimpleText(WO.Lang:Get("menu.fullscreen_subtitle"), "WO.Small", 30, 56,
-            WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit(WO.Lang:Get("menu.title"), "WO.Title", 28, 27,
+            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER,
+            math.max(120, sidebarWidth - 40), 32)
+        WO.UI.DrawTextFit(WO.Lang:Get("menu.fullscreen_subtitle"), "WO.Small", 30, 56,
+            WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER,
+            math.max(120, sidebarWidth - 44), 20)
 
         local char = LocalCharacter()
+        local statusText
 
         if char then
             local level = (WO.Leveling.ClientData and WO.Leveling.ClientData.level) or char.level or 1
-            draw.SimpleText(char:GetFullName() .. "  ·  " .. WO.Lang:Get("character.level") .. " " .. level,
-                "WO.Body", w - 84, 39, WO.UI.Colors.text,
-                TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+            statusText = char:GetFullName() .. "  ·  " .. WO.Lang:Get("character.level") .. " " .. level
         else
-            draw.SimpleText(WO.Lang:Get("menu.character_none"), "WO.Body", w - 84, 39,
-                WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+            statusText = WO.Lang:Get("menu.character_none")
         end
+
+        WO.UI.DrawTextFit(statusText, "WO.Body", w - 72, 39,
+            char and WO.UI.Colors.text or WO.UI.Colors.textDim,
+            TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, math.max(120, w - sidebarWidth - 120), 24)
     end
 
     local sidebar = vgui.Create("DPanel", menuFrame)
@@ -509,7 +511,8 @@ local function CreateMenuFrame()
 
         local char = LocalCharacter()
         local text = char and char:GetFullName() or WO.Lang:Get("menu.character_none")
-        draw.DrawText(text, "WO.Small", 2, 12, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT)
+        WO.UI.DrawTextFit(text, "WO.Small", 2, 12, WO.UI.Colors.textDim,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 4, h - 18)
     end
 
     local exitButton = WO.UI.Button(sidebar, WO.Lang:Get("menu.exit"), function()

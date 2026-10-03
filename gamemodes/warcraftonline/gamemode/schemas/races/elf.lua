@@ -5,11 +5,10 @@
 
 WO.Races.Register({
     id = "elf",
-    name = "Эльф",
+    name = WO.Lang:Get("race.elf"),
     description = "Грациозные существа, мастера магии и стрельбы. Слабее в ближнем бою.",
 
-    -- Модели ночных эльфов WoW (Mailer, Steam Workshop) + стоковый fallback.
-    -- Список строится в config/sh_models.lua (WO.Models.GetRace).
+    -- Только смонтированные модели ночных эльфов, проверенные config/sh_models.lua.
     models = WO.Models.GetRace("elf"),
 
     genders = { "male", "female" },

@@ -5,11 +5,10 @@
 
 WO.Races.Register({
     id = "human",
-    name = "Человек",
+    name = WO.Lang:Get("race.human"),
     description = "Универсальная раса: сильные воины, мудрые маги и ловкие разбойники.",
 
-    -- Модели WoW (Mailer, Steam Workshop) + стоковый fallback.
-    -- Список строится в config/sh_models.lua (WO.Models.GetRace).
+    -- Только смонтированные WoW-модели; гражданского fallback нет.
     models = WO.Models.GetRace("human"),
 
     genders = { "male", "female" },

@@ -17,7 +17,8 @@ timer.Create("wo_interaction_trace", 0.25, 0, function()
 
     local ent = ply:GetEyeTrace().Entity
 
-    if IsValid(ent) and WO.Interaction.CanInteract(ent, ply) and ent:GetPos():Distance(ply:GetPos()) <= (WO.Config.InteractDistance or 100) then
+    if IsValid(ent) and WO.Interaction.CanInteract(ent, ply) and
+        ent:GetPos():Distance(ply:GetPos()) <= WO.Interaction.GetRange(ent) then
         if currentEnt ~= ent then
             currentEnt = ent
             currentText = WO.Interaction.GetText(ent, ply)
@@ -35,29 +36,27 @@ hook.Add("HUDPaint", "wo_interaction_paint", function()
 
     if not IsValid(ply) or not ply:Alive() then return end
 
-    local text = currentText
     local keyText = WO.Lang:Get("interact.key")
-
-    local fullText = keyText .. "  " .. text
-
+    local maxWidth = math.max(80, ScrW() - 48)
     surface.SetFont("WO.HUD")
+    local keyWidth = select(1, surface.GetTextSize(keyText))
+    local _, font = WO.UI.FitText(currentText, "WO.HUD", maxWidth - keyWidth - 54, 28)
+    local text = WO.UI.FitText(currentText, font, maxWidth - keyWidth - 54, 28)
+    local textWidth = select(1, surface.GetTextSize(text))
+    local h = 42
+    local w = math.min(maxWidth, keyWidth + textWidth + 50)
+    local x = (ScrW() - w) / 2
+    local y = math.Clamp(ScrH() * 0.62, 12, ScrH() - h - 12)
 
-    local tw, th = surface.GetTextSize(fullText)
-    local w = tw + 36
-    local h = th + 16
-    local x = ScrW() / 2 - w / 2
-    local y = ScrH() * 0.62
-
-    draw.RoundedBox(8, x, y, w, h, Color(WO.UI.Colors.panelDark.r, WO.UI.Colors.panelDark.g, WO.UI.Colors.panelDark.b, 220))
+    draw.RoundedBox(WO.UI.Metrics.radiusSmall, x, y, w, h,
+        Color(WO.UI.Colors.panelDark.r, WO.UI.Colors.panelDark.g,
+            WO.UI.Colors.panelDark.b, 230))
 
     surface.SetDrawColor(WO.UI.Colors.accent)
-    surface.DrawRect(x, y + h - 2, w, 2)
+    surface.DrawRect(x + 8, y + h - 2, w - 16, 2)
 
-    -- Ключ золотом, текст белым
-    surface.SetFont("WO.HUD")
-
-    local keyW = surface.GetTextSize(keyText)
-
-    draw.SimpleText(keyText, "WO.HUD", x + 14, y + h / 2, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
-    draw.SimpleText(text, "WO.HUD", x + 18 + keyW, y + h / 2, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+    WO.UI.DrawTextFit(keyText, "WO.HUD", x + 16, y + h / 2,
+        WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, keyWidth + 8, 28)
+    WO.UI.DrawTextFit(text, font, x + 22 + keyWidth, y + h / 2,
+        color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, maxWidth - keyWidth - 42, 28)
 end)

@@ -39,6 +39,9 @@ WO.Lang.Register("en", {
     ["character.rotate_left"] = "Rotate Left",
     ["character.rotate_right"] = "Rotate Right",
     ["character.rotate_hint"] = "Drag the model or use the rotation buttons",
+    ["character.model_preview_unavailable"] = "WoW model not found. Check the installed Workshop pack.",
+    ["character.no_models_available"] = "No playable race models found. Install the Playable Characters Megapack and restart the server.",
+    ["character.model_unavailable"] = "This character model is unavailable. Check the installed Workshop pack.",
 
     ["character.step.race"] = "Race",
     ["character.step.gender"] = "Gender",
@@ -200,6 +203,18 @@ WO.Lang.Register("en", {
     ["interact.open"] = "Open",
     ["interact.use"] = "Use",
     ["interact.key"] = "[E]",
+    ["interact.npc_vendor"] = "Trade",
+    ["interact.npc_quest"] = "Quest",
+    ["interact.npc_talk"] = "Talk",
+    ["race.human"] = "Human",
+    ["race.elf"] = "Night Elf",
+    ["race.orc"] = "Orc",
+    ["race.dwarf"] = "Dwarf",
+    ["race.gnome"] = "Gnome",
+    ["race.undead"] = "Undead",
+    ["race.tauren"] = "Tauren",
+    ["race.troll"] = "Troll",
+    ["race.goblin"] = "Goblin",
 
     -----------------------------------------------------------------------
     -- Progress

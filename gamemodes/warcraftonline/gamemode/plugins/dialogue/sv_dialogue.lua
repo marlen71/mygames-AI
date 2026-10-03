@@ -19,16 +19,20 @@ end
 local function SessionValid(ply)
     local session = GetSession(ply)
 
-    if not session then return false end
+    if not session or not IsValid(ply) or not ply:HasCharacter() then return false end
 
     local ent = session.ent
 
-    if not IsValid(ent) then
+    if not IsValid(ent) or ent:GetClass() ~= "wo_npc" or
+        ent.npcDef ~= session.npcDef or
+        not WO.NPCs or WO.NPCs.Get(ent:GetNPCID()) ~= session.npcDef then
         ClearSession(ply)
         return false
     end
 
-    if ply:GetPos():Distance(ent:GetPos()) > 220 then
+    local range = WO.Interaction.GetRange(ent)
+
+    if ply:GetPos():Distance(ent:GetPos()) > range then
         ClearSession(ply)
         return false
     end
@@ -48,6 +52,10 @@ local function SendNode(ply, dialogueId, nodeId)
 
     local session = GetSession(ply)
 
+    if not session then return end
+
+    session.nodeId = nodeId
+
     WO.Net.Send("Dialogue.Open", ply, {
         dialogueId = dialogueId,
         nodeId = nodeId,
@@ -63,8 +71,8 @@ end
 ---------------------------------------------------------------------------
 
 --- Открыть диалог NPC для игрока.
-function WO.Dialogue.Open(ply, npcDef)
-    if not IsValid(ply) or not ply:HasCharacter() then return end
+function WO.Dialogue.Open(ply, npcDef, ent)
+    if not IsValid(ply) or not ply:HasCharacter() or not istable(npcDef) then return end
 
     local dialogueId = npcDef.dialogue
 
@@ -73,19 +81,12 @@ function WO.Dialogue.Open(ply, npcDef)
         return
     end
 
-    -- Находим ближайший живой wo_npc этого NPC для контроля дистанции
-    local ent = nil
-
-    for _, candidate in ipairs(ents.FindByClass("wo_npc")) do
-        if IsValid(candidate) and candidate.npcDef == npcDef then
-            if ply:GetPos():Distance(candidate:GetPos()) <= (npcDef.interactRange or 140) + 64 then
-                ent = candidate
-                break
-            end
-        end
+    if not IsValid(ent) or ent:GetClass() ~= "wo_npc" or ent.npcDef ~= npcDef or
+        WO.NPCs.Get(ent:GetNPCID()) ~= npcDef or
+        not WO.Interaction.CanInteract(ent, ply) or
+        ply:GetPos():Distance(ent:GetPos()) > WO.Interaction.GetRange(ent) then
+        return
     end
-
-    if not IsValid(ent) then return end
 
     ply.wo_dialogue = {
         ent = ent,
@@ -124,8 +125,8 @@ local function RunAction(ply, action)
     if verb == "quest" and arg ~= "" then
         local session = GetSession(ply)
 
-        if WO.Quests and WO.Quests.OfferFromDialogue then
-            WO.Quests.OfferFromDialogue(ply, arg, session and session.npcDef or nil)
+        if session and WO.Quests and WO.Quests.OfferFromDialogue then
+            WO.Quests.OfferFromDialogue(ply, arg, session.npcDef, session.ent)
         end
 
         return
@@ -147,7 +148,7 @@ local function RunAction(ply, action)
         local session = GetSession(ply)
 
         if session and WO.Vendors and WO.Vendors.Open then
-            WO.Vendors.Open(ply, session.npcDef)
+            WO.Vendors.Open(ply, session.npcDef, session.ent)
         end
 
         return
@@ -168,9 +169,9 @@ function WO.Dialogue.OnChoose(ply, dialogueId, nodeId, optionIndex)
 
     local session = GetSession(ply)
 
-    if session.dialogueId ~= dialogueId then return end
+    if session.dialogueId ~= dialogueId or session.nodeId ~= nodeId then return end
 
-    local node = WO.Dialogue.GetNode(dialogueId, nodeId)
+    local node = WO.Dialogue.GetNode(dialogueId, session.nodeId)
 
     if not node then return end
 

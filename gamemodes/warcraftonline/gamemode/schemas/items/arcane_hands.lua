@@ -1,33 +1,15 @@
 --[[
-    Warcraft Online — «Магические руки», слабое стартовое оружие мага.
-    Использует стандартные GMod c_arms; визуальный импульс создаёт WO-SWEP.
+    Legacy tombstone for old saves that used arcane_hands as an item.
+    Mages now receive weapon_hpwr_stick directly; it is not inventory/equipment.
 ]]
-
-local config = WO.Config.ArcaneHands or {}
-
 WO.Items.Register({
     id = "arcane_hands",
-    name = "Магические руки",
+    name = "Legacy arcane hands (not an item)",
     type = "weapon",
     category = "magic",
-
-    model = config.fallbackWorldModel or "models/weapons/w_physics.mdl",
-    weight = 0,
-    size = { w = 1, h = 2 },
+    noInventory = true,
+    legacyStarter = true,
+    description = "This legacy inventory definition is disabled; the class loadout grants its SWEP.",
     stackable = false,
-    rarity = "common",
-
-    description = "Слабый дальний импульс тайной магии. Расходует ману; урон проверяется сервером.",
-
-    weapon = {
-        class = "wo_arcane_hands",
-        damage = config.damage or 7,
-        range = config.range or 480,
-        attackSpeed = config.cooldown or 1.15,
-    },
-
-    equipment = { slot = "main_hand" },
     stats = {},
-    requirements = { level = 1, class = { "mage" } },
-    price = { buy = 20, sell = 5 },
 })

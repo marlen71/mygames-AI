@@ -71,6 +71,28 @@ function WO.Items.GetAll()
     return WO.Items.Registry:GetAll()
 end
 
+--- Не допускает в контейнеры виртуальные/старые starter-определения и их SWEP-классы.
+function WO.Items.IsInventoryAllowed(classOrDefinition)
+    local def = istable(classOrDefinition) and classOrDefinition or WO.Items.Get(classOrDefinition)
+
+    if not def or def.noInventory == true then
+        return false, "not_inventory_item"
+    end
+
+    local weaponClass = def.weapon and def.weapon.class
+    local starters = WO.Config.StartingWeaponClasses or {}
+
+    if isstring(weaponClass) then
+        for _, blockedClass in pairs(starters) do
+            if weaponClass == blockedClass then
+                return false, "starter_weapon_not_item"
+            end
+        end
+    end
+
+    return true
+end
+
 ---------------------------------------------------------------------------
 -- Item Instances
 ---------------------------------------------------------------------------
@@ -88,6 +110,11 @@ function WO.Items.CreateInstance(class, amount, data)
 
     if not def then
         WO.Error("WO.Items.CreateInstance: unknown item class '" .. tostring(class) .. "'")
+        return nil
+    end
+
+    if not WO.Items.IsInventoryAllowed(def) then
+        WO.Warn("WO.Items.CreateInstance: inventory is disabled for '" .. tostring(class) .. "'")
         return nil
     end
 
@@ -120,7 +147,7 @@ end
     @return table
 ]]
 function WO.Items.Serialize(instance)
-    if not istable(instance) then return nil end
+    if not istable(instance) or not WO.Items.IsInventoryAllowed(instance.class) then return nil end
 
     return {
         uid = instance.uid,
@@ -145,6 +172,11 @@ function WO.Items.Deserialize(data)
 
     if not def then
         WO.Warn("WO.Items.Deserialize: unknown item class '" .. tostring(data.class) .. "', skipping")
+        return nil
+    end
+
+    if not WO.Items.IsInventoryAllowed(def) then
+        WO.Warn("WO.Items.Deserialize: non-inventory item '" .. tostring(data.class) .. "', skipping")
         return nil
     end
 
@@ -196,7 +228,7 @@ end
     @return boolean success
 ]]
 function WO.Items.SetState(instance, to)
-    if not istable(instance) then return false end
+    if not istable(instance) or not WO.Items.IsInventoryAllowed(instance.class) then return false end
 
     local from = instance.state or WO.Items.State.INVENTORY
 

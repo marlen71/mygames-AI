@@ -95,7 +95,9 @@ function WO.Equipment.ApplyWeapons(ply)
         if instance then
             local def = WO.Items.Get(instance.class)
 
-            if def and def.weapon and isstring(def.weapon.class) then
+            if def and WO.Items.IsInventoryAllowed(def) and def.weapon and
+                isstring(def.weapon.class) and WO.Workshop and
+                WO.Workshop.HasClass(nil, def.weapon.class) then
                 ply:Give(def.weapon.class)
 
                 local wep = ply:GetWeapon(def.weapon.class)
@@ -117,8 +119,16 @@ function WO.Equipment.ApplyWeapons(ply)
         end
     end
 
-    if mainHandClass and isfunction(ply.SelectWeapon) then
-        ply:SelectWeapon(mainHandClass)
+    local loadoutPrimary = nil
+
+    if WO.Loadout and isfunction(WO.Loadout.Apply) then
+        loadoutPrimary = WO.Loadout.Apply(ply, char)
+    end
+
+    local selectedClass = mainHandClass or loadoutPrimary
+
+    if selectedClass and isfunction(ply.SelectWeapon) and ply:HasWeapon(selectedClass) then
+        ply:SelectWeapon(selectedClass)
     end
 end
 
@@ -235,7 +245,9 @@ function WO.Equipment.Equip(ply, uid)
 
     local def = WO.Items.Get(instance.class)
 
-    if not def or not def.equipment then return false, "not_equippable" end
+    if not def or not WO.Items.IsInventoryAllowed(def) or not def.equipment then
+        return false, "not_equippable"
+    end
 
     -- Слот
     local slotId = def.equipment.slot
@@ -340,6 +352,9 @@ function WO.Equipment.Unequip(ply, slotId)
     local instance = equipment and equipment:Get(slotId)
 
     if not instance then return false, "empty_slot" end
+    if not WO.Items.IsInventoryAllowed(instance.class) then
+        return false, "not_inventory_item"
+    end
 
     if instance.locked then return false, "locked" end
 

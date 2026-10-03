@@ -3,6 +3,14 @@
     Команда только читает реестры/файлы; она не выдаёт оружие и не меняет данные.
 ]]
 
+-- Ask connecting clients to download the exact published Workshop dependencies.
+-- The dedicated server still has to subscribe/mount them itself for runtime checks.
+if SERVER and resource and isfunction(resource.AddWorkshop) then
+    for _, addon in ipairs(WO.Workshop.RequiredAddons or {}) do
+        resource.AddWorkshop(tostring(addon.id))
+    end
+end
+
 local function Reply(ply, text)
     if IsValid(ply) then
         ply:ChatPrint("[WO] " .. text)
@@ -30,18 +38,30 @@ concommand.Add("wo_workshop_assets", function(ply)
         Reply(ply, asset.id .. " (Workshop " .. tostring(asset.workshopID) .. ") — " .. asset.title)
 
         if #asset.models == 0 and #asset.weapons == 0 then
-            Reply(ply, "  модели/SWEP не обнаружены; используется безопасный fallback")
+            Reply(ply, "  runtime-ассеты не обнаружены; NPC/SWEP не будут подменяться fallback-классами")
         end
 
         for index = 1, math.min(#asset.models, 4) do
             Reply(ply, "  model: " .. asset.models[index])
         end
 
-        for index = 1, math.min(#asset.weapons, 4) do
-            local weapon = asset.weapons[index]
-            Reply(ply, "  установленный SWEP (только модель, не выдаётся): " ..
-                weapon.class .. " | " .. weapon.name .. " | " ..
-                tostring(weapon.worldModel or weapon.viewModel or "нет модели"))
+        if asset.id == "runtime_requirements" then
+            for _, weapon in ipairs(asset.weapons) do
+                Reply(ply, "  SWEP " .. weapon.class .. ": " ..
+                    (weapon.registered and "registered" or "MISSING"))
+            end
+
+            for _, npc in ipairs(asset.npcClasses or {}) do
+                Reply(ply, "  NPC " .. npc.class .. ": " ..
+                    (npc.registered and "registered" or "MISSING"))
+            end
+        else
+            for index = 1, math.min(#asset.weapons, 4) do
+                local weapon = asset.weapons[index]
+                Reply(ply, "  установленный SWEP (только модель, не выдаётся): " ..
+                    weapon.class .. " | " .. weapon.name .. " | " ..
+                    tostring(weapon.worldModel or weapon.viewModel or "нет модели"))
+            end
         end
     end
 

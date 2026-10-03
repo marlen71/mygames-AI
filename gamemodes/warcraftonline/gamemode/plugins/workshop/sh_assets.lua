@@ -29,6 +29,22 @@ local function ContainsAny(text, terms)
     return false
 end
 
+local function ContainsWord(text, terms)
+    if not istable(terms) or #terms == 0 then return false end
+
+    text = Lower(text)
+
+    for _, term in ipairs(terms) do
+        local value = Lower(term)
+
+        if value ~= "" and string.find(text, "%f[%w]" .. value .. "%f[%W]") then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function IsMountedModel(path)
     return isstring(path) and path ~= "" and
         string.EndsWith(Lower(path), ".mdl") and file.Exists(path, "GAME") == true
@@ -165,8 +181,38 @@ function WO.Workshop.NPCModels(assetId)
     return found
 end
 
-local function PlayerManagerModels(terms)
-    local out = {}
+--- Проверяет точный runtime-класс NPC: список NPC или реестр SENT.
+function WO.Workshop.HasNPCClass(class)
+    if not isstring(class) or class == "" then return false end
+
+    if scripted_ents and isfunction(scripted_ents.GetStored) then
+        local ok, stored = pcall(scripted_ents.GetStored, class)
+        local definition = istable(stored) and (stored.t or stored) or nil
+
+        if ok and istable(definition) then
+            return true
+        end
+    end
+
+    if list and isfunction(list.Get) then
+        local registry = list.Get("NPC") or {}
+
+        if istable(registry[class]) then
+            return true
+        end
+
+        for _, entry in pairs(registry) do
+            if istable(entry) and (entry.Class == class or entry.class == class) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function PlayerManagerModels(search)
+    local out, seen = {}, {}
 
     if not player_manager or not isfunction(player_manager.AllValidModels) then
         return out
@@ -176,17 +222,44 @@ local function PlayerManagerModels(terms)
 
     if not ok or not istable(models) then return out end
 
-    for name, path in pairs(models) do
-        if isstring(path) and ContainsAny(tostring(name) .. " " .. path, terms) and IsMountedModel(path) then
+    local nameTerms = istable(search) and search.nameTerms or search
+    local genderTerms = istable(search) and search.genderTerms or nil
+    local excludeTerms = istable(search) and search.excludeTerms or nil
+
+    local function matches(identity)
+        if not ContainsAny(identity, nameTerms) then return false end
+        if istable(genderTerms) and #genderTerms > 0 and
+            not ContainsWord(identity, genderTerms) then return false end
+        if istable(excludeTerms) and ContainsWord(identity, excludeTerms) then return false end
+
+        return true
+    end
+
+    local function add(path)
+        if IsMountedModel(path) and not seen[path] then
+            seen[path] = true
             out[#out + 1] = path
-        elseif isstring(name) and IsMountedModel(name) and ContainsAny(name .. " " .. tostring(path), terms) then
-            out[#out + 1] = name
+        end
+    end
+
+    for name, path in pairs(models) do
+        local identity = tostring(name) .. " " .. tostring(path)
+
+        if isstring(path) and matches(identity) then
+            add(path)
+        elseif isstring(name) and matches(identity) then
+            add(name)
         end
     end
 
     table.sort(out)
 
     return out
+end
+
+--- Ищет установленные player_manager модели по расе и полу.
+function WO.Workshop.PlayerModels(search)
+    return PlayerManagerModels(search)
 end
 
 local scannedModels = nil
@@ -432,8 +505,55 @@ function WO.Workshop.GetDiagnostics()
             workshopID = catalog.id,
             models = WO.Workshop.Models(assetId),
             weapons = WO.Workshop.WeaponModels(assetId),
+            npcClasses = {},
         }
     end
+
+    local runtime = {
+        id = "runtime_requirements",
+        title = "Required runtime models, NPCs and SWEPs",
+        workshopID = "exact classes",
+        models = {},
+        weapons = {},
+        npcClasses = {},
+    }
+
+    local seenModels = {}
+
+    for _, race in pairs(WO.Races and WO.Races.GetAll and WO.Races.GetAll() or {}) do
+        for _, gender in ipairs(race.genders or {}) do
+            for _, path in ipairs((race.models and race.models[gender]) or {}) do
+                if not seenModels[path] and WO.Models.Exists(path) then
+                    seenModels[path] = true
+                    runtime.models[#runtime.models + 1] = path
+                end
+            end
+        end
+    end
+
+    for key, class in pairs(WO.Workshop.RequestedSWEPs or {}) do
+        local stored = weapons and isfunction(weapons.GetStored) and weapons.GetStored(class)
+        runtime.weapons[#runtime.weapons + 1] = {
+            class = class,
+            name = istable(stored) and (stored.PrintName or stored.ClassName) or key,
+            registered = istable(stored),
+            worldModel = istable(stored) and stored.WorldModel or nil,
+            viewModel = istable(stored) and stored.ViewModel or nil,
+        }
+    end
+
+    for key, class in pairs(WO.Workshop.RequestedNPCClasses or {}) do
+        runtime.npcClasses[#runtime.npcClasses + 1] = {
+            key = key,
+            class = class,
+            registered = WO.Workshop.HasNPCClass(class),
+        }
+    end
+
+    table.sort(runtime.models)
+    table.sort(runtime.weapons, function(a, b) return a.class < b.class end)
+    table.sort(runtime.npcClasses, function(a, b) return a.class < b.class end)
+    report[#report + 1] = runtime
 
     table.sort(report, function(a, b) return a.id < b.id end)
 

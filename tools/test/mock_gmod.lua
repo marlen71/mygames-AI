@@ -85,6 +85,7 @@ KEY_C = 67
 KEY_F1 = 98
 KEY_E = 69
 HITGROUP_GENERIC = 0
+SIMPLE_USE = 3
 MOVETYPE_NONE = 0
 MOVETYPE_WALK = 2
 MOVETYPE_NOCLIP = 8
@@ -426,6 +427,7 @@ function MOCK.NewEntity(class)
     e.__methods.SetAngles = function(tt, a) tt.__ang = a end
     e.__methods.EyeAngles = function(tt) return tt.__ang end
     e.__methods.GetEyeTrace = function(tt) return { HitPos = tt.__pos + Vector(0, 0, 64), Hit = false, Entity = nil } end
+    e.__methods.GetClass = function(tt) return tt.__class end
     e.__methods.Nick = function(tt) return tt.__nick or "Player" end
     e.__methods.SteamID = function(tt) return tt.__steamid or "STEAM_0:0:1" end
     e.__methods.SteamID64 = function(tt) return tt.__steamid64 or "76561190000000001" end
@@ -559,12 +561,14 @@ function MOCK.NewEntity(class)
     e.__methods.SetOwner = function() end
     e.__methods.GetOwner = function() return nil end
     e.__methods.EmitSound = function() end
-    e.__methods.SetUseType = function() end
+    e.__methods.SetUseType = function(tt, useType) tt.__useType = useType end
 
     return e
 end
 
-RENDERGROUP_OPAQUE = 0
+RENDERGROUP_OPAQUE = 7
+RENDERGROUP_TRANSLUCENT = 8
+RENDERGROUP_BOTH = 9
 ClientsideModel = function(modelPath)
     local entity = MOCK.NewEntity("clientside_model")
     entity:SetModel(modelPath)
@@ -703,7 +707,7 @@ function util.AddNetworkString(name)
 end
 
 function util.IsValidModel(path)
-    return py.file_exists(path)
+    return file.Exists(path, "GAME")
 end
 
 function util.PrecacheModel(path) end

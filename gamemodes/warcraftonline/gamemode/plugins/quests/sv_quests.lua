@@ -178,7 +178,7 @@ function WO.Quests.RecheckCollect(ply, questId)
 end
 
 --- Обновляет kill/talk-шаги.
-local function ProgressStep(ply, stepType, targetId)
+local function ProgressStep(ply, stepType, targetId, targetLevel)
     if not IsValid(ply) or not ply:HasCharacter() then return end
 
     local char = ply:GetCharacter()
@@ -189,7 +189,8 @@ local function ProgressStep(ply, stepType, targetId)
 
         if def and state.status == "active" then
             for index, step in ipairs(def.steps) do
-                if step.type == stepType and step.target == targetId then
+                if step.type == stepType and step.target == targetId and
+                    (not step.level or tonumber(step.level) == tonumber(targetLevel)) then
                     local have = ((state.progress or {})[index] or 0) + 1
 
                     if StepProgress(char, state, def, index, have) then
@@ -305,9 +306,9 @@ WO.Hook.Add("ItemAdded", "quests", function(char, instance, amount)
 end)
 
 -- Убийства NPC
-WO.Hook.Add("NPCKilled", "quests", function(npcDef, ply)
+WO.Hook.Add("NPCKilled", "quests", function(npcDef, ply, level)
     if npcDef and npcDef.id then
-        ProgressStep(ply, "kill", npcDef.id)
+        ProgressStep(ply, "kill", npcDef.id, level)
     end
 end)
 
@@ -320,15 +321,35 @@ end
 -- Предложение квеста из диалога
 ---------------------------------------------------------------------------
 
+local function IsQuestgiverInteractionValid(ply, npcDef, ent, questId)
+    if not IsValid(ply) or not ply:HasCharacter() or not istable(npcDef) or
+        not IsValid(ent) or ent:GetClass() ~= "wo_npc" or ent.npcDef ~= npcDef or
+        not WO.NPCs or WO.NPCs.Get(ent:GetNPCID()) ~= npcDef or
+        not WO.Interaction.CanInteract(ent, ply) or
+        ply:GetPos():Distance(ent:GetPos()) > WO.Interaction.GetRange(ent) then
+        return false
+    end
+
+    if questId then
+        for _, offeredId in ipairs(npcDef.quests or {}) do
+            if offeredId == questId then return true end
+        end
+
+        return false
+    end
+
+    return true
+end
+
 --- Действие "quest:<id>" в диалоге: принять/показать состояние.
-function WO.Quests.OfferFromDialogue(ply, questId, npcDef)
-    if not IsValid(ply) or not ply:HasCharacter() then return end
+function WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
+    if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId) then return false end
 
     local def = WO.Quests.Get(questId)
 
     if not def then
         WO.Error("WO.Quests.OfferFromDialogue: unknown quest '" .. tostring(questId) .. "'")
-        return
+        return false
     end
 
     local state = WO.Quests.GetState(ply:GetCharacter(), questId)
@@ -426,18 +447,16 @@ end)
 ---------------------------------------------------------------------------
 
 --- Показывает доступные квесты NPC (используется из WO.NPCs.OnInteract).
-function WO.Quests.OpenNPC(ply, npcDef)
-    if not IsValid(ply) then return end
+function WO.Quests.OpenNPC(ply, npcDef, ent)
+    if not IsQuestgiverInteractionValid(ply, npcDef, ent) then return end
 
     local char = ply:GetCharacter()
-
-    if not char then return end
 
     for _, questId in ipairs(npcDef.quests or {}) do
         local state = WO.Quests.GetState(char, questId)
 
         if not state then
-            WO.Quests.OfferFromDialogue(ply, questId, npcDef)
+            WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
             return
         elseif state.status == "active" then
             WO.Quests.TryComplete(ply, questId)

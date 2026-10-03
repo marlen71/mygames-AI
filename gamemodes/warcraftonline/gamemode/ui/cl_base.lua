@@ -101,7 +101,8 @@ function BUTTON:Paint(w, h)
         textColor = WO.UI.Colors.textDark
     end
 
-    draw.SimpleText(self:GetText(), self.font or "WO.Body", w / 2, h / 2, textColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    WO.UI.DrawTextFit(self:GetText(), self.font or "WO.Body", w / 2, h / 2,
+        textColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, h - 6)
 end
 
 vgui.Register("WO_Button", BUTTON, "DButton")
@@ -119,7 +120,45 @@ function LABEL:Init()
     self:SetText("")
     self.font = "WO.Body"
     self.col = WO.UI.Colors.text
+    self.woAlignment = 4 -- middle-left, matching the usual DLabel default
     self.woCentered = false
+end
+
+local function SplitLongWord(word, font, maxWidth)
+    local lines = {}
+    local characters = {}
+    local index = 1
+
+    while index <= #word do
+        local firstByte = string.byte(word, index)
+        local length = firstByte >= 240 and 4 or (firstByte >= 224 and 3 or
+            (firstByte >= 192 and 2 or 1))
+        length = math.min(length, #word - index + 1)
+        characters[#characters + 1] = string.sub(word, index, index + length - 1)
+        index = index + length
+    end
+
+    surface.SetFont(font)
+
+    local chunk = ""
+
+    for _, character in ipairs(characters) do
+        local candidate = chunk .. character
+        local width = surface.GetTextSize(candidate)
+
+        if chunk ~= "" and width > maxWidth then
+            lines[#lines + 1] = chunk
+            chunk = character
+        else
+            chunk = candidate
+        end
+    end
+
+    if chunk ~= "" then
+        lines[#lines + 1] = chunk
+    end
+
+    return lines
 end
 
 local function WrapLabelText(text, font, maxWidth)
@@ -137,9 +176,25 @@ local function WrapLabelText(text, font, maxWidth)
 
             if line ~= "" and width > limit then
                 lines[#lines + 1] = line
-                line = word
+                line = ""
+            end
+
+            if line == "" then
+                local wordWidth = surface.GetTextSize(word)
+
+                if wordWidth <= limit then
+                    line = word
+                else
+                    local pieces = SplitLongWord(word, font, limit)
+
+                    for index = 1, #pieces - 1 do
+                        lines[#lines + 1] = pieces[index]
+                    end
+
+                    line = pieces[#pieces] or ""
+                end
             else
-                line = candidate
+                line = line .. " " .. word
             end
         end
 
@@ -152,24 +207,48 @@ local function WrapLabelText(text, font, maxWidth)
 end
 
 function LABEL:Paint(w, h)
-    -- Единственная точка отрисовки label: перенос по ширине и clip по высоте
-    -- не дают длинным названиям/описаниям залезать на соседние элементы.
+    -- Один общий painter: поддерживает перенос длинных токенов и все 9 вариантов
+    -- SetContentAlignment, поэтому выравнивание меток не игнорируется.
     local font = self.font or "WO.Body"
+    local padding = 4
+
+    surface.SetFont(font)
     local _, lineHeight = surface.GetTextSize("Ag")
     lineHeight = math.max(1, lineHeight)
 
-    local lines = WrapLabelText(self:GetText() or "", font, w - 8)
-    local x = self.woCentered and w / 2 or 0
-    local align = self.woCentered and TEXT_ALIGN_CENTER or TEXT_ALIGN_LEFT
-    local y = math.max(0, math.floor((h - math.min(h, #lines * lineHeight)) / 2))
+    local lines = WrapLabelText(self:GetText() or "", font, w - padding * 2)
+    local blockHeight = #lines * lineHeight
+    local alignment = math.Clamp(math.floor(tonumber(self.woAlignment) or 4), 1, 9)
+    local horizontal = (alignment - 1) % 3
+    local vertical = math.floor((alignment - 1) / 3)
+    local x, textAlign
 
-    surface.SetFont(font)
+    if horizontal == 1 then
+        x = w / 2
+        textAlign = TEXT_ALIGN_CENTER
+    elseif horizontal == 2 then
+        x = w - padding
+        textAlign = TEXT_ALIGN_RIGHT
+    else
+        x = padding
+        textAlign = TEXT_ALIGN_LEFT
+    end
+
+    local y
+
+    if vertical == 0 then
+        y = padding
+    elseif vertical == 2 then
+        y = math.max(0, h - blockHeight - padding)
+    else
+        y = math.max(0, math.floor((h - math.min(h, blockHeight)) / 2))
+    end
 
     for _, line in ipairs(lines) do
         if y + lineHeight > h then break end
 
         draw.SimpleText(line, font, x, y, self.col or WO.UI.Colors.text,
-            align, TEXT_ALIGN_TOP)
+            textAlign, TEXT_ALIGN_TOP)
         y = y + lineHeight
     end
 end
@@ -178,8 +257,13 @@ function LABEL:SetTextColor(col)
     self.col = col
 end
 
+function LABEL:SetContentAlignment(alignment)
+    self.woAlignment = math.Clamp(math.floor(tonumber(alignment) or 4), 1, 9)
+    self.woCentered = self.woAlignment == 2 or self.woAlignment == 5 or self.woAlignment == 8
+end
+
 function LABEL:SetCentered(centered)
-    self.woCentered = centered == true
+    self:SetContentAlignment(centered and 5 or 4)
 end
 
 vgui.Register("WO_Label", LABEL, "DLabel")
@@ -190,19 +274,26 @@ vgui.Register("WO_Label", LABEL, "DLabel")
 
 local WINDOW = {}
 
-AccessorFunc(WINDOW, "title", "Title")
-
 function WINDOW:Init()
-    self.title = "Window"
+    self.windowTitle = ""
     self:SetDraggable(true)
     self:SetSizable(false)
     self:SetDeleteOnClose(true)
-    self:SetTitle("")
+
+    -- DFrame keeps its built-in caption empty; only the WO title bar is visible.
+    if isfunction(self.SetTitle) then
+        self:SetTitle("")
+    end
+
+    if IsValid(self.lblTitle) then
+        self.lblTitle:SetVisible(false)
+    end
+
     self:ShowCloseButton(false)
 
     self.closeButton = vgui.Create("WO_Button", self)
     self.closeButton:SetText("✕")
-    self.closeButton:SetSize(28, 28)
+    self.closeButton:SetSize(30, 28)
     self.closeButton.DoClick = function()
         if WO.Sound and WO.Sound.PlayLocal then
             WO.Sound.PlayLocal("ui_close")
@@ -213,19 +304,23 @@ function WINDOW:Init()
 end
 
 function WINDOW:PerformLayout(w, h)
-    self.closeButton:SetPos(w - 34, 6)
+    if IsValid(self.closeButton) then
+        self.closeButton:SetPos(w - 36, 6)
+    end
 end
 
 function WINDOW:Paint(w, h)
-    draw.RoundedBox(WO.UI.Metrics.radius, 0, 0, w, h, WO.UI.Colors.bg)
-    WO.UI.DrawTitleBar(0, 0, w, 38, self.title)
-
-    surface.SetDrawColor(WO.UI.Colors.border)
-    surface.DrawOutlinedRect(0, 0, w, h, 1)
+    WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.bg, WO.UI.Colors.border,
+        WO.UI.Metrics.radius)
+    WO.UI.DrawTitleBar(0, 0, w, 38, self.windowTitle)
 end
 
-function WINDOW:SetTitle2(title)
-    self.title = title
+function WINDOW:SetWindowTitle(title)
+    self.windowTitle = tostring(title or "")
+end
+
+function WINDOW:GetWindowTitle()
+    return self.windowTitle or ""
 end
 
 vgui.Register("WO_Window", WINDOW, "DFrame")
@@ -238,7 +333,7 @@ vgui.Register("WO_Window", WINDOW, "DFrame")
 function WO.UI.Window(title, w, h)
     local frame = vgui.Create("WO_Window")
 
-    frame:SetTitle(title or "")
+    frame:SetWindowTitle(title or "")
     frame:SetSize(w or 600, h or 400)
     frame:Center()
     frame:MakePopup()

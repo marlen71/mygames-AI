@@ -39,6 +39,9 @@ WO.Lang.Register("ru", {
     ["character.rotate_left"] = "Повернуть влево",
     ["character.rotate_right"] = "Повернуть вправо",
     ["character.rotate_hint"] = "Потяните мышью или используйте кнопки поворота",
+    ["character.model_preview_unavailable"] = "Модель WoW не найдена. Проверьте установку Workshop-пака.",
+    ["character.no_models_available"] = "Нет доступных расовых моделей. Установите Playable Characters Megapack и перезапустите сервер.",
+    ["character.model_unavailable"] = "Модель персонажа недоступна. Проверьте установленный Workshop-пак.",
 
     ["character.step.race"] = "Раса",
     ["character.step.gender"] = "Пол",
@@ -200,6 +203,18 @@ WO.Lang.Register("ru", {
     ["interact.open"] = "Открыть",
     ["interact.use"] = "Использовать",
     ["interact.key"] = "[E]",
+    ["interact.npc_vendor"] = "Торговля",
+    ["interact.npc_quest"] = "Задание",
+    ["interact.npc_talk"] = "Поговорить",
+    ["race.human"] = "Человек",
+    ["race.elf"] = "Ночной эльф",
+    ["race.orc"] = "Орк",
+    ["race.dwarf"] = "Дворф",
+    ["race.gnome"] = "Гном",
+    ["race.undead"] = "Нежить",
+    ["race.tauren"] = "Таурен",
+    ["race.troll"] = "Тролль",
+    ["race.goblin"] = "Гоблин",
 
     -----------------------------------------------------------------------
     -- Прогресс

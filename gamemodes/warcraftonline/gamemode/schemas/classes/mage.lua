@@ -16,7 +16,6 @@ WO.Classes.Register({
     },
 
     resource = "mana",
-    startingEquipment = { main_hand = "arcane_hands" },
 
     allowedWeapons = { "staff", "magic" },
     allowedArmor = { "cloth", "misc" },
@@ -24,7 +23,6 @@ WO.Classes.Register({
     abilities = {},
 
     startingItems = {
-        { class = "arcane_hands", amount = 1 },
         { class = "health_potion", amount = 3 },
         { class = "bread", amount = 2 },
     },

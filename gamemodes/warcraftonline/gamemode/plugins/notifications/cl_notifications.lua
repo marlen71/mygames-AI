@@ -74,20 +74,23 @@ hook.Add("HUDPaint", "wo_notifications_paint", function()
                 alpha = 255 * ((LIFETIME - age) / 0.6)
             end
 
-            surface.SetFont("WO.HUD")
-
-            local tw, th = surface.GetTextSize(note.text)
-            local w = tw + 32
-            local h = th + 14
+            local maxWidth = math.max(120, screenW - 40)
+            local fittedText, fittedFont = WO.UI.FitText(note.text, "WO.HUD", maxWidth - 32, 28)
+            local tw, th = surface.GetTextSize(fittedText)
+            local w = math.min(maxWidth, tw + 32)
+            local h = math.max(40, th + 14)
             local x = screenW / 2 - w / 2
 
-            draw.RoundedBox(6, x, y, w, h, Color(WO.UI.Colors.panelDark.r, WO.UI.Colors.panelDark.g, WO.UI.Colors.panelDark.b, alpha * 0.92))
+            draw.RoundedBox(WO.UI.Metrics.radiusSmall, x, y, w, h,
+                Color(WO.UI.Colors.panelDark.r, WO.UI.Colors.panelDark.g,
+                    WO.UI.Colors.panelDark.b, alpha * 0.92))
 
             surface.SetDrawColor(note.color.r, note.color.g, note.color.b, alpha)
-            surface.DrawRect(x, y + h - 2, w, 2)
+            surface.DrawRect(x + 8, y + h - 2, w - 16, 2)
 
-            draw.SimpleText(note.text, "WO.HUD", screenW / 2, y + h / 2,
-                Color(255, 255, 255, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            WO.UI.DrawTextFit(fittedText, fittedFont, screenW / 2, y + h / 2,
+                Color(255, 255, 255, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER,
+                w - 16, h - 4)
 
             y = y + h + 6
         end

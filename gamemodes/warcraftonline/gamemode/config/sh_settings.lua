@@ -56,7 +56,16 @@ WO.Config.InventoryHeight = 6
 WO.Config.DefaultHandsModel = "models/weapons/c_arms.mdl"
 
 ---------------------------------------------------------------------------
--- Стартовое оружие (баланс остаётся в конфиге, а предметы — в schemas/items)
+-- Точные внешние SWEP-классы стартовой экипировки.
+-- Они выдаются сервером напрямую и не создают инвентарных предметов.
+WO.Config.StartingWeaponClasses = {
+    hands = "drc_unarmed",
+    knife = "tfa_cso_coldsteelblade",
+    mage = "weapon_hpwr_stick",
+}
+
+---------------------------------------------------------------------------
+-- Legacy-баланс предметов (не используется для стартовой выдачи SWEP)
 ---------------------------------------------------------------------------
 
 WO.Config.StarterKnife = {
@@ -97,7 +106,27 @@ WO.Config.NPCSpawnPoints = {
     },
     black_wolf = {
         { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
-            offset = Vector(-190, 0, 8), ang = Angle(0, 0, 0) },
+            offset = Vector(-190, 0, 8), ang = Angle(0, 0, 0), level = 1 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(-250, 0, 8), ang = Angle(0, 0, 0), level = 2 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(-315, 0, 8), ang = Angle(0, 0, 0), level = 3 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(-385, 0, 8), ang = Angle(0, 0, 0), level = 4 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(-460, 0, 8), ang = Angle(0, 0, 0), level = 5 },
+    },
+    elwynn_boar = {
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(0, -190, 8), ang = Angle(0, 180, 0), level = 1 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(0, -255, 8), ang = Angle(0, 180, 0), level = 2 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(0, -325, 8), ang = Angle(0, 180, 0), level = 3 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(0, -400, 8), ang = Angle(0, 180, 0), level = 4 },
+        { map = "gm_construct", anchor = "info_player_start", anchorIndex = 1,
+            offset = Vector(0, -480, 8), ang = Angle(0, 180, 0), level = 5 },
     },
 }
 

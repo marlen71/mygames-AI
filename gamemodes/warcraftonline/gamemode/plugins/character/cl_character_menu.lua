@@ -69,8 +69,8 @@ function WO.CharacterUI.OpenMainMenu()
 
     frame.Paint = function(_, w, h)
         draw.RoundedBox(0, 0, 0, w, h, Color(8, 11, 18, 248))
-        draw.SimpleText("Warcraft Online", "WO.Title", w / 2, panelY - 58,
-            WO.UI.Colors.accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit("Warcraft Online", "WO.Title", w / 2, panelY - 58,
+            WO.UI.Colors.accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 48, 44)
     end
 
     local panel = vgui.Create("DPanel", frame)
@@ -78,8 +78,8 @@ function WO.CharacterUI.OpenMainMenu()
     panel:SetSize(panelWidth, panelHeight)
     panel.Paint = function(_, w, h)
         WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, WO.UI.Colors.borderLight)
-        draw.SimpleText(WO.Lang:Get("character.main_menu"), "WO.Subtitle", w / 2, 32,
-            WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit(WO.Lang:Get("character.main_menu"), "WO.Subtitle", w / 2, 32,
+            WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 32, 28)
     end
 
     local buttonWidth = math.min(420, panelWidth - 56)
@@ -134,8 +134,13 @@ local function CreateCharacterCard(parent, entry, onSelect)
     card:SetPaintBackground(false)
     card.selected = false
 
-    -- Модель
-    local model = WO.UI.CreateCharacterModel(card, entry.model ~= "" and entry.model or "models/player/group01/male_01.mdl")
+    -- No civilian fallback: unavailable Workshop models show the shared placeholder.
+    local model = WO.UI.CreateCharacterModel(card)
+
+    if isstring(entry.model) and entry.model ~= "" then
+        model:SetPreviewModel(entry.model)
+    end
+
     model:SetPos(10, 10)
     model:SetSize(160, 170)
 
@@ -151,8 +156,10 @@ local function CreateCharacterCard(parent, entry, onSelect)
 
         WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, border)
 
-        draw.SimpleText(entry.name .. " " .. entry.surname, "WO.Subtitle", w / 2, 186, WO.UI.Colors.text, TEXT_ALIGN_CENTER)
-        draw.SimpleText(info, "WO.Tiny", w / 2, 212, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit(entry.name .. " " .. entry.surname, "WO.Subtitle", w / 2, 186,
+            WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, 24)
+        WO.UI.DrawTextFit(info, "WO.Tiny", w / 2, 212,
+            WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, 22)
     end
 
     card.OnMousePressed = function()
@@ -187,7 +194,8 @@ function WO.CharacterUI.OpenSelect()
 
     frame.Paint = function(_, w, h)
         draw.RoundedBox(0, 0, 0, w, h, Color(10, 12, 18, 250))
-        draw.SimpleText(WO.Lang:Get("character.select"), "WO.Title", w / 2, 40, WO.UI.Colors.accent, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit(WO.Lang:Get("character.select"), "WO.Title", w / 2, 40,
+            WO.UI.Colors.accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 48, 40)
     end
 
     local selectedEntry = nil
@@ -234,7 +242,8 @@ function WO.CharacterUI.OpenSelect()
         label:SetPaintBackground(false)
 
         label.Paint = function(_, w, h)
-            draw.SimpleText(WO.Lang:Get("character.no_characters"), "WO.Subtitle", w / 2, h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            WO.UI.DrawTextFit(WO.Lang:Get("character.no_characters"), "WO.Subtitle", w / 2, h / 2,
+                WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 48, h - 8)
         end
     end
 

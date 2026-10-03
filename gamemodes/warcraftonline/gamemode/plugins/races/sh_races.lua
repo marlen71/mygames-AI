@@ -7,10 +7,7 @@
         name = "Человек",
         description = "...",
 
-        models = {
-            male = { "models/player/group01/male_01.mdl", ... },
-            female = { "models/player/group01/female_01.mdl", ... },
-        },
+        models = WO.Models.GetRace("human"), -- только реально смонтированные race/gender модели
 
         genders = { "male", "female" },
         modelScale = 1,
@@ -134,6 +131,37 @@ function WO.Races.GetModels(raceId, gender)
     return (race.models and race.models[gender]) or {}
 end
 
+--- Полы, для которых у расы есть хотя бы одна реально доступная модель.
+function WO.Races.GetAvailableGenders(raceId)
+    local race = WO.Races.Get(raceId)
+    local out = {}
+
+    if not race then return out end
+
+    for _, gender in ipairs(race.genders or {}) do
+        if #WO.Races.GetModels(raceId, gender) > 0 then
+            out[#out + 1] = gender
+        end
+    end
+
+    return out
+end
+
+--- Проверяет, входит ли путь в список смонтированных моделей любой расы/пола.
+function WO.Races.IsPlayableModel(model)
+    if not isstring(model) or model == "" then return false end
+
+    for raceId, race in pairs(WO.Races.GetAll()) do
+        for _, gender in ipairs(race.genders or {}) do
+            if WO.Races.IsModelAllowed(raceId, gender, model) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 --[[
     Доступен ли пол для расы.
 
@@ -148,7 +176,7 @@ function WO.Races.IsGenderAllowed(raceId, gender)
 
     for _, g in ipairs(race.genders or {}) do
         if g == gender then
-            return true
+            return #WO.Races.GetModels(raceId, gender) > 0
         end
     end
 

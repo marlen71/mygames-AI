@@ -75,7 +75,11 @@ hook.Add("PlayerSpawn", "wo_player_spawn", function(ply)
 
     ReleaseFromLimbo(ply)
 
-    WO.Character.ApplyToPlayer(ply)
+    if WO.Character.ApplyToPlayer(ply) == false then
+        WO.Character.Unload(ply)
+        PutInLimbo(ply)
+        return
+    end
 
     WO.Hook.Run("CharacterSpawned", char, ply)
 end)

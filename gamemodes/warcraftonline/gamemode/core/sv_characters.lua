@@ -248,12 +248,20 @@ function WO.Character.Load(ply, charId)
 
     local char = RowToCharacter(rows[1])
 
-    -- Восстановление повреждённых данных
+    -- Валидируем сохранённые данные до привязки к игроку. Модель не подменяется
+    -- гражданской: если раса/модель больше не доступна в Workshop, выбор безопасно
+    -- отклоняется, чтобы администратор восстановил аддон или пересоздал персонажа.
     local clean, warnings = WO.Character.SanitizeLoaded(char)
 
     for _, warning in ipairs(warnings) do
         WO.Warn("Character load warning [" .. char.id .. "]: " .. warning)
     end
+
+    if not clean then
+        return false, "model_unavailable"
+    end
+
+    char = clean
 
     -- Плагины загружают свои данные (инвентарь, экипировка, квесты)
     WO.Hook.Run("CharacterLoad", char)
@@ -413,7 +421,13 @@ function WO.Character.Select(ply, charId)
     local char = result
 
     WO.Character.ExitLimbo(ply)
-    WO.Character.ApplyToPlayer(ply)
+
+    if WO.Character.ApplyToPlayer(ply) == false then
+        WO.Character.Unload(ply)
+        WO.Character.EnterLimbo(ply)
+        WO.Net.Send("Character.SelectResult", ply, false, "model_unavailable")
+        return false, "model_unavailable"
+    end
 
     -- Восстанавливаем оружие из экипировки (если плагин загружен)
     if WO.Equipment and WO.Equipment.ApplyWeapons then
@@ -447,11 +461,21 @@ function WO.Character.ApplyToPlayer(ply)
 
     if not char then
         WO.Error("ApplyToPlayer: player has no character")
-        return
+        return false
     end
 
-    -- Модель
-    ply:SetModel(char.model or "models/player/group01/male_01.mdl")
+    if not isstring(char.model) or char.model == "" or
+        not WO.Races.IsModelAllowed(char.race, char.gender, char.model) or
+        not WO.Models.Exists(char.model) or
+        (util.IsValidModel and not util.IsValidModel(char.model)) then
+        WO.Warn("ApplyToPlayer rejected unavailable race model for character " .. tostring(char.id))
+        ply:SetNW2Bool("wo_char_active", false)
+        WO.Character.EnterLimbo(ply)
+        return false
+    end
+
+    -- Only the server-validated, mounted race model can be applied.
+    ply:SetModel(char.model)
 
     -- Кастомизация: skin, bodygroups, color
     local customization = char.customization or {}
@@ -518,6 +542,8 @@ function WO.Character.ApplyToPlayer(ply)
     end
 
     WO.Hook.Run("CharacterApplied", char, ply)
+
+    return true
 end
 
 ---------------------------------------------------------------------------

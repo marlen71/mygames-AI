@@ -2,20 +2,80 @@
     Warcraft Online — NPC (server): спавн и жизненный цикл.
 ]]
 
---- Создаёт одного NPC из схемы.
-function WO.NPCs.SpawnOne(def, pos, ang)
-    local ent = ents.Create("wo_npc")
+local function SpawnLevel(def, spawn)
+    local level = WO.NPCs.ClampLevel(def, spawn and spawn.level or def.level)
 
-    if not IsValid(ent) then
-        WO.Error("WO.NPCs.SpawnOne: cannot create wo_npc for '" .. tostring(def.id) .. "'")
+    return level, WO.NPCs.GetLevelStats(def, level)
+end
+
+local function SetExternalNPCData(ent, def, level, stats)
+    ent.WO_NPCDefinition = def
+    ent.npcDef = def
+    ent.WO_NPCLevel = level
+    ent.WO_NPCLevelStats = stats
+
+    if isfunction(ent.SetNW2String) then
+        ent:SetNW2String("wo_npc_id", def.id or "")
+        ent:SetNW2String("wo_name", (def.name or def.id) .. " · ур. " .. level)
+        ent:SetNW2String("wo_role", def.type or "creature")
+    end
+
+    if isfunction(ent.SetNW2Int) then
+        ent:SetNW2Int("wo_level", level)
+    end
+
+    if stats then
+        if isfunction(ent.SetMaxHealth) then ent:SetMaxHealth(stats.health) end
+        if isfunction(ent.SetHealth) then ent:SetHealth(stats.health) end
+    end
+end
+
+--- Создаёт одного NPC из схемы и конкретной явной spawn-записи.
+function WO.NPCs.SpawnOne(def, pos, ang, spawn)
+    if not istable(def) or not isvector(pos) then return nil end
+
+    local workshopClass = def.workshopClass
+    local entityClass = workshopClass or "wo_npc"
+
+    if workshopClass then
+        if not (WO.Workshop and WO.Workshop.HasNPCClass and
+            WO.Workshop.HasNPCClass(workshopClass)) then
+            WO.Warn("NPC class is not registered; skipping '" .. tostring(def.id) ..
+                "' (required " .. tostring(workshopClass) .. ")")
+            return nil
+        end
+    elseif not isstring(def.model) or def.model == "" or
+        (WO.Models and WO.Models.Exists and not WO.Models.Exists(def.model)) or
+        (util.IsValidModel and not util.IsValidModel(def.model)) then
+        WO.Warn("NPC model is unavailable; skipping '" .. tostring(def.id) .. "'")
         return nil
     end
 
+    local ent = ents.Create(entityClass)
+
+    if not IsValid(ent) then
+        WO.Warn("Cannot create NPC class '" .. tostring(entityClass) ..
+            "' for definition '" .. tostring(def.id) .. "'")
+        return nil
+    end
+
+    local level, stats = SpawnLevel(def, spawn)
     ent:SetPos(pos)
     ent:SetAngles(ang or Angle(0, 0, 0))
     ent:Spawn()
 
-    ent:SetupNPC(def)
+    if workshopClass then
+        SetExternalNPCData(ent, def, level, stats)
+    else
+        if not isfunction(ent.SetupNPC) or ent:SetupNPC(def, level, stats) == false then
+            ent:Remove()
+            return nil
+        end
+
+        ent.WO_NPCDefinition = def
+        ent.WO_NPCLevel = level
+        ent.WO_NPCLevelStats = stats
+    end
 
     WO.NPCs.Spawned[#WO.NPCs.Spawned + 1] = ent
 
@@ -79,7 +139,7 @@ function WO.NPCs.SpawnAll()
                 local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
 
                 if pos then
-                    local ent = WO.NPCs.SpawnOne(def, pos, ang)
+                    local ent = WO.NPCs.SpawnOne(def, pos, ang, spawn)
 
                     if IsValid(ent) then
                         spawnedForDefinition = true
@@ -120,22 +180,80 @@ end)
 WO.Hook.Add("NPCAttack", "npcs", function(npcDef, ent, ply)
     if not IsValid(ply) or not ply:HasCharacter() then return end
 
+    local stats = IsValid(ent) and ent.WO_NPCLevelStats or nil
+    local amount = stats and stats.damage or npcDef.damage or 8
+
     if WO.Combat and WO.Combat.Damage then
         WO.Combat.Damage(ent, ply, {
-            amount = npcDef.damage or 8,
+            amount = amount,
             damageType = "physical",
             canCrit = false,
         })
     end
 end)
 
--- Переводит общий combat death в доменное событие NPC; Quest-плагин подписан
--- только на NPCKilled и не зависит от конкретных SWEP/Workshop-моделей.
-WO.Hook.Add("EntityKilled", "npcs", function(ent, attacker)
-    if not IsValid(ent) or not ent.npcDef or not ent.npcDef.hostile then return end
-    if not IsValid(attacker) or not attacker:IsPlayer() or not attacker:HasCharacter() then return end
+local function ResolveDefinition(ent)
+    if not IsValid(ent) then return nil end
 
-    WO.Hook.Run("NPCKilled", ent.npcDef, attacker)
+    return ent.WO_NPCDefinition or ent.npcDef
+end
+
+function WO.NPCs.HandleKilled(ent, attacker)
+    local def = ResolveDefinition(ent)
+
+    if not def or not def.hostile or ent.WO_NPCKillEventSent then return false end
+    if not IsValid(attacker) or not attacker:IsPlayer() or not attacker:HasCharacter() then return false end
+
+    ent.WO_NPCKillEventSent = true
+    WO.Hook.Run("NPCKilled", def, attacker, ent.WO_NPCLevel or def.level or 1)
+
+    return true
+end
+
+-- Level-specific damage is applied to damage delivered by registered external
+-- Workshop NPC classes; level-one values are the explicitly configured baseline.
+hook.Add("EntityTakeDamage", "wo_npc_level_damage", function(target, damageInfo)
+    if not damageInfo or not isfunction(damageInfo.GetAttacker) or
+        not isfunction(damageInfo.ScaleDamage) then return end
+
+    local attacker = damageInfo:GetAttacker()
+    local def = ResolveDefinition(attacker)
+
+    if not def then
+        attacker = isfunction(damageInfo.GetInflictor) and damageInfo:GetInflictor() or nil
+        def = ResolveDefinition(attacker)
+    end
+
+    if not def or not def.hostile or not def.workshopClass then return end
+
+    local stats = attacker.WO_NPCLevelStats
+    local baseline = WO.NPCs.GetLevelStats(def, def.minLevel or 1)
+
+    if not stats or not baseline or not baseline.damage or baseline.damage <= 0 or
+        not stats.damage then return end
+
+    damageInfo:ScaleDamage(stats.damage / baseline.damage)
+end)
+
+-- Engine death hooks for external Workshop NPC/SENT classes. The WO entity
+-- calls HandleKilled from OnTakeDamage directly; the sent flag deduplicates it
+-- against either engine hook when both are emitted.
+local function HandleExternalNPCDeath(ent, attacker)
+    if not IsValid(ent) or not ResolveDefinition(ent) then return end
+
+    WO.NPCs.HandleKilled(ent, attacker)
+end
+
+hook.Add("OnNPCKilled", "wo_external_npc_killed", HandleExternalNPCDeath)
+
+hook.Add("PostEntityTakeDamage", "wo_external_npc_damage_killed", function(ent, damageInfo, wasDamageTaken)
+    if wasDamageTaken ~= true or not IsValid(ent) or not damageInfo or
+        not isfunction(ent.Health) or ent:Health() > 0 then
+        return
+    end
+
+    local attacker = isfunction(damageInfo.GetAttacker) and damageInfo:GetAttacker() or nil
+    HandleExternalNPCDeath(ent, attacker)
 end)
 
 ---------------------------------------------------------------------------

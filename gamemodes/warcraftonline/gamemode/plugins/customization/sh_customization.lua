@@ -4,7 +4,7 @@
     ПРИНЦИП: у каждой модели свои bodygroups. Нельзя считать,
     что bodygroup 0 — всегда волосы. Поэтому конфигурация ведётся на модель:
 
-        WO.Customization:RegisterModel("models/player/group01/male_01.mdl", {
+        WO.Customization.RegisterModel(WO.Models.GetRace("human").male[1], {
             bodygroups = {
                 {
                     id = 0,

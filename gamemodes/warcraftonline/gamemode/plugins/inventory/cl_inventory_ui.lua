@@ -11,6 +11,7 @@
 WO.InventoryUI = WO.InventoryUI or {}
 
 local frame = nil
+local nextInventoryWindowId = 0
 
 ---------------------------------------------------------------------------
 -- Вспомогательные функции
@@ -118,11 +119,13 @@ local function CreateResourcesPanel(parent)
         local data = WO.Inventory.ClientData
         local capacity = data and ((data.width or 0) * (data.height or 0)) or 0
 
-        draw.SimpleText(WO.Lang:Get("currency.name") .. ": " .. moneyText,
-            "WO.Small", 12, h / 2, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
-        draw.SimpleText(WO.Lang:Get("inventory.items_count") .. ": " .. #GetItems() ..
+        WO.UI.DrawTextFit(WO.Lang:Get("currency.name") .. ": " .. moneyText,
+            "WO.Small", 12, h / 2, WO.UI.Colors.accent,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, math.max(0, w * 0.48 - 12), h - 4)
+        WO.UI.DrawTextFit(WO.Lang:Get("inventory.items_count") .. ": " .. #GetItems() ..
             "  /  " .. capacity, "WO.Small", w - 12, h / 2,
-            WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+            WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER,
+            math.max(0, w * 0.48 - 12), h - 4)
     end
 
     return panel
@@ -149,8 +152,9 @@ local function BuildGrid(parent)
         empty:SetSize(parent:GetWide() - 24, math.max(60, parent:GetTall() - 160))
         empty:SetPaintBackground(false)
         empty.Paint = function(_, w, h)
-            draw.SimpleText(WO.Lang:Get("inventory.loading"), "WO.Small",
-                w / 2, h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            WO.UI.DrawTextFit(WO.Lang:Get("inventory.loading"), "WO.Small",
+                w / 2, h / 2, WO.UI.Colors.textDim,
+                TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 24, h - 8)
         end
         parent.emptyState = empty
         return
@@ -326,8 +330,8 @@ function WO.InventoryUI.Open()
     inventoryPanel:SetSize(inventoryWidth, contentHeight)
     inventoryPanel.Paint = function(_, w, h)
         WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, WO.UI.Colors.border)
-        draw.SimpleText(WO.Lang:Get("inventory.title"), "WO.Subtitle",
-            14, 22, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        WO.UI.DrawTextFit(WO.Lang:Get("inventory.title"), "WO.Subtitle",
+            14, 22, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 28, 26)
     end
 
     CreateResourcesPanel(inventoryPanel)
@@ -351,8 +355,7 @@ function WO.InventoryUI.Open()
         }) or nil
 
     if IsValid(equipmentPanel) then
-        local charModel = WO.UI.CreateCharacterModel(equipmentPanel,
-            char.model or "models/player/group01/male_01.mdl")
+        local charModel = WO.UI.CreateCharacterModel(equipmentPanel, char.model)
         local modelWidth = math.min(220, equipmentWidth - 30)
         charModel:SetPos(math.floor((equipmentWidth - modelWidth) / 2), 38)
         charModel:SetSize(modelWidth, previewHeight - 4)
@@ -363,7 +366,8 @@ function WO.InventoryUI.Open()
         end
     end
 
-    local refreshHookId = "wo_inventory_ui_" .. tostring(thisFrame:EntIndex())
+    nextInventoryWindowId = nextInventoryWindowId + 1
+    local refreshHookId = "wo_inventory_ui_" .. tostring(nextInventoryWindowId)
 
     WO.Hook.Add("InventoryChanged", refreshHookId, function()
         if IsValid(thisFrame) and IsValid(inventoryPanel) and inventoryPanel.RefreshItems then

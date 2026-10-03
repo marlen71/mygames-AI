@@ -1,27 +1,27 @@
 --[[
-    Warcraft Online — волк первого уровня, цель стартового kill-квеста.
+    Warcraft Online — Fang (Клык), цель стартового kill-квеста.
 
-    WO.Workshop ищет зарегистрированного NPC уровня 1 из Creature Megapack и
-    принимает только реально смонтированную модель. При отсутствии аддона
-    используется проверенный GMod fallback; права/урон/XP остаются в WO.
+    Используется только точный класс Creatures Megapack. Без регистрации класса
+    сущность не спавнится: никакой подмены зомби/стоковой моделью.
 ]]
 
 WO.NPCs.Register({
     id = "black_wolf",
-    name = "Волк (уровень 1)",
+    name = "Клык",
     type = "creature",
     hostile = true,
+    workshopClass = WO.Workshop.RequestedNPCClasses.fang,
     level = 1,
-
-    model = WO.Workshop.NPCModelOr("wow_wolf", "models/zombie/fast.mdl"),
-    scale = 0.85,
-
-    -- gm_construct имеет явную точку info_player_start; другие карты пусты,
-    -- пока администратор не добавит map-specific spawn в конфигурацию.
-    spawns = WO.Config.NPCSpawnPoints.black_wolf or {},
-
-    health = 45,
-    damage = 4,
+    minLevel = 1,
+    maxLevel = 5,
+    levelStats = {
+        [1] = { health = 45,  damage = 4 },
+        [2] = { health = 62,  damage = 5 },
+        [3] = { health = 82,  damage = 6 },
+        [4] = { health = 106, damage = 8 },
+        [5] = { health = 134, damage = 10 },
+    },
     attackRange = 110,
     interactRange = 0,
+    spawns = WO.Config.NPCSpawnPoints.black_wolf or {},
 })
