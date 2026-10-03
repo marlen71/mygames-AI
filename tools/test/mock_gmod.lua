@@ -289,6 +289,11 @@ function VEC:Distance(other)
     return (self - other):Length()
 end
 
+function VEC:DistToSqr(other)
+    local delta = self - other
+    return delta.x * delta.x + delta.y * delta.y + delta.z * delta.z
+end
+
 function VEC:Dot(other)
     return self.x * other.x + self.y * other.y + self.z * other.z
 end
@@ -435,6 +440,8 @@ function MOCK.NewEntity(class)
     e.__methods.Alive = function(tt) return tt.__alive ~= false end
     e.__methods.SetNW2Bool = function(tt, k, v) tt.__nw2[k] = v end
     e.__methods.GetNW2Bool = function(tt, k, d) if tt.__nw2[k] == nil then return d end return tt.__nw2[k] end
+    e.__methods.SetNW2Entity = function(tt, k, v) tt.__nw2[k] = v end
+    e.__methods.GetNW2Entity = function(tt, k) return tt.__nw2[k] end
     e.__methods.SetNW2String = function(tt, k, v) tt.__nw2[k] = v end
     e.__methods.GetNW2String = function(tt, k, d) if tt.__nw2[k] == nil then return d end return tt.__nw2[k] end
     e.__methods.SetNW2Int = function(tt, k, v) tt.__nw2[k] = v end
@@ -1460,7 +1467,8 @@ function MOCK.FindPanelByText(text)
     for i = #MOCK.createdPanels, 1, -1 do
         local panel = MOCK.createdPanels[i]
 
-        if rawget(panel, "__removed") ~= true and rawget(panel, "__text") == text then
+        if rawget(panel, "__removed") ~= true and
+            (rawget(panel, "__text") == text or rawget(panel, "woText") == text) then
             return panel
         end
     end
@@ -1497,8 +1505,10 @@ function surface.GetFontName() return "default" end
 
 draw = draw or {}
 MOCK.drawTextCalls = MOCK.drawTextCalls or 0
-function draw.SimpleText()
+MOCK.drawnTextValues = MOCK.drawnTextValues or {}
+function draw.SimpleText(text)
     MOCK.drawTextCalls = MOCK.drawTextCalls + 1
+    MOCK.drawnTextValues[#MOCK.drawnTextValues + 1] = tostring(text or "")
     return 0, 0
 end
 function draw.NoTexture() end
@@ -1542,7 +1552,7 @@ FrameTime = function() return MOCK.frameTime or 0 end
 ---------------------------------------------------------------------------
 
 game = game or {}
-function game.GetMap() return "gm_flatgrass" end
+function game.GetMap() return MOCK.mapName or "gm_flatgrass" end
 function game.GetIPAddress() return "127.0.0.1:27015" end
 function game.SinglePlayer() return true end
 function game.MaxPlayers() return 16 end

@@ -15,10 +15,10 @@ WO.Dialogue.Register({
             },
         },
         wolves = {
-            text = "Серые твари обнаглели. Победи одного волка первого уровня у дороги — и награда не заставит себя ждать.",
+            text = "Охотник следит за волчьими стаями и кабанами. Найдите его у дороги — он поручит охоту.",
             options = {
-                { text = "Я возьмусь за это дело", action = "quest:wolves_of_elwynn" },
-                { text = "Назад",                  action = "next:start" },
+                { text = "Поищу охотника", action = "close" },
+                { text = "Назад",          action = "next:start" },
             },
         },
         supplies = {

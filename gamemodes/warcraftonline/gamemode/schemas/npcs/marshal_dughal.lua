@@ -18,7 +18,7 @@ WO.NPCs.Register({
     spawns = WO.Config.NPCSpawnPoints.marshal_dughal or {},
 
     dialogue = "marshal_intro",
-    quests = { "wolves_of_elwynn", "supplies_for_the_road" },
+    quests = { "supplies_for_the_road" },
 
     interactRange = WO.Config.InteractDistance,
 })

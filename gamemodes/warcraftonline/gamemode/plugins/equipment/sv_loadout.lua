@@ -20,7 +20,6 @@ local function GetDesired(char)
     end
 
     add(configured.hands)
-    add(configured.knife)
 
     local isMage = char and char.class == "mage"
 
@@ -28,7 +27,9 @@ local function GetDesired(char)
         add(configured.mage)
     end
 
-    local primary = isMage and configured.mage or configured.knife
+    -- Non-mages keep the standard hands SWEP until they equip their starter
+    -- knife item from the inventory. The mage wand remains a direct loadout.
+    local primary = isMage and configured.mage or configured.hands
 
     return desired, primary
 end
@@ -58,7 +59,7 @@ function WO.Loadout.Apply(ply, char)
 
     for _, weapon in ipairs(ply:GetWeapons()) do
         if IsValid(weapon) and weapon.WOStarterLoadout == true and
-            not wanted[weapon:GetClass()] then
+            not weapon.WOItemUID and not wanted[weapon:GetClass()] then
             ply:StripWeapon(weapon:GetClass())
         end
     end

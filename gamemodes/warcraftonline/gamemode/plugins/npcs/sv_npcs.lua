@@ -30,8 +30,29 @@ local function SetExternalNPCData(ent, def, level, stats)
     end
 end
 
+local function SpawnKey(def, spawn, index)
+    return tostring(def.id) .. ":" .. tostring(spawn and (spawn.spawnKey or index) or index)
+end
+
+function WO.NPCs.HasActiveQuest(questId)
+    if not isstring(questId) or questId == "" then return false end
+
+    for _, ply in ipairs(player.GetAll()) do
+        if IsValid(ply) and ply:HasCharacter() then
+            local char = ply:GetCharacter()
+            local state = char and char.quests and char.quests[questId]
+
+            if state and state.status == "active" then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 --- Создаёт одного NPC из схемы и конкретной явной spawn-записи.
-function WO.NPCs.SpawnOne(def, pos, ang, spawn)
+function WO.NPCs.SpawnOne(def, pos, ang, spawn, spawnIndex)
     if not istable(def) or not isvector(pos) then return nil end
 
     local workshopClass = def.workshopClass
@@ -76,6 +97,9 @@ function WO.NPCs.SpawnOne(def, pos, ang, spawn)
         ent.WO_NPCLevel = level
         ent.WO_NPCLevelStats = stats
     end
+
+    ent.WO_NPCSpawnQuestId = spawn and spawn.questId or nil
+    ent.WO_NPCSpawnKey = SpawnKey(def, spawn, spawnIndex)
 
     WO.NPCs.Spawned[#WO.NPCs.Spawned + 1] = ent
 
@@ -133,26 +157,34 @@ function WO.NPCs.SpawnAll()
 
     for _, def in pairs(WO.NPCs.List) do
         local spawnedForDefinition = false
+        local gatedByQuest = false
 
-        for _, spawn in ipairs(def.spawns or {}) do
+        for index, spawn in ipairs(def.spawns or {}) do
             if not spawn.map or spawn.map == map then
-                local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
+                if spawn.questId and not WO.NPCs.HasActiveQuest(spawn.questId) then
+                    gatedByQuest = true
+                else
+                    local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
 
-                if pos then
-                    local ent = WO.NPCs.SpawnOne(def, pos, ang, spawn)
+                    if pos then
+                        local ent = WO.NPCs.SpawnOne(def, pos, ang, spawn, index)
 
-                    if IsValid(ent) then
-                        spawnedForDefinition = true
+                        if IsValid(ent) then
+                            spawnedForDefinition = true
+                        end
+                    elseif spawn.anchor then
+                        WO.Debug("NPC spawn anchor not found: " .. tostring(spawn.anchor) ..
+                            " for '" .. tostring(def.id) .. "' on map '" .. tostring(map) .. "'")
                     end
-                elseif spawn.anchor then
-                    WO.Debug("NPC spawn anchor not found: " .. tostring(spawn.anchor) ..
-                        " for '" .. tostring(def.id) .. "' on map '" .. tostring(map) .. "'")
                 end
             end
         end
 
         if spawnedForDefinition then
             definitionsPlaced = definitionsPlaced + 1
+        elseif gatedByQuest then
+            WO.Debug("NPC spawn gated by quest for '" .. tostring(def.id) .. "' on map '" ..
+                tostring(map) .. "'")
         else
             WO.Debug("NPC not spawned: no explicit spawn configured for '" ..
                 tostring(def.id) .. "' on map '" .. tostring(map) .. "'")
@@ -163,6 +195,55 @@ function WO.NPCs.SpawnAll()
         " entities (explicit map spawns only)")
 end
 
+--- Поддерживает quest-linked spawn group в соответствии с активными персонажами.
+function WO.NPCs.SyncQuestSpawns(questId)
+    if not isstring(questId) or questId == "" then return end
+
+    local active = WO.NPCs.HasActiveQuest(questId)
+    local existing = {}
+
+    for index = #WO.NPCs.Spawned, 1, -1 do
+        local ent = WO.NPCs.Spawned[index]
+
+        if not IsValid(ent) then
+            table.remove(WO.NPCs.Spawned, index)
+        elseif ent.WO_NPCSpawnQuestId == questId then
+            local dead = isfunction(ent.Health) and ent:Health() <= 0
+
+            if active and not dead then
+                existing[ent.WO_NPCSpawnKey] = ent
+            else
+                ent:Remove()
+                table.remove(WO.NPCs.Spawned, index)
+            end
+        end
+    end
+
+    if not active then return end
+
+    local map = game.GetMap()
+
+    for _, def in pairs(WO.NPCs.List) do
+        for index, spawn in ipairs(def.spawns or {}) do
+            if spawn.questId == questId and (not spawn.map or spawn.map == map) then
+                local key = SpawnKey(def, spawn, index)
+
+                if not IsValid(existing[key]) then
+                    local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
+
+                    if pos then
+                        local ent = WO.NPCs.SpawnOne(def, pos, ang, spawn, index)
+
+                        if IsValid(ent) then
+                            existing[key] = ent
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 hook.Add("InitPostEntity", "wo_npcs_spawn", function()
     timer.Simple(1, function()
         WO.NPCs.SpawnAll()
@@ -171,6 +252,42 @@ end)
 
 hook.Add("PostCleanupMap", "wo_npcs_respawn", function()
     WO.NPCs.SpawnAll()
+end)
+
+WO.Hook.Add("QuestStateChanged", "npcs_quest_spawn_state", function(_, questId)
+    WO.NPCs.SyncQuestSpawns(questId)
+end)
+
+WO.Hook.Add("CharacterLoaded", "npcs_quest_spawn_load", function(char)
+    for questId, state in pairs(char.quests or {}) do
+        if state.status == "active" then
+            WO.NPCs.SyncQuestSpawns(questId)
+        end
+    end
+end)
+
+WO.Hook.Add("CharacterUnloaded", "npcs_quest_spawn_unload", function(char)
+    for questId in pairs(char.quests or {}) do
+        WO.NPCs.SyncQuestSpawns(questId)
+    end
+end)
+
+-- Поддерживаем 7 целей в активной зоне и восстанавливаем точку, если животное
+-- погибло без зачтённого убийства (урон мира/игрок без соответствующего задания).
+WO.Hook.Add("NPCKilled", "npcs_quest_spawn_replenish", function(npcDef)
+    local questIds = {}
+
+    for _, spawn in ipairs(npcDef and npcDef.spawns or {}) do
+        if spawn.questId then
+            questIds[spawn.questId] = true
+        end
+    end
+
+    for questId in pairs(questIds) do
+        timer.Simple(0, function()
+            WO.NPCs.SyncQuestSpawns(questId)
+        end)
+    end
 end)
 
 ---------------------------------------------------------------------------
@@ -242,6 +359,15 @@ local function HandleExternalNPCDeath(ent, attacker)
     if not IsValid(ent) or not ResolveDefinition(ent) then return end
 
     WO.NPCs.HandleKilled(ent, attacker)
+
+    local questId = ent.WO_NPCSpawnQuestId
+
+    if questId then
+        -- Defer until the engine has finished removing the killed entity.
+        timer.Simple(0, function()
+            WO.NPCs.SyncQuestSpawns(questId)
+        end)
+    end
 end
 
 hook.Add("OnNPCKilled", "wo_external_npc_killed", HandleExternalNPCDeath)

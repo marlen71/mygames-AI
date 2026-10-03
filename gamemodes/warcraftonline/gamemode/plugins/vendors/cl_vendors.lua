@@ -83,7 +83,7 @@ function WO.Vendors.OpenUI(data)
             moneyText = WO.Util.FormatMoney(current.money or 0)
         end
 
-        moneyLabel:SetText(WO.Lang:Get("currency.name") .. ": " .. moneyText)
+        moneyLabel:SetDisplayText(WO.Lang:Get("currency.name") .. ": " .. moneyText)
 
         -- Товары
         for _, entry in ipairs(current.stock or {}) do

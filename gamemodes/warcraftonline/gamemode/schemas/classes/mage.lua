@@ -17,7 +17,7 @@ WO.Classes.Register({
 
     resource = "mana",
 
-    allowedWeapons = { "staff", "magic" },
+    allowedWeapons = { "staff", "magic", "dagger" },
     allowedArmor = { "cloth", "misc" },
 
     abilities = {},
@@ -25,6 +25,7 @@ WO.Classes.Register({
     startingItems = {
         { class = "health_potion", amount = 3 },
         { class = "bread", amount = 2 },
+        { class = "starter_knife", amount = 1 },
     },
 
     modifiers = {},

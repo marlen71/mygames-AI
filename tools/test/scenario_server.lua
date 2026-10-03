@@ -79,11 +79,20 @@ local starterKnifeDef = WO.Items.Get("starter_knife")
 local arcaneHandsDef = WO.Items.Get("arcane_hands")
 local desiredWeapons = WO.Config.StartingWeaponClasses
 local mageDesired = WO.Loadout.GetDesiredClasses({ class = "mage" })
-MOCK.Assert(starterKnifeDef and starterKnifeDef.noInventory == true and
+local warriorDesired = WO.Loadout.GetDesiredClasses({ class = "warrior" })
+local mageStartingItems = WO.Classes.GetStartingItems("mage")
+local mageHasKnifeItem = false
+for _, entry in ipairs(mageStartingItems) do
+    if entry.class == "starter_knife" then mageHasKnifeItem = true end
+end
+MOCK.Assert(starterKnifeDef and starterKnifeDef.allowStarterKnifeItem == true and
+    starterKnifeDef.weapon.class == "tfa_cso_coldsteelblade" and
+    starterKnifeDef.equipment.slot == "main_hand" and
     arcaneHandsDef and arcaneHandsDef.noInventory == true and
-    not WO.Items.IsInventoryAllowed("starter_knife") and
+    WO.Items.IsInventoryAllowed("starter_knife") and
+    not WO.Items.IsInventoryAllowed({ weapon = { class = "tfa_cso_coldsteelblade" } }) and
     not WO.Items.IsInventoryAllowed("arcane_hands"),
-    "legacy starter knife и magic hands tombstone не допускаются в инвентарь")
+    "только явный starter_knife является предметом; нож, руки и wand сохраняют точные классы")
 MOCK.Assert(desiredWeapons.hands == "drc_unarmed" and
     desiredWeapons.knife == "tfa_cso_coldsteelblade" and
     desiredWeapons.mage == "weapon_hpwr_stick" and
@@ -91,9 +100,29 @@ MOCK.Assert(desiredWeapons.hands == "drc_unarmed" and
     weapons.GetStored("tfa_cso_coldsteelblade") and
     weapons.GetStored("weapon_hpwr_stick"),
     "все три точных starter SWEP зарегистрированы в тестовом runtime")
-MOCK.Assert(#mageDesired == 3 and mageDesired[1] == "drc_unarmed" and
-    mageDesired[2] == "tfa_cso_coldsteelblade" and mageDesired[3] == "weapon_hpwr_stick",
-    "маг получает руки и нож, а также точный HPWR wand")
+MOCK.Assert(#mageDesired == 2 and mageDesired[1] == "drc_unarmed" and
+    mageDesired[2] == "weapon_hpwr_stick" and #warriorDesired == 1 and
+    warriorDesired[1] == "drc_unarmed" and mageHasKnifeItem and
+    WO.Classes.IsWeaponAllowed("mage", "dagger"),
+    "маг сохраняет прямой HPWR wand и получает нож-предмет; остальные начинают с обычных рук")
+
+local migrationPlayer = MOCK.NewEntity("player")
+local migrationChar = WO.Character.New({
+    id = "starter-knife-migration-test", name = "Миграция", surname = "Тест",
+    class = "warrior",
+})
+migrationPlayer:SetCharacter(migrationChar)
+local migrationContainer = WO.Inventory.GetContainer(migrationChar)
+MOCK.Assert(WO.Equipment.MigrateStarterKnife(migrationChar, migrationPlayer) == true and
+    migrationContainer:CountItem("starter_knife") == 1 and
+    WO.Equipment.MigrateStarterKnife(migrationChar, migrationPlayer) == false and
+    migrationContainer:CountItem("starter_knife") == 1,
+    "legacy loadout мигрируется в один сохраняемый нож без повторной выдачи")
+local migrationEquipmentData = WO.Equipment.Get(migrationChar):Serialize()
+local restoredMigrationEquipment = WO.Equipment.Deserialize(migrationEquipmentData)
+MOCK.Assert(restoredMigrationEquipment.starterKnifeMigrationApplied == true,
+    "флаг миграции starter knife переживает сериализацию экипировки")
+WO.SaveQueue.Clear(migrationChar)
 
 local badLoadedCharacter, badModelWarnings = WO.Character.SanitizeLoaded({
     id = "bad-model-test", name = "Тест", surname = "Модели", age = 25,
@@ -215,6 +244,9 @@ MOCK.Assert(char.name == "Тест", "имя сохранено: " .. tostring(c
 MOCK.Assert(char.race == "human" and char.class == "warrior", "раса/класс сохранены")
 MOCK.Assert(char.model == models[1], "модель сохранена")
 MOCK.Assert(ply:HasCharacter(), "HasCharacter() == true")
+MOCK.Assert(ply:GetPos():DistToSqr(Vector(0, 0, 24)) == 0 and
+    char.map == game.GetMap() and isvector(char.pos),
+    "новый персонаж использует обычную map spawn point вместо нулевой координаты")
 MOCK.Assert(ply:GetStamina() > 0,
     "персонаж входит в мир с полной выносливостью для стартового оружия")
 MOCK.Assert(#WO.Character.LoadList(ply) == 1, "повторный net-запрос не создал дубликат")
@@ -238,8 +270,8 @@ char = ply:GetCharacter()
 MOCK.Assert(char and char.id == savedCharID, "загружен тот же персонаж без дубликата")
 MOCK.Assert(WO.Equipment.Get(char).startingEquipmentApplied == true and
     WO.Equipment.Get(char):Get("main_hand") == nil and
-    WO.Inventory.GetContainer(char):CountItem("starter_knife") == 0,
-    "стартовый loadout не превращается в предмет или снимаемый main-hand слот")
+    WO.Inventory.GetContainer(char):CountItem("starter_knife") == 1,
+    "стартовый нож сохраняется один раз в инвентаре до явного экипирования")
 
 print("[scenario] existing character selection OK")
 
@@ -260,14 +292,43 @@ end
 MOCK.Assert(itemCount > 0, "стартовые предметы выданы: " .. itemCount)
 
 local mainHand = WO.Equipment.Get(char):Get("main_hand")
-local equippedKnife = ply:GetWeapon("tfa_cso_coldsteelblade")
 local equippedHands = ply:GetWeapon("drc_unarmed")
+local starterKnifeUID
 
-MOCK.Assert(mainHand == nil and IsValid(equippedKnife) and IsValid(equippedHands) and
-    equippedKnife.WOStarterLoadout == true and equippedHands.WOStarterLoadout == true and
-    equippedKnife.WOItemUID == nil and equippedKnife.WOItemClass == nil and
-    ply:GetActiveWeapon() == equippedKnife,
-    "воин получает точные руки и нож напрямую, вне инвентаря и слотов экипировки")
+for uid, instance in pairs(inv.items) do
+    if instance.class == "starter_knife" then
+        starterKnifeUID = uid
+        break
+    end
+end
+
+MOCK.Assert(mainHand == nil and not IsValid(ply:GetWeapon("tfa_cso_coldsteelblade")) and
+    IsValid(equippedHands) and equippedHands.WOStarterLoadout == true and
+    ply:GetActiveWeapon() == equippedHands and starterKnifeUID ~= nil,
+    "воин появляется с обычными руками, а точный нож остаётся предметом в инвентаре")
+
+MOCK.TakeOutbox()
+MOCK.Assert(WO.Equipment.Equip(ply, starterKnifeUID) == true,
+    "использование предмета экипирует стартовый нож")
+local equipOutbox = MOCK.TakeOutbox()
+local equippedKnife = ply:GetWeapon("tfa_cso_coldsteelblade")
+mainHand = WO.Equipment.Get(char):Get("main_hand")
+MOCK.Assert(mainHand and mainHand.uid == starterKnifeUID and
+    IsValid(equippedKnife) and equippedKnife.WOItemUID == starterKnifeUID and
+    ply:GetActiveWeapon() == equippedKnife and inv:CountItem("starter_knife") == 0 and
+    #MOCK.FindInbox(equipOutbox, "Inventory.Sync") >= 1,
+    "нож появляется/выбирается только после equip, а инвентарь синхронизирован")
+
+MOCK.TakeOutbox()
+MOCK.Assert(WO.Equipment.Unequip(ply, "main_hand") == true,
+    "нож можно снять обратно")
+local unequipOutbox = MOCK.TakeOutbox()
+MOCK.Assert(not IsValid(ply:GetWeapon("tfa_cso_coldsteelblade")) and
+    IsValid(ply:GetWeapon("drc_unarmed")) and ply:GetActiveWeapon() == ply:GetWeapon("drc_unarmed") and
+    inv:CountItem("starter_knife") == 1 and
+    WO.Equipment.Get(char):Get("main_hand") == nil and
+    #MOCK.FindInbox(unequipOutbox, "Inventory.Sync") >= 1,
+    "снятый нож возвращается в инвентарь с тем же UID и немедленной синхронизацией")
 
 local magePlayer = MOCK.NewEntity("player")
 local mageCharacter = WO.Character.New({ id = "mage-loadout-test", class = "mage" })
@@ -276,10 +337,10 @@ local magePrimary = WO.Loadout.Apply(magePlayer, mageCharacter)
 
 MOCK.Assert(magePrimary == "weapon_hpwr_stick" and
     magePlayer:HasWeapon("drc_unarmed") and
-    magePlayer:HasWeapon("tfa_cso_coldsteelblade") and
+    not magePlayer:HasWeapon("tfa_cso_coldsteelblade") and
     magePlayer:HasWeapon("weapon_hpwr_stick") and
     magePlayer:GetWeapon("weapon_hpwr_stick").WOItemUID == nil,
-    "маг получает HPWR wand как отдельный стартовый SWEP без предмета экипировки")
+    "маг сохраняет точный wand как loadout, но не получает нож")
 
 local money = WO.Currency.Get(ply)
 
@@ -349,13 +410,48 @@ local charId = char.id
 local moneyBefore = WO.Currency.Get(ply)
 local levelBefore = char:GetLevel()
 
-MOCK.Assert(WO.SaveQueue.SaveNow(char) ~= false, "SaveNow")
+-- Старая таблица того же ID не должна затереть свежий объект после reload.
+local staleSnapshot = WO.Character.New({
+    id = char.id, steamid = char.steamid, steamid64 = char.steamid64,
+    name = char.name, surname = char.surname, age = char.age,
+    gender = char.gender, race = char.race, class = char.class,
+    model = char.model, level = 1, experience = 0, money = 0,
+    map = char.map, pos = Vector(-1, -1, -1), ang = Angle(0, 0, 0),
+    customization = char.customization, inventory = char.inventory,
+    equipment = char.equipment, quests = char.quests,
+})
+WO.SaveQueue.MarkDirty(staleSnapshot)
+MOCK.Assert(WO.SaveQueue.SaveNow(char) == true,
+    "активная версия персонажа сохраняется поверх очередного старого snapshot")
+WO.SaveQueue.FlushAll()
+local afterStaleFlush = WO.Database:Fetch(
+    "SELECT level, experience, money FROM wo_characters WHERE id = ?", char.id)[1]
+MOCK.Assert(tonumber(afterStaleFlush.level) == levelBefore and
+    tonumber(afterStaleFlush.money) == moneyBefore,
+    "повторный flush не перезаписывает прогресс/валюту устаревшим объектом")
+
+local originalTransaction = WO.Database.Transaction
+local retryPosition = Vector(916, 48, 144)
+ply:SetPos(retryPosition)
+ply:SetEyeAngles(Angle(6, 91, 0))
+WO.Database.Transaction = function() return false end
+WO.SaveQueue.MarkDirty(char)
+
+MOCK.Assert(WO.SaveQueue.SaveNow(char) == false and WO.SaveQueue.IsDirty(char) and
+    char.pos:DistToSqr(retryPosition) == 0,
+    "при временной ошибке БД очередь сохраняет актуальную позицию для повтора")
 
 WO.Character.Unload(ply)
+MOCK.Assert(ply:HasCharacter() == false and char.player == nil and WO.SaveQueue.IsDirty(char),
+    "выгрузка отвязывает игрока, не теряя неуспешное сохранение")
 
-MOCK.Assert(ply:HasCharacter() == false, "персонаж выгружен")
+local rejectedStaleLoad = WO.Character.Select(ply, charId)
+MOCK.Assert(rejectedStaleLoad == false and not ply:HasCharacter() and WO.SaveQueue.IsDirty(char),
+    "после ошибки БД устаревшая запись не загружается, пока pending snapshot не сохранён")
 
-WO.Character.Select(ply, charId)
+WO.Database.Transaction = originalTransaction
+MOCK.Assert(WO.Character.Select(ply, charId) == true and not WO.SaveQueue.IsDirty(char),
+    "повтор перед загрузкой сохраняет pending snapshot после восстановления БД")
 MOCK.RunTimers(0.5)
 
 local restored = ply:GetCharacter()
@@ -363,8 +459,13 @@ local restored = ply:GetCharacter()
 MOCK.Assert(restored ~= nil, "персонаж загружен обратно")
 MOCK.Assert(restored.name == "Тест", "имя восстановлено")
 MOCK.Assert(restored:GetLevel() == levelBefore, "уровень восстановлен")
+MOCK.Assert(ply:GetPos():DistToSqr(retryPosition) == 0 and
+    math.abs(ply:EyeAngles().y - 91) < 0.01 and restored.map == game.GetMap(),
+    "сохранённые после retry позиция, направление и карта восстанавливаются")
 MOCK.Assert(WO.Currency.Get(ply) == moneyBefore, "деньги восстановлены: " ..
     tostring(WO.Currency.Get(ply)) .. " == " .. tostring(moneyBefore))
+MOCK.Assert(WO.Inventory.GetContainer(restored):CountItem("starter_knife") == 1,
+    "повтор сохранения не дублирует предмет ножа в инвентаре")
 
 print("[scenario] persistence OK")
 
@@ -382,16 +483,29 @@ local anchorPosition = WO.NPCs.ResolveSpawnPoint({
 })
 MOCK.Assert(isvector(anchorPosition) and anchorPosition.x == 12 and anchorPosition.z == 20,
     "map anchor разрешается детерминированно с явным смещением")
+local ordinarySpawn = WO.FindSpawnPoint(ply)
+MOCK.Assert(isvector(ordinarySpawn) and ordinarySpawn.x == 0 and ordinarySpawn.z == 24,
+    "новый персонаж использует обычную map spawn point, а не центр карты")
+local findByClass = ents.FindByClass
+ents.FindByClass = function() return {} end
+local missingSpawn = WO.FindSpawnPoint(ply)
+ents.FindByClass = findByClass
+MOCK.Assert(missingSpawn == nil,
+    "при отсутствии map spawn point код не выдумывает координату в центре карты")
 
--- Добавляем явные map-specific точки, чтобы проверить обычный жизненный цикл NPC.
-for _, def in pairs(WO.NPCs.List) do
-    def.spawns = {
-        { map = game.GetMap(), pos = Vector(0, 0, 16), ang = Angle(0, 180, 0) },
-    }
-end
+MOCK.mapName = "gm_construct"
+local wolfSpawnPoints = WO.Config.NPCSpawnPoints.black_wolf
+local boarSpawnPoints = WO.Config.NPCSpawnPoints.elwynn_boar
+MOCK.Assert(#wolfSpawnPoints == 7 and #boarSpawnPoints == 7 and
+    wolfSpawnPoints[1].map == "gm_construct" and wolfSpawnPoints[1].questId == "wolves_of_elwynn" and
+    boarSpawnPoints[1].map == "gm_construct" and boarSpawnPoints[1].questId == "boar_hunt",
+    "точные 7+7 spawn-точек привязаны к карте и своим квестам")
+
+-- Статические квестодатели появляются на своей карте; животные до принятия
+-- задания не создаются.
 WO.NPCs.SpawnAll()
 
-MOCK.Assert(#WO.NPCs.Spawned >= 3, "явно настроенные NPC заспавнены: " .. #WO.NPCs.Spawned)
+MOCK.Assert(#WO.NPCs.Spawned >= 3, "статические NPC заспавнены: " .. #WO.NPCs.Spawned)
 
 local function FindNPC(id)
     for _, ent in ipairs(WO.NPCs.Spawned) do
@@ -403,17 +517,36 @@ local function FindNPC(id)
     return nil
 end
 
+local function FindNPCs(id)
+    local out = {}
+
+    for _, ent in ipairs(WO.NPCs.Spawned) do
+        if IsValid(ent) and ent.npcDef and ent.npcDef.id == id then
+            out[#out + 1] = ent
+        end
+    end
+
+    return out
+end
+
 local marshal = FindNPC("marshal_dughal")
 local marla = FindNPC("trader_marla")
-local wolfEnt = FindNPC("black_wolf")
+local hunter = FindNPC("hunter_dyrne")
 
 MOCK.Assert(marshal ~= nil, "marshal_dughal заспавнен")
 MOCK.Assert(marla ~= nil, "trader_marla заспавнен")
-MOCK.Assert(wolfEnt ~= nil and wolfEnt:GetClass() == "wow_npc_14892" and
-    wolfEnt.WO_NPCLevel == 1,
-    "Fang создан точным wow_npc_14892 классом на уровне 1")
-MOCK.Assert(marshal.__useType == SIMPLE_USE and marla.__useType == SIMPLE_USE,
-    "диалоговые NPC используют SIMPLE_USE")
+MOCK.Assert(hunter ~= nil and hunter.npcDef.quests[1] == "wolves_of_elwynn" and
+    hunter.npcDef.quests[2] == "boar_hunt",
+    "hunter_dyrne выдаёт оба охотничьих задания")
+MOCK.Assert(#FindNPCs("black_wolf") == 0 and #FindNPCs("elwynn_boar") == 0,
+    "волки и кабаны не появляются до принятия соответствующих квестов")
+MOCK.Assert(math.abs(marshal:GetPos().x - 1034.032104) < 0.01 and
+    math.abs(marla:GetPos().x - 241.648193) < 0.01 and
+    math.abs(hunter:GetPos().x - 1311.738403) < 0.01,
+    "маршал, торговка и охотник используют точки хаба на gm_construct")
+MOCK.Assert(marshal.__useType == SIMPLE_USE and marla.__useType == SIMPLE_USE and
+    hunter.__useType == SIMPLE_USE,
+    "диалоговые/квестовые NPC используют SIMPLE_USE")
 MOCK.Assert(WO.Interaction.GetRange(marla) == WO.Config.InteractDistance,
     "клиентская подсказка и серверный Use согласованы по диапазону")
 for level = 1, 5 do
@@ -525,32 +658,84 @@ MOCK.Assert(WO.Currency.Get(ply) > moneyBeforeSell, "продажа принес
 
 print("[scenario] vendor OK")
 
--- Принимаем kill-квест и проверяем внешний engine NPC death event.
-local acceptQuest = WO.Quests.Accept(ply, "wolves_of_elwynn")
+-- Quest.Accept — внутренний server API: прямой net-вызов без проверенного NPC
+-- не должен выдавать задание, даже если игрок знает questId.
+ply:SetPos(hunter:GetPos())
+MOCK.NetDeliver({ name = "Quest.Accept", args = { "wolves_of_elwynn" } }, 8, ply)
+MOCK.Assert(ply:GetCharacter().quests["wolves_of_elwynn"] == nil and
+    ply:GetCharacter().quests["boar_hunt"] == nil,
+    "клиент не может принять квест прямым Quest.Accept без server-side NPC interaction")
 
-MOCK.Assert(acceptQuest == true, "kill-квест первого уровня принят")
+-- Hunter выдаёт wolf kill-квест первым: появляется только его группа из семи Fang.
+MOCK.TakeOutbox()
+hunter:Use(ply, ply)
+local acceptQuest = ply:GetCharacter().quests["wolves_of_elwynn"]
 
-local activeWolf = FindNPC("black_wolf")
-MOCK.Assert(IsValid(activeWolf) and activeWolf:GetClass() == "wow_npc_14892",
-    "цель test quest — точный Fang class")
-activeWolf:SetHealth(1)
+MOCK.Assert(acceptQuest and acceptQuest.status == "active" and
+    ply:GetCharacter().quests["boar_hunt"] == nil,
+    "принятие wolf quest через hunter_dyrne создаёт только волчью цель")
 
--- Проверяем фактический engine OnNPCKilled bridge без подмены внешнего
--- TFA SWEP его тестовой реализацией.
-hook.Run("OnNPCKilled", activeWolf, ply)
-hook.Run("OnNPCKilled", activeWolf, ply) -- duplicate engine event must be ignored
-activeWolf:SetHealth(0)
-hook.Run("PostEntityTakeDamage", activeWolf, {
-    GetAttacker = function() return ply end,
-}, true) -- same death via generic SENT bridge is deduplicated
+local activeWolves = FindNPCs("black_wolf")
+MOCK.Assert(#activeWolves == 7 and #FindNPCs("elwynn_boar") == 0,
+    "после принятия wolf quest появляются 7 Fang, но не кабаны")
+local earlyBoarAccept, earlyBoarReason = WO.Quests.Accept(
+    ply, "boar_hunt", hunter.npcDef, hunter)
+MOCK.Assert(earlyBoarAccept == false and earlyBoarReason == "prerequisites" and
+    ply:GetCharacter().quests["boar_hunt"] == nil,
+    "boar quest заблокирован до завершения волчьего задания даже при валидном NPC")
+for _, wolf in ipairs(activeWolves) do
+    MOCK.Assert(wolf:GetClass() == "wow_npc_14892" and
+        wolf.WO_NPCLevel >= 1 and wolf.WO_NPCLevel <= 5,
+        "каждая цель сохраняет точный Fang class и уровень 1–5")
+end
+
+-- Проверяем engine death bridge, дедупликацию и прогресс всех семи целей.
+local lastWolf
+for index, wolf in ipairs(activeWolves) do
+    lastWolf = wolf
+    wolf:SetHealth(1)
+    hook.Run("OnNPCKilled", wolf, ply)
+
+    if index == 1 then
+        hook.Run("OnNPCKilled", wolf, ply) -- duplicate event must be ignored
+    end
+
+    wolf:SetHealth(0)
+    hook.Run("PostEntityTakeDamage", wolf, {
+        GetAttacker = function() return ply end,
+    }, true) -- duplicate generic SENT event must also be ignored
+
+    if index == 1 then
+        MOCK.RunTimers(0)
+        MOCK.Assert(#FindNPCs("black_wolf") == 7,
+            "убитый Fang восстанавливается в своей фиксированной точке, пока квест активен")
+    end
+end
 
 local wolfQuest = ply:GetCharacter().quests["wolves_of_elwynn"]
-MOCK.Assert(wolfQuest.status == "completed" and wolfQuest.progress[1] == 1 and
-    activeWolf.WO_NPCKillEventSent == true,
-    "Fang server death hook завершил квест ровно один раз: " .. tostring(wolfQuest.status))
-activeWolf:Remove()
+MOCK.Assert(wolfQuest.status == "completed" and wolfQuest.progress[1] == 7 and
+    lastWolf.WO_NPCKillEventSent == true and #FindNPCs("black_wolf") == 0,
+    "семь уникальных Fang завершают квест один раз, после чего группа удаляется")
 
-print("[scenario] first-level Fang quest / exact starter loadout / server death hook OK")
+-- Охотник выдаёт отдельное кабанье задание; группа появляется только тогда.
+ply:SetPos(hunter:GetPos())
+MOCK.TakeOutbox()
+hunter:Use(ply, ply)
+local boarQuest = ply:GetCharacter().quests["boar_hunt"]
+local activeBoars = FindNPCs("elwynn_boar")
+MOCK.Assert(boarQuest and boarQuest.status == "active" and #activeBoars == 7 and
+    #FindNPCs("black_wolf") == 0,
+    "принятие задания у hunter_dyrne создаёт только семь кабанов")
+for _, boar in ipairs(activeBoars) do
+    MOCK.Assert(boar:GetClass() == "wow_npc_2809" and
+        boar.WO_NPCLevel >= 1 and boar.WO_NPCLevel <= 5,
+        "каждая кабанья цель сохраняет точный wow_npc_2809 class и уровень 1–5")
+end
+MOCK.Assert(WO.Quests.Abandon(ply, "boar_hunt") == true and
+    #FindNPCs("elwynn_boar") == 0,
+    "отказ от кабаньего задания удаляет оставшуюся quest-linked группу")
+
+print("[scenario] quest-gated Fang/boar spawns / exact starter loadout / server death hook OK")
 
 ---------------------------------------------------------------------------
 -- 9. Выход

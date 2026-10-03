@@ -296,7 +296,9 @@ function WO.Equipment.Equip(ply, uid)
     local oldInstance = equipment:Get(slotId)
 
     if oldInstance then
-        local unequipOk, unequipReason = WO.Equipment.Unequip(ply, slotId)
+        local unequipOk, unequipReason = WO.Equipment.Unequip(ply, slotId, {
+            suppressInventorySync = true,
+        })
 
         if not unequipOk then
             instance.locked = nil
@@ -321,6 +323,7 @@ function WO.Equipment.Equip(ply, uid)
     WO.Visual.Apply(ply)
 
     Refresh(char, ply)
+    WO.Inventory.Sync(ply)
 
     WO.Notify(ply, "success", WO.Lang:Get("inventory.equip") .. ": " .. (def.name or instance.class))
 
@@ -340,7 +343,7 @@ end
     @param slotId string
     @return boolean success, string|nil reason
 ]]
-function WO.Equipment.Unequip(ply, slotId)
+function WO.Equipment.Unequip(ply, slotId, options)
     if not IsValid(ply) then return false, "invalid_player" end
 
     local char = ply:GetCharacter()
@@ -390,6 +393,10 @@ function WO.Equipment.Unequip(ply, slotId)
     WO.Visual.Apply(ply)
 
     Refresh(char, ply)
+
+    if not (istable(options) and options.suppressInventorySync == true) then
+        WO.Inventory.Sync(ply)
+    end
 
     local def = WO.Items.Get(instance.class)
 
@@ -484,6 +491,49 @@ local function EquipStartingEquipment(char, ply)
 end
 
 WO.Hook.Add("CharacterSelected", "equipment_starting", EquipStartingEquipment)
+
+--- Однократно переводит старый прямой starter SWEP в сохранённый инвентарный предмет.
+function WO.Equipment.MigrateStarterKnife(char, ply)
+    if not WO.Character.IsCharacter(char) or not IsValid(ply) or ply:GetCharacter() ~= char then
+        return false
+    end
+
+    local equipment = WO.Equipment.Get(char)
+    local container = WO.Inventory.GetContainer(char)
+
+    if not equipment or not container or equipment.starterKnifeMigrationApplied then
+        return false
+    end
+
+    local alreadyStored = container:CountItem("starter_knife") > 0
+
+    if not alreadyStored then
+        for _, instance in pairs(equipment.slots or {}) do
+            if instance and instance.class == "starter_knife" then
+                alreadyStored = true
+                break
+            end
+        end
+    end
+
+    if not alreadyStored then
+        local ok, reason = WO.Inventory.GiveItem(ply, "starter_knife", 1)
+
+        if not ok then
+            WO.Debug("Starter knife migration deferred for " .. char:GetFullName() ..
+                " (" .. tostring(reason) .. ")")
+            return false
+        end
+    end
+
+    equipment.starterKnifeMigrationApplied = true
+    WO.SaveQueue.MarkDirty(char)
+
+    return true
+end
+
+WO.Hook.Add("CharacterSelected", "equipment_starter_knife_migration",
+    WO.Equipment.MigrateStarterKnife)
 
 ---------------------------------------------------------------------------
 -- Сохранение / загрузка

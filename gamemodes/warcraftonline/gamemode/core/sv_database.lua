@@ -402,8 +402,50 @@ local function RegisterBaseMigrations()
         ]])
     end)
 
-    -- Будущие миграции:
-    -- WO.Database:RegisterMigration(2, function() ... end)
+    -- v2: явный флаг сохранённой позиции, чтобы новая/старая запись без
+    -- известной позиции использовала обычную spawn point, а не (0, 0, 0).
+    WO.Database:RegisterMigration(2, function()
+        local columns, err = driver.Query("PRAGMA table_info(wo_characters)")
+
+        if columns == false then
+            error(err or "could not inspect wo_characters columns")
+        end
+
+        local hasPositionSaved = false
+
+        for _, column in ipairs(columns or {}) do
+            if column.name == "position_saved" then
+                hasPositionSaved = true
+                break
+            end
+        end
+
+        local result
+
+        if not hasPositionSaved then
+            result, err = driver.Query(
+                "ALTER TABLE wo_characters ADD COLUMN position_saved INTEGER NOT NULL DEFAULT 0")
+
+            if result == false then
+                error(err or "could not add wo_characters.position_saved")
+            end
+        end
+
+        -- Переносим реальные позиции, уже сохранённые предыдущей версией.
+        -- Нулевой вектор был её значением по умолчанию для новых персонажей.
+        result, err = driver.Query([[
+            UPDATE wo_characters
+            SET position_saved = 1
+            WHERE map IS NOT NULL
+                AND (COALESCE(pos_x, 0) != 0 OR
+                     COALESCE(pos_y, 0) != 0 OR
+                     COALESCE(pos_z, 0) != 0)
+        ]])
+
+        if result == false then
+            error(err or "could not migrate saved character positions")
+        end
+    end)
 end
 
 --- Инициализирует БД: создаёт таблицы, применяет миграции.

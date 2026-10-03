@@ -47,10 +47,12 @@ MOCK.Assert(WO.CharacterUI ~= nil and WO.CharacterUI.OpenCreate ~= nil, "экр�
 MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
     "client загрузил плагины персонажа и HUD")
 local hudShouldDraw = hook.GetTable().HUDShouldDraw
+local hudDrawTargetID = hook.GetTable().HUDDrawTargetID
 MOCK.Assert(hudShouldDraw and isfunction(hudShouldDraw.wo_hud_hide) and
     hudShouldDraw.wo_hud_hide("CHudHealth") == nil and
-    hudShouldDraw.wo_hud_hide("CHudScoreboard") == nil,
-    "стандартный HUD не скрывается в лимбо до синхронизации персонажа")
+    hudShouldDraw.wo_hud_hide("CHudScoreboard") == nil and
+    hudDrawTargetID and hudDrawTargetID.wo_hud_hide_targetid() == nil,
+    "стандартный HUD и target ID не скрываются в лимбо до синхронизации персонажа")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы видны на клиенте")
 MOCK.Assert(WO.Models ~= nil and WO.Models.GetRace ~= nil, "каталог моделей виден на клиенте")
 MOCK.Assert(WO.Config.StartingWeaponClasses.hands == "drc_unarmed" and
@@ -60,9 +62,33 @@ MOCK.Assert(WO.Config.StartingWeaponClasses.hands == "drc_unarmed" and
     weapons.GetStored("tfa_cso_coldsteelblade") and
     weapons.GetStored("weapon_hpwr_stick"),
     "клиент видит точные классы стартовых SWEP из runtime registry")
-MOCK.Assert(not WO.Items.IsInventoryAllowed("starter_knife") and
+MOCK.Assert(WO.Items.IsInventoryAllowed("starter_knife") and
+    WO.Items.Get("starter_knife").weapon.class == "tfa_cso_coldsteelblade" and
     not WO.Items.IsInventoryAllowed("arcane_hands"),
-    "стартовые руки/нож не отображаются как инвентарные предметы")
+    "предмет ножа хранит точный SWEP-класс, а руки остаются loadout-only")
+
+local oneTextButton = WO.UI.Button(nil, "Один текст", function() end)
+local oneTextLabel = WO.UI.Label(nil, "Один текст")
+MOCK.Assert(oneTextButton:GetText() == "" and oneTextButton.woText == "Один текст" and
+    oneTextLabel:GetText() == "" and oneTextLabel.woText == "Один текст",
+    "WO_Button/WO_Label держат native label пустым и рисуют themed text один раз")
+
+local function PaintedOccurrences(panel)
+    MOCK.drawnTextValues = {}
+    panel:Paint(180, 32)
+
+    local count = 0
+
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        if text == "Один текст" then count = count + 1 end
+    end
+
+    return count
+end
+
+MOCK.Assert(PaintedOccurrences(oneTextButton) == 1 and
+    PaintedOccurrences(oneTextLabel) == 1,
+    "кастомные кнопка и метка рисуют видимый текст ровно один раз")
 
 print("[scenario] client load OK")
 
@@ -317,8 +343,28 @@ MOCK.NetDeliver({ name = "Character.Sync", args = { {
     customization = { skin = 0, bodygroups = {} },
 } } }, 8, nil)
 MOCK.Assert(hudShouldDraw.wo_hud_hide("CHudHealth") == false and
-    hudShouldDraw.wo_hud_hide("CHudScoreboard") == false,
-    "при активном синхронизированном персонаже стандартные элементы HUD скрыты")
+    hudShouldDraw.wo_hud_hide("CHudScoreboard") == false and
+    hudDrawTargetID.wo_hud_hide_targetid() == false,
+    "при активном персонаже скрыты stock HUD и native target ID")
+
+-- Клиентский NW2-флаг может запаздывать после respawn; при активном snapshot
+-- кастомный HUD всё равно должен рисоваться. Валюта в player frame не входит.
+LocalPlayer():SetNW2Bool("wo_inmenu", true)
+MOCK.drawnTextValues = {}
+local hudDrawsBefore = MOCK.drawTextCalls
+hook.Run("HUDPaint")
+MOCK.Assert(MOCK.drawTextCalls > hudDrawsBefore,
+    "HUD не пропадает из-за устаревшего wo_inmenu после respawn")
+local formattedMoney = WO.Currency.Format(1234)
+local hudShowsMoney = false
+for _, text in ipairs(MOCK.drawnTextValues) do
+    if string.find(text, formattedMoney, 1, true) then
+        hudShowsMoney = true
+        break
+    end
+end
+MOCK.Assert(not hudShowsMoney, "валюта не отображается в WoW-style HUD")
+LocalPlayer():SetNW2Bool("wo_inmenu", false)
 
 MOCK.Assert(scripted_ents.Get("wo_npc").RenderGroup == RENDERGROUP_BOTH,
     "NPC marker draw hook is enabled for both opaque and translucent passes")

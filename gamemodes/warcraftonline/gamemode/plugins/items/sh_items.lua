@@ -83,8 +83,16 @@ function WO.Items.IsInventoryAllowed(classOrDefinition)
     local starters = WO.Config.StartingWeaponClasses or {}
 
     if isstring(weaponClass) then
-        for _, blockedClass in pairs(starters) do
+        for starterKey, blockedClass in pairs(starters) do
             if weaponClass == blockedClass then
+                -- Only the explicit knife item may represent a starter SWEP.
+                -- Hands and the mage wand remain loadout-only, and no other
+                -- definition can smuggle a configured starter weapon into an inventory.
+                if starterKey == "knife" and def.id == "starter_knife" and
+                    def.allowStarterKnifeItem == true then
+                    return true
+                end
+
                 return false, "starter_weapon_not_item"
             end
         end

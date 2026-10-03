@@ -43,14 +43,24 @@ local function CharacterToRow(char)
     local player = char.player
     local pos = char.pos
     local ang = char.ang
+    local map = char.map
 
     if IsValid(player) then
         pos = player:GetPos()
         ang = player:EyeAngles()
+        map = game.GetMap()
     end
 
-    pos = pos or vector_origin
-    ang = ang or angle_zero
+    local hasPosition = isvector(pos)
+
+    if hasPosition then
+        ang = ang or angle_zero
+        map = map or game.GetMap()
+    else
+        pos = nil
+        ang = nil
+        map = nil
+    end
 
     return {
         id = char.id,
@@ -66,13 +76,14 @@ local function CharacterToRow(char)
         level = char.level or 1,
         experience = char.experience or 0,
         money = char.money or 0,
-        map = game.GetMap(),
-        pos_x = pos.x,
-        pos_y = pos.y,
-        pos_z = pos.z,
-        ang_p = ang.p,
-        ang_y = ang.y,
-        ang_r = ang.r,
+        map = map,
+        position_saved = hasPosition and 1 or 0,
+        pos_x = hasPosition and pos.x or nil,
+        pos_y = hasPosition and pos.y or nil,
+        pos_z = hasPosition and pos.z or nil,
+        ang_p = hasPosition and ang.p or nil,
+        ang_y = hasPosition and ang.y or nil,
+        ang_r = hasPosition and ang.r or nil,
         customization = util.TableToJSON(char.customization or {}),
         created_at = char.createdAt or WO.Util.Time(),
         last_played = WO.Util.Time(),
@@ -81,6 +92,7 @@ end
 
 local function RowToCharacter(row)
     local customization = util.JSONToTable(row.customization or "")
+    local positionSaved = tonumber(row.position_saved) == 1
 
     local data = {
         id = row.id,
@@ -96,9 +108,11 @@ local function RowToCharacter(row)
         level = tonumber(row.level) or 1,
         experience = tonumber(row.experience) or 0,
         money = tonumber(row.money) or 0,
-        map = row.map,
-        pos = Vector(tonumber(row.pos_x) or 0, tonumber(row.pos_y) or 0, tonumber(row.pos_z) or 0),
-        ang = Angle(tonumber(row.ang_p) or 0, tonumber(row.ang_y) or 0, tonumber(row.ang_r) or 0),
+        map = positionSaved and row.map or nil,
+        pos = positionSaved and Vector(tonumber(row.pos_x) or 0,
+            tonumber(row.pos_y) or 0, tonumber(row.pos_z) or 0) or nil,
+        ang = positionSaved and Angle(tonumber(row.ang_p) or 0,
+            tonumber(row.ang_y) or 0, tonumber(row.ang_r) or 0) or nil,
         customization = istable(customization) and customization or { skin = 0, bodygroups = {} },
         createdAt = tonumber(row.created_at) or WO.Util.Time(),
         lastPlayed = tonumber(row.last_played) or WO.Util.Time(),
@@ -214,8 +228,7 @@ function WO.Character.Create(ply, data)
 
     -- Полная персистентность сразу: инвентарь/экипировка/данные плагинов
     -- пишутся через CharacterSave — иначе Select→Load терял бы стартовые предметы.
-    WO.SaveQueue.MarkDirty(char)
-    WO.Character.Save(char)
+    WO.SaveQueue.SaveNow(char)
     WO.Hook.Run("CharacterCreated", char)
 
     return true, char
@@ -244,6 +257,24 @@ function WO.Character.Load(ply, charId)
 
     if not rows or not rows[1] then
         return false, "not_found"
+    end
+
+    -- Не загружаем устаревшую DB-версию, если предыдущая запись этого ID
+    -- ждёт retry после временной ошибки сохранения.
+    if WO.SaveQueue and isfunction(WO.SaveQueue.SavePendingByID) then
+        local pendingSaved, hadPending = WO.SaveQueue.SavePendingByID(charId)
+
+        if not pendingSaved then
+            return false, "database_error"
+        end
+
+        if hadPending then
+            rows = WO.Database:Fetch("SELECT * FROM wo_characters WHERE id = ? AND steamid = ?", charId, steamid)
+
+            if not rows or not rows[1] then
+                return false, "not_found"
+            end
+        end
     end
 
     local char = RowToCharacter(rows[1])
@@ -294,6 +325,18 @@ function WO.Character.Save(char)
 
     local row = CharacterToRow(char)
 
+    -- Keep an in-memory snapshot even if the database is temporarily
+    -- unavailable, so SaveQueue can retry after the player entity disconnects.
+    if row.position_saved == 1 then
+        char.pos = Vector(row.pos_x, row.pos_y, row.pos_z)
+        char.ang = Angle(row.ang_p, row.ang_y, row.ang_r)
+        char.map = row.map
+    else
+        char.pos = nil
+        char.ang = nil
+        char.map = nil
+    end
+
     local ok = WO.Database:Transaction(function()
         if not WO.Database:Update("wo_characters", {
             name = row.name,
@@ -307,6 +350,7 @@ function WO.Character.Save(char)
             experience = row.experience,
             money = row.money,
             map = row.map,
+            position_saved = row.position_saved,
             pos_x = row.pos_x,
             pos_y = row.pos_y,
             pos_z = row.pos_z,
@@ -350,6 +394,8 @@ function WO.Character.Unload(ply)
     ply:SetCharacter(nil)
 
     WO.Hook.Run("CharacterUnloaded", char, ply)
+    char.player = nil
+
     WO.Log("Character unloaded: " .. char:GetFullName())
 end
 
@@ -513,13 +559,18 @@ function WO.Character.ApplyToPlayer(ply)
     local pos = char.pos
     local ang = char.ang
 
-    if char.map and char.map == game.GetMap() and pos then
+    if char.map and char.map == game.GetMap() and isvector(pos) then
         ply:SetPos(pos)
     else
-        local spawnPos, spawnAng = WO.FindSpawnPoint()
+        local spawnPos, spawnAng = WO.FindSpawnPoint(ply)
 
-        ply:SetPos(spawnPos)
-        ang = spawnAng
+        if isvector(spawnPos) then
+            ply:SetPos(spawnPos)
+            ang = spawnAng
+        else
+            WO.Warn("No standard map spawn point found while applying character " .. tostring(char.id) ..
+                "; keeping the engine-selected player position")
+        end
     end
 
     if ang then

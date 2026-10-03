@@ -37,19 +37,47 @@ local function PrerequisitesDone(char, def)
     return true
 end
 
+local function IsQuestgiverInteractionValid(ply, npcDef, ent, questId)
+    if not IsValid(ply) or not ply:HasCharacter() or not istable(npcDef) or
+        not IsValid(ent) or ent:GetClass() ~= "wo_npc" or not isfunction(ent.GetNPCID) or
+        ent.npcDef ~= npcDef or not WO.NPCs or WO.NPCs.Get(ent:GetNPCID()) ~= npcDef or
+        not WO.Interaction or not WO.Interaction.CanInteract or
+        not WO.Interaction.GetRange or not WO.Interaction.CanInteract(ent, ply) or
+        ply:GetPos():Distance(ent:GetPos()) > WO.Interaction.GetRange(ent) then
+        return false
+    end
+
+    if questId then
+        local questDef = WO.Quests.Get(questId)
+
+        if not questDef or questDef.giver ~= npcDef.id then return false end
+
+        for _, offeredId in ipairs(npcDef.quests or {}) do
+            if offeredId == questId then return true end
+        end
+
+        return false
+    end
+
+    return true
+end
+
 ---------------------------------------------------------------------------
 -- Принятие / отказ / отслеживание
 ---------------------------------------------------------------------------
 
 --- Принимает квест (с проверкой уровня, требований и повторов).
-function WO.Quests.Accept(ply, questId)
+function WO.Quests.Accept(ply, questId, npcDef, ent)
     if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
 
-    local char = ply:GetCharacter()
     local def = WO.Quests.Get(questId)
 
     if not def then return false, "unknown_quest" end
+    if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId) then
+        return false, "invalid_giver"
+    end
 
+    local char = ply:GetCharacter()
     local state = WO.Quests.GetState(char, questId)
 
     if state then
@@ -78,6 +106,7 @@ function WO.Quests.Accept(ply, questId)
     WO.SaveQueue.MarkDirty(char)
     Sync(ply)
     SendEvent(ply, { type = "accepted", questId = questId, name = def.name })
+    WO.Hook.Run("QuestStateChanged", ply, questId, "active")
 
     WO.Log("Quest accepted: " .. questId .. " by " .. char:GetFullName())
 
@@ -103,6 +132,7 @@ function WO.Quests.Abandon(ply, questId)
     WO.SaveQueue.MarkDirty(char)
     Sync(ply)
     SendEvent(ply, { type = "abandoned", questId = questId })
+    WO.Hook.Run("QuestStateChanged", ply, questId, "abandoned")
 
     return true
 end
@@ -276,6 +306,7 @@ function WO.Quests.TryComplete(ply, questId)
         },
     })
 
+    WO.Hook.Run("QuestStateChanged", ply, questId, "completed")
     WO.Log("Quest completed: " .. questId .. " by " .. char:GetFullName())
 
     return true
@@ -321,26 +352,6 @@ end
 -- Предложение квеста из диалога
 ---------------------------------------------------------------------------
 
-local function IsQuestgiverInteractionValid(ply, npcDef, ent, questId)
-    if not IsValid(ply) or not ply:HasCharacter() or not istable(npcDef) or
-        not IsValid(ent) or ent:GetClass() ~= "wo_npc" or ent.npcDef ~= npcDef or
-        not WO.NPCs or WO.NPCs.Get(ent:GetNPCID()) ~= npcDef or
-        not WO.Interaction.CanInteract(ent, ply) or
-        ply:GetPos():Distance(ent:GetPos()) > WO.Interaction.GetRange(ent) then
-        return false
-    end
-
-    if questId then
-        for _, offeredId in ipairs(npcDef.quests or {}) do
-            if offeredId == questId then return true end
-        end
-
-        return false
-    end
-
-    return true
-end
-
 --- Действие "quest:<id>" в диалоге: принять/показать состояние.
 function WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
     if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId) then return false end
@@ -365,7 +376,7 @@ function WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
         return
     end
 
-    local ok, reason = WO.Quests.Accept(ply, questId)
+    local ok, reason = WO.Quests.Accept(ply, questId, npcDef, ent)
 
     if not ok then
         SendEvent(ply, {

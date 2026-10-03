@@ -10,18 +10,42 @@
 -- Спавн-точки
 ---------------------------------------------------------------------------
 
---- Находит безопасную стартовую позицию на текущей карте.
-function WO.FindSpawnPoint()
-    local spawns = ents.FindByClass("info_player_start")
+--- Возвращает обычную spawn-точку карты; никаких координат/центра от gamemode.
+function WO.FindSpawnPoint(ply)
+    local gamemode = GAMEMODE or GM
 
-    if #spawns > 0 then
-        local spawn = spawns[math.random(#spawns)]
+    if IsValid(ply) and gamemode and isfunction(gamemode.PlayerSelectSpawn) then
+        local ok, selected = pcall(gamemode.PlayerSelectSpawn, gamemode, ply)
 
-        return spawn:GetPos() + Vector(0, 0, 8), spawn:GetAngles()
+        if ok and IsValid(selected) then
+            return selected:GetPos() + Vector(0, 0, 8), selected:GetAngles()
+        end
     end
 
-    -- Фолбэк: центр карты
-    return Vector(0, 0, 128), Angle(0, 0, 0)
+    local spawnClasses = {
+        "info_player_start",
+        "info_player_deathmatch",
+        "info_player_combine",
+        "info_player_rebel",
+        "info_player_counterterrorist",
+        "info_player_terrorist",
+    }
+    local spawns, seen = {}, {}
+
+    for _, class in ipairs(spawnClasses) do
+        for _, spawn in ipairs(ents.FindByClass(class) or {}) do
+            if IsValid(spawn) and not seen[spawn] then
+                seen[spawn] = true
+                spawns[#spawns + 1] = spawn
+            end
+        end
+    end
+
+    if #spawns == 0 then return nil, nil end
+
+    local spawn = spawns[math.random(#spawns)]
+
+    return spawn:GetPos() + Vector(0, 0, 8), spawn:GetAngles()
 end
 
 ---------------------------------------------------------------------------
@@ -31,9 +55,13 @@ end
 local function PutInLimbo(ply)
     WO.Character.EnterLimbo(ply)
 
-    local pos = WO.FindSpawnPoint()
+    local pos = WO.FindSpawnPoint(ply)
 
-    ply:SetPos(pos)
+    if isvector(pos) then
+        ply:SetPos(pos)
+    else
+        WO.Warn("No standard map spawn point found; leaving limbo player at engine-selected position")
+    end
 end
 
 local function ReleaseFromLimbo(ply)
@@ -83,6 +111,47 @@ hook.Add("PlayerSpawn", "wo_player_spawn", function(ply)
 
     WO.Hook.Run("CharacterSpawned", char, ply)
 end)
+
+---------------------------------------------------------------------------
+-- Позиция персонажа: периодически помечаем её для autosave.
+---------------------------------------------------------------------------
+
+local function AngleDistance(a, b)
+    local delta = (tonumber(a) or 0) - (tonumber(b) or 0)
+    delta = math.abs(delta) % 360
+
+    return math.min(delta, 360 - delta)
+end
+
+local function StartPositionTracking()
+    timer.Create("wo_position_dirty_check", 15, 0, function()
+        for _, ply in ipairs(player.GetAll()) do
+            if IsValid(ply) and ply:HasCharacter() then
+                local char = ply:GetCharacter()
+                local pos = ply:GetPos()
+                local ang = ply:EyeAngles()
+                local savedPos = char.pos
+                local savedAng = char.ang
+                local moved = not isvector(savedPos) or
+                    savedPos:DistToSqr(pos) >= (64 * 64)
+                local turned = not savedAng or
+                    AngleDistance(savedAng.p, ang.p) >= 15 or
+                    AngleDistance(savedAng.y, ang.y) >= 15 or
+                    AngleDistance(savedAng.r, ang.r) >= 15
+                local map = game.GetMap()
+
+                if moved or turned or char.map ~= map then
+                    char.pos = Vector(pos.x, pos.y, pos.z)
+                    char.ang = Angle(ang.p, ang.y, ang.r)
+                    char.map = map
+                    WO.SaveQueue.MarkDirty(char)
+                end
+            end
+        end
+    end)
+end
+
+hook.Add("Initialize", "wo_position_tracking_init", StartPositionTracking)
 
 hook.Add("PlayerLoadout", "wo_player_loadout", function(ply)
     if not IsValid(ply) or not ply:HasCharacter() then

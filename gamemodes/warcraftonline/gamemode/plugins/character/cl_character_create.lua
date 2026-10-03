@@ -317,7 +317,7 @@ stepBuilders[3] = function(parent)
 
     slider.OnValueChanged = function(_, value)
         draft.age = math.floor(value)
-        label:SetText(WO.Lang:Get("character.age") .. ": " .. draft.age)
+        label:SetDisplayText(WO.Lang:Get("character.age") .. ": " .. draft.age)
     end
 end
 
@@ -407,7 +407,7 @@ stepBuilders[6] = function(parent, modelPanel)
     local function UpdateModelLabel()
         local models = WO.Races.GetModels(draft.race, draft.gender)
 
-        modelIndexLabel:SetText(draft.modelIndex .. " / " .. math.max(1, #models))
+        modelIndexLabel:SetDisplayText(draft.modelIndex .. " / " .. math.max(1, #models))
     end
 
     UpdateModelLabel()
@@ -557,7 +557,7 @@ stepBuilders[7] = function(parent)
         local class = draft.class and WO.Classes.Get(draft.class)
         local name = class and class.name or WO.Lang:Get("character.class_unselected")
 
-        selectedLabel:SetText(WO.Lang:Get("character.selected_class") .. ": " .. name)
+        selectedLabel:SetDisplayText(WO.Lang:Get("character.selected_class") .. ": " .. name)
     end
 
     UpdateSelectedClass()
@@ -664,7 +664,7 @@ stepBuilders[8] = function(parent)
     local confirmToggle
     confirmToggle = WO.UI.Button(parent, "", function()
         draft.confirmed = not draft.confirmed
-        confirmToggle:SetText((draft.confirmed and "☑ " or "☐ ") ..
+        confirmToggle:SetDisplayText((draft.confirmed and "☑ " or "☐ ") ..
             WO.Lang:Get("character.create_confirm_check"))
         confirmToggle:SetAccent(draft.confirmed)
 
@@ -675,7 +675,7 @@ stepBuilders[8] = function(parent)
     confirmToggle:Dock(TOP)
     confirmToggle:DockMargin(0, 12, 0, 0)
     confirmToggle:SetTall(38)
-    confirmToggle:SetText("☐ " .. WO.Lang:Get("character.create_confirm_check"))
+    confirmToggle:SetDisplayText("☐ " .. WO.Lang:Get("character.create_confirm_check"))
 end
 
 ---------------------------------------------------------------------------
@@ -701,10 +701,10 @@ local function BuildStep(parent, modelPanel)
 
     if IsValid(primaryButton) then
         if draft.step == 8 then
-            primaryButton:SetText(WO.Lang:Get("character.create_confirm_action"))
+            primaryButton:SetDisplayText(WO.Lang:Get("character.create_confirm_action"))
             primaryButton:SetEnabled(draft.confirmed and not submitPending)
         else
-            primaryButton:SetText(WO.Lang:Get("ui.next"))
+            primaryButton:SetDisplayText(WO.Lang:Get("ui.next"))
             primaryButton:SetEnabled(true)
         end
     end

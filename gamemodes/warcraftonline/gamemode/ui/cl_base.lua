@@ -53,11 +53,19 @@ AccessorFunc(BUTTON, "accent", "Accent", FORCE_BOOL)
 AccessorFunc(BUTTON, "font", "Font")
 
 function BUTTON:Init()
+    -- DButton may render its native label in addition to a custom Paint.
+    -- Keep that label empty and draw exactly one themed text layer ourselves.
     self:SetText("")
+    self.woText = ""
     self:SetTall(32)
     self.hovered = false
     self.accent = false
     self.font = "WO.Body"
+end
+
+function BUTTON:SetDisplayText(text)
+    self.woText = tostring(text or "")
+    self:SetText("")
 end
 
 function BUTTON:OnCursorEntered()
@@ -101,7 +109,7 @@ function BUTTON:Paint(w, h)
         textColor = WO.UI.Colors.textDark
     end
 
-    WO.UI.DrawTextFit(self:GetText(), self.font or "WO.Body", w / 2, h / 2,
+    WO.UI.DrawTextFit(self.woText or "", self.font or "WO.Body", w / 2, h / 2,
         textColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, h - 6)
 end
 
@@ -117,7 +125,9 @@ AccessorFunc(LABEL, "font", "Font")
 AccessorFunc(LABEL, "col", "TextColor2")
 
 function LABEL:Init()
+    -- DLabel's native label is disabled so wrapped text is drawn only once.
     self:SetText("")
+    self.woText = ""
     self.font = "WO.Body"
     self.col = WO.UI.Colors.text
     self.woAlignment = 4 -- middle-left, matching the usual DLabel default
@@ -216,7 +226,7 @@ function LABEL:Paint(w, h)
     local _, lineHeight = surface.GetTextSize("Ag")
     lineHeight = math.max(1, lineHeight)
 
-    local lines = WrapLabelText(self:GetText() or "", font, w - padding * 2)
+    local lines = WrapLabelText(self.woText or "", font, w - padding * 2)
     local blockHeight = #lines * lineHeight
     local alignment = math.Clamp(math.floor(tonumber(self.woAlignment) or 4), 1, 9)
     local horizontal = (alignment - 1) % 3
@@ -251,6 +261,11 @@ function LABEL:Paint(w, h)
             textAlign, TEXT_ALIGN_TOP)
         y = y + lineHeight
     end
+end
+
+function LABEL:SetDisplayText(text)
+    self.woText = tostring(text or "")
+    self:SetText("")
 end
 
 function LABEL:SetTextColor(col)
@@ -292,7 +307,7 @@ function WINDOW:Init()
     self:ShowCloseButton(false)
 
     self.closeButton = vgui.Create("WO_Button", self)
-    self.closeButton:SetText("✕")
+    self.closeButton:SetDisplayText("✕")
     self.closeButton:SetSize(30, 28)
     self.closeButton.DoClick = function()
         if WO.Sound and WO.Sound.PlayLocal then
@@ -349,7 +364,7 @@ end
 function WO.UI.Button(parent, text, onClick)
     local button = vgui.Create("WO_Button", parent)
 
-    button:SetText(text or "")
+    button:SetDisplayText(text or "")
 
     if isfunction(onClick) then
         button.DoClick = function()
@@ -368,7 +383,7 @@ end
 function WO.UI.Label(parent, text, font, col)
     local label = vgui.Create("WO_Label", parent)
 
-    label:SetText(text or "")
+    label:SetDisplayText(text or "")
 
     if font then
         label:SetFont(font)

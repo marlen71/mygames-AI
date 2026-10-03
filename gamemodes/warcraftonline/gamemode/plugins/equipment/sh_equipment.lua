@@ -36,6 +36,7 @@ function WO.Equipment.New()
     return setmetatable({
         slots = {},
         startingEquipmentApplied = false,
+        starterKnifeMigrationApplied = false,
     }, EQUIPMENT)
 end
 
@@ -93,6 +94,7 @@ end
 function EQUIPMENT:Serialize()
     local out = {
         __startingEquipmentApplied = self.startingEquipmentApplied == true,
+        __starterKnifeMigrationApplied = self.starterKnifeMigrationApplied == true,
     }
 
     for slotId, instance in pairs(self.slots) do
@@ -111,6 +113,7 @@ function WO.Equipment.Deserialize(data)
     if not istable(data) then return equipment end
 
     equipment.startingEquipmentApplied = data.__startingEquipmentApplied == true
+    equipment.starterKnifeMigrationApplied = data.__starterKnifeMigrationApplied == true
 
     for slotId, itemData in pairs(data) do
         if equipment:HasSlot(slotId) then

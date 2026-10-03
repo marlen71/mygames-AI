@@ -368,6 +368,9 @@ function SLOT:Paint(w, h)
             -- DModelPanel иконка
             self.itemIcon:SetPos(2, 2)
             self.itemIcon:SetSize(w - 4, h - 4)
+        elseif isstring(def.iconText) and def.iconText ~= "" then
+            WO.UI.DrawTextFit(def.iconText, "WO.Subtitle", w / 2, h / 2,
+                rarityColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 8, h - 8)
         end
     end
 end

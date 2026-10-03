@@ -1,16 +1,36 @@
 --[[
-    Legacy tombstone for old saves that used starter_knife as an item.
-    New starter weapons are granted directly by WO.Loadout and never enter a
-    container or equipment slot. Deserialize/AddItem safely discard old records.
+    Warcraft Online — стартовый нож.
+    Хранится как обычный инвентарный экземпляр; точный SWEP выдаётся только
+    после экипировки предмета в main_hand.
 ]]
+
 WO.Items.Register({
     id = "starter_knife",
-    name = "Legacy starter knife (not an item)",
+    name = "Стартовый нож",
     type = "weapon",
     category = "dagger",
-    noInventory = true,
-    legacyStarter = true,
-    description = "This legacy inventory definition is disabled; the class loadout grants its SWEP.",
+    iconText = "Н",
+    weight = 1,
+    size = { w = 1, h = 2 },
     stackable = false,
+    rarity = "common",
+    durability = 100,
+    description = "Лёгкий нож. Экипируйте его, чтобы использовать в бою.",
+
+    -- Узкое исключение: только этот предмет представляет нож из starter
+    -- config. Руки и магический посох по-прежнему не являются предметами.
+    allowStarterKnifeItem = true,
+
+    weapon = {
+        class = "tfa_cso_coldsteelblade",
+    },
+
+    equipment = {
+        slot = "main_hand",
+    },
+
     stats = {},
+    requirements = {
+        level = 1,
+    },
 })

@@ -25,6 +25,7 @@ WO.Classes.Register({
 
     startingItems = {
         { class = "leather_vest", amount = 1 },
+        { class = "starter_knife", amount = 1 },
         { class = "bread", amount = 3 },
     },
 

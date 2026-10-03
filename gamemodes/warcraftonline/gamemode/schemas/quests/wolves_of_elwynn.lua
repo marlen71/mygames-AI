@@ -1,18 +1,18 @@
 --[[
-    Warcraft Online — стартовый тестовый квест.
-    Цикл: принять задание у маршала → победить волка уровня 1 → получить награду.
+    Warcraft Online — охота на стаю волков.
+    Стая появляется только после принятия задания у Охотника.
 ]]
 
 WO.Quests.Register({
     id = "wolves_of_elwynn",
     name = "Первая охота",
-    description = "Победите одного волка первого уровня у дороги и получите награду.",
+    description = "Победите семерых волков у дороги и получите награду.",
     level = 1,
-    giver = "marshal_dughal",
+    giver = "hunter_dyrne",
 
     steps = {
-        { type = "kill", target = "black_wolf", level = 1, amount = 1,
-            text = "Победите волка первого уровня" },
+        { type = "kill", target = "black_wolf", amount = 7,
+            text = "Победите волков" },
     },
 
     rewards = {
