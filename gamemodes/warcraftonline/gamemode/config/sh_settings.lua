@@ -97,49 +97,54 @@ WO.Config.ArcaneHands = {
 }
 
 ---------------------------------------------------------------------------
--- Spawn-точки тестового хаба из переданного набора координат.
--- Привязка координат к gm_construct подтверждена пользователем 2026-10-04.
--- На других картах NPC не перемещаются в эти координаты и ждут своих точек.
+-- Map-specific NPC spawn points.
+-- World/NPC coordinates were supplied for rp_lordaeron; on other maps these
+-- NPCs remain unplaced rather than being moved to guessed coordinates.
 ---------------------------------------------------------------------------
+
+WO.Config.WorldMap = "rp_lordaeron"
 
 WO.Config.NPCSpawnPoints = {
     hunter_dyrne = {
-        { map = "gm_construct", pos = Vector(1572.5, -416.2, -144), ang = Angle(0, 180, 0) },
+        { map = WO.Config.WorldMap, pos = Vector(-5812.6, 7972.9, -1572), ang = Angle(0, 4, 0) },
     },
     marshal_dughal = {
-        { map = "gm_construct", pos = Vector(1341.2, -654.8, -144), ang = Angle(0, 0, 0) },
+        { map = WO.Config.WorldMap, pos = Vector(-8678.3, 8009.3, -1489), ang = Angle(1, 46, 0) },
     },
     trader_marla = {
-        { map = "gm_construct", pos = Vector(1089.1, -352.7, -144), ang = Angle(0, 90, 0) },
+        { map = WO.Config.WorldMap, pos = Vector(-7083.1, 8847.6, -1535.6), ang = Angle(2, -90, 0) },
     },
-    -- The request did not include a mount vendor coordinate. This is an explicit,
-    -- provisional point in the same confirmed gm_construct hub; check its floor/clearance live.
     mount_merchant = {
-        { map = "gm_construct", pos = Vector(850, -520, -144), ang = Angle(0, 0, 0) },
+        { map = WO.Config.WorldMap, pos = Vector(-7316.9, 8827.6, -1572), ang = Angle(1, -65, 0) },
     },
-    -- Пробная явная точка Малигоса рядом с торговой зоной; геометрию проверить в live GMod.
     malygos_scroll_vendor = {
-        { map = "gm_construct", pos = Vector(1110, -560, -144), ang = Angle(0, 180, 0) },
+        { map = WO.Config.WorldMap, pos = Vector(-6746.5, 8830.4, -1572), ang = Angle(0, -45, 0) },
     },
     black_wolf = {
-        { map = "gm_construct", spawnKey = "wolf_01", questId = "wolves_of_elwynn",
-            pos = Vector(-4887.5, -3415.5, 250), ang = Angle(0, 0, 0), level = 1 },
-        { map = "gm_construct", spawnKey = "wolf_02", questId = "wolves_of_elwynn",
-            pos = Vector(-4415, -3048.3, 250), ang = Angle(0, 0, 0), level = 2 },
-        { map = "gm_construct", spawnKey = "wolf_03", questId = "wolves_of_elwynn",
-            pos = Vector(-4057.9, -2683.4, 250), ang = Angle(0, 0, 0), level = 3 },
-        { map = "gm_construct", spawnKey = "wolf_04", questId = "wolves_of_elwynn",
-            pos = Vector(-4878.6, -2474.7, 250), ang = Angle(0, 0, 0), level = 4 },
+        { map = WO.Config.WorldMap, spawnKey = "wolf_01", questId = "wolves_of_elwynn",
+            pos = Vector(-2674.5, -10887.5, -3072), ang = Angle(0, 0, 0), level = 1 },
+        { map = WO.Config.WorldMap, spawnKey = "wolf_02", questId = "wolves_of_elwynn",
+            pos = Vector(-3131.4, -10645.7, -3072), ang = Angle(0, 0, 0), level = 2 },
+        { map = WO.Config.WorldMap, spawnKey = "wolf_03", questId = "wolves_of_elwynn",
+            pos = Vector(-2746.8, -10087.1, -3072), ang = Angle(0, 0, 0), level = 3 },
+        { map = WO.Config.WorldMap, spawnKey = "wolf_04", questId = "wolves_of_elwynn",
+            pos = Vector(-2182.1, -11247.3, -3072), ang = Angle(0, 0, 0), level = 4 },
     },
     elwynn_boar = {
-        { map = "gm_construct", spawnKey = "boar_01", questId = "boar_hunt",
-            pos = Vector(1115.8, 6149.4, -32), ang = Angle(0, 0, 0), level = 1 },
-        { map = "gm_construct", spawnKey = "boar_02", questId = "boar_hunt",
-            pos = Vector(1593.3, 6078.2, -32), ang = Angle(0, 0, 0), level = 2 },
-        { map = "gm_construct", spawnKey = "boar_03", questId = "boar_hunt",
-            pos = Vector(1176.7, 5825.2, -32), ang = Angle(0, 0, 0), level = 3 },
-        { map = "gm_construct", spawnKey = "boar_04", questId = "boar_hunt",
-            pos = Vector(1586.2, 5735, -32), ang = Angle(0, 0, 0), level = 4 },
+        -- Persistent ambient world mobs are available to every character; quests
+        -- count their deaths without gating the NPCs on a character's quest state.
+        { map = WO.Config.WorldMap, spawnKey = "boar_01", questId = "boar_hunt",
+            ambient = true, respawnDelay = 30,
+            pos = Vector(-5344.3, 1652.2, -3071.8), ang = Angle(0, 0, 0), level = 1 },
+        { map = WO.Config.WorldMap, spawnKey = "boar_02", questId = "boar_hunt",
+            ambient = true, respawnDelay = 30,
+            pos = Vector(-5158.9, 1170.1, -3072), ang = Angle(0, 0, 0), level = 2 },
+        { map = WO.Config.WorldMap, spawnKey = "boar_03", questId = "boar_hunt",
+            ambient = true, respawnDelay = 30,
+            pos = Vector(-4937.5, 833.7, -3072), ang = Angle(0, 0, 0), level = 3 },
+        { map = WO.Config.WorldMap, spawnKey = "boar_04", questId = "boar_hunt",
+            ambient = true, respawnDelay = 30,
+            pos = Vector(-4810.9, 1435.8, -3071.5), ang = Angle(0, 0, 0), level = 4 },
     },
 }
 

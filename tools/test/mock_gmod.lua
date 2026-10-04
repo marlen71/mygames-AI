@@ -90,6 +90,9 @@ KEY_C = 67
 KEY_F1 = 98
 KEY_E = 69
 HITGROUP_GENERIC = 0
+DMG_BURN = 8
+DMG_FALL = 32
+DMG_SHOCK = 256
 SIMPLE_USE = 3
 MOVETYPE_NONE = 0
 MOVETYPE_WALK = 2
@@ -1601,6 +1604,10 @@ function surface.DrawOutlinedRect() end
 function surface.DrawTexturedRect() end
 function surface.DrawTexturedRectUV() end
 function surface.DrawTexturedRectRotated() end
+MOCK.surfacePolyCalls = MOCK.surfacePolyCalls or 0
+function surface.DrawPoly()
+    MOCK.surfacePolyCalls = MOCK.surfacePolyCalls + 1
+end
 MOCK.surfaceLineCalls = MOCK.surfaceLineCalls or 0
 function surface.DrawLine()
     MOCK.surfaceLineCalls = MOCK.surfaceLineCalls + 1

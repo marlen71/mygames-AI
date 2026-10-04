@@ -63,6 +63,7 @@ function BUTTON:Init()
     self.font = "WO.Body"
     self.woBusy = false
     self.woDispatching = false
+    self.woAction = nil
 
     -- Explicit input setup keeps the custom control clickable after parent frames
     -- rebuild/dock their children, instead of relying on DButton defaults.
@@ -74,6 +75,14 @@ end
 function BUTTON:SetDisplayText(text)
     self.woText = tostring(text or "")
     self:SetText("")
+end
+
+-- Keep the action on the registered control rather than replacing DoClick on
+-- each VGUI instance. Derma always enters this class method, including mouse,
+-- keyboard, and programmatic clicks.
+function BUTTON:SetAction(callback, clickSound)
+    self.woAction = isfunction(callback) and callback or nil
+    self.woClickSound = isstring(clickSound) and clickSound or "ui_click"
 end
 
 function BUTTON:SetBusy(busy, pendingText)
@@ -118,14 +127,14 @@ local function PlayButtonSound(soundId)
     end
 end
 
-local function DispatchButtonClick(button, callback)
+local function DispatchButtonClick(button, callback, clickSound)
     if not IsValid(button) or button.woDispatching or
         (isfunction(button.IsEnabled) and not button:IsEnabled()) then
         return false
     end
 
     button.woDispatching = true
-    PlayButtonSound("ui_click")
+    PlayButtonSound(clickSound or "ui_click")
 
     local ok, result = pcall(callback, button)
 
@@ -147,7 +156,11 @@ local function DispatchButtonClick(button, callback)
 end
 
 function BUTTON:DoClick()
-    PlayButtonSound("ui_click")
+    if isfunction(self.woAction) then
+        return DispatchButtonClick(self, self.woAction, self.woClickSound)
+    end
+
+    PlayButtonSound(self.woClickSound or "ui_click")
 end
 
 function BUTTON:Paint(w, h)
@@ -373,13 +386,9 @@ function WINDOW:Init()
     self.closeButton = vgui.Create("WO_Button", self)
     self.closeButton:SetDisplayText("✕")
     self.closeButton:SetSize(30, 28)
-    self.closeButton.DoClick = function()
-        if WO.Sound and WO.Sound.PlayLocal then
-            WO.Sound.PlayLocal("ui_close")
-        end
-
+    self.closeButton:SetAction(function()
         self:Close()
-    end
+    end, "ui_close")
 end
 
 function WINDOW:PerformLayout(w, h)
@@ -430,11 +439,7 @@ function WO.UI.Button(parent, text, onClick)
 
     button:SetDisplayText(text or "")
 
-    if isfunction(onClick) then
-        button.DoClick = function()
-            return DispatchButtonClick(button, onClick)
-        end
-    end
+    button:SetAction(onClick)
 
     return button
 end

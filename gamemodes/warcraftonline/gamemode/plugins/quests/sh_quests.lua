@@ -29,6 +29,9 @@
         "kill"    — убить N целей (target = id NPC или "player")
         "collect" — иметь N предметов класса class (автопроверка по инвентарю)
         "talk"    — поговорить с NPC target (действие talk:<npcId> в диалоге)
+
+    Навигация задаётся в шаге через waypoint = { map, pos, radius } или waypointNPC.
+    Kill/talk-цели без явного waypoint автоматически используют spawn-точки NPC.
 ]]
 
 WO.Quests = WO.Quests or {}
@@ -56,6 +59,7 @@ function WO.Quests.Register(def)
     def.rewards = def.rewards or {}
     def.prerequisites = def.prerequisites or {}
     def.level = def.level or 1
+    def.repeatInterval = math.max(0, math.floor(tonumber(def.repeatInterval) or 0))
 
     if #def.steps == 0 then
         WO.Error("WO.Quests.Register: quest '" .. def.id .. "' has no steps")

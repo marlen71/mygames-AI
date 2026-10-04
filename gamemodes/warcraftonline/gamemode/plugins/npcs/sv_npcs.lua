@@ -3,6 +3,8 @@
 ]]
 
 WO.NPCs.SuppressedSpawnKeys = WO.NPCs.SuppressedSpawnKeys or {}
+WO.NPCs.SpawnGeneration = WO.NPCs.SpawnGeneration or 0
+WO.NPCs.PendingSpawnRespawns = WO.NPCs.PendingSpawnRespawns or {}
 
 local function SpawnLevel(def, spawn)
     local level = WO.NPCs.ClampLevel(def, spawn and spawn.level or def.level)
@@ -125,8 +127,10 @@ function WO.NPCs.SpawnOne(def, pos, ang, spawn, spawnIndex)
         ent.WO_NPCLevelStats = stats
     end
 
-    ent.WO_NPCSpawnQuestId = spawn and spawn.questId or nil
+    ent.WO_NPCSpawnQuestId = spawn and not spawn.ambient and spawn.questId or nil
     ent.WO_NPCSpawnKey = SpawnKey(def, spawn, spawnIndex)
+    ent.WO_NPCSpawn = spawn
+    ent.WO_NPCSpawnIndex = spawnIndex
 
     WO.NPCs.Spawned[#WO.NPCs.Spawned + 1] = ent
 
@@ -170,6 +174,9 @@ end
 --- Спавнит NPC только по явным координатам/map-anchor из схемы или конфига.
 -- Пустой список или отсутствующий anchor означает «не размещать».
 function WO.NPCs.SpawnAll()
+    WO.NPCs.SpawnGeneration = WO.NPCs.SpawnGeneration + 1
+    WO.NPCs.PendingSpawnRespawns = {}
+
     -- Убираем остатки (например, после cleanup).
     for _, ent in ipairs(WO.NPCs.Spawned) do
         if IsValid(ent) then
@@ -188,7 +195,8 @@ function WO.NPCs.SpawnAll()
 
         for index, spawn in ipairs(def.spawns or {}) do
             if not spawn.map or spawn.map == map then
-                if spawn.questId and not WO.NPCs.HasActiveQuest(spawn.questId) then
+                if spawn.questId and not spawn.ambient and
+                    not WO.NPCs.HasActiveQuest(spawn.questId) then
                     gatedByQuest = true
                 else
                     local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
@@ -259,7 +267,8 @@ function WO.NPCs.SyncQuestSpawns(questId)
 
     for _, def in pairs(WO.NPCs.List) do
         for index, spawn in ipairs(def.spawns or {}) do
-            if spawn.questId == questId and (not spawn.map or spawn.map == map) then
+            if spawn.questId == questId and not spawn.ambient and
+                (not spawn.map or spawn.map == map) then
                 local key = SpawnKey(def, spawn, index)
 
                 if not IsValid(existing[key]) and
@@ -277,6 +286,56 @@ function WO.NPCs.SyncQuestSpawns(questId)
             end
         end
     end
+end
+
+local function HasLivingSpawnEntity(spawnKey)
+    for index = #WO.NPCs.Spawned, 1, -1 do
+        local ent = WO.NPCs.Spawned[index]
+
+        if not IsValid(ent) then
+            table.remove(WO.NPCs.Spawned, index)
+        elseif ent.WO_NPCSpawnKey == spawnKey then
+            local dead = isfunction(ent.Health) and ent:Health() <= 0
+
+            if not dead then return true end
+            table.remove(WO.NPCs.Spawned, index)
+        end
+    end
+
+    return false
+end
+
+local function ScheduleSpawnRespawn(def, spawn, spawnIndex)
+    local delay = tonumber(spawn and spawn.respawnDelay) or 0
+
+    if delay <= 0 or not istable(def) or not istable(spawn) then return end
+
+    local spawnKey = SpawnKey(def, spawn, spawnIndex)
+    local generation = WO.NPCs.SpawnGeneration
+
+    if WO.NPCs.PendingSpawnRespawns[spawnKey] == generation then return end
+
+    WO.NPCs.PendingSpawnRespawns[spawnKey] = generation
+
+    timer.Simple(delay, function()
+        if WO.NPCs.PendingSpawnRespawns[spawnKey] ~= generation then return end
+
+        WO.NPCs.PendingSpawnRespawns[spawnKey] = nil
+
+        if WO.NPCs.SpawnGeneration ~= generation or
+            (spawn.map and spawn.map ~= game.GetMap()) or
+            (spawn.questId and not spawn.ambient and
+                not WO.NPCs.HasActiveQuest(spawn.questId)) or
+            HasLivingSpawnEntity(spawnKey) then
+            return
+        end
+
+        local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
+
+        if pos then
+            WO.NPCs.SpawnOne(def, pos, ang, spawn, spawnIndex)
+        end
+    end)
 end
 
 hook.Add("InitPostEntity", "wo_npcs_spawn", function()
@@ -307,16 +366,26 @@ WO.Hook.Add("CharacterUnloaded", "npcs_quest_spawn_unload", function(char)
     end
 end)
 
--- Убийство владельцем активного квеста не заменяется. Убийства посторонним
--- игроком или NPC восстанавливают точку, чтобы не лишить участника цели.
+-- Quest-linked spawns are protected from immediate replacement when their
+-- participant kills them. Ambient world spawns use their data-driven respawnDelay
+-- and are independent of any character's quest state.
 WO.Hook.Add("NPCDeath", "npcs_quest_spawn_replenish", function(npcDef, ent, attacker)
     local questIds = {}
+    local spawn = IsValid(ent) and ent.WO_NPCSpawn or nil
 
-    if IsValid(ent) and ent.WO_NPCSpawnQuestId then
-        questIds[ent.WO_NPCSpawnQuestId] = true
+    if spawn and spawn.respawnDelay then
+        ScheduleSpawnRespawn(npcDef, spawn, ent.WO_NPCSpawnIndex)
+    end
+
+    if IsValid(ent) and spawn then
+        if ent.WO_NPCSpawnQuestId then
+            questIds[ent.WO_NPCSpawnQuestId] = true
+        end
     else
-        for _, spawn in ipairs(npcDef and npcDef.spawns or {}) do
-            if spawn.questId then questIds[spawn.questId] = true end
+        for _, candidate in ipairs(npcDef and npcDef.spawns or {}) do
+            if candidate.questId and not candidate.ambient then
+                questIds[candidate.questId] = true
+            end
         end
     end
 

@@ -12,7 +12,7 @@ WO.NPCs.Register({
     scale = 1,
     spawns = WO.Config.NPCSpawnPoints.trader_marla or {},
     dialogue = "trader_marla",
-    quests = { "meet_the_trader" },
+    quests = {}, -- торговка не выдаёт задания; отправляет к охотнику и маршалу
     vendor = {
         stock = {
             { class = "bread", price = 4, amount = 20 },

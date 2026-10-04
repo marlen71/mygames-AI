@@ -14,6 +14,161 @@ local function GetStateSnapshot()
 end
 
 ---------------------------------------------------------------------------
+-- Автоматическая метка маршрута для активного задания
+---------------------------------------------------------------------------
+
+local dismissedWaypoints = {}
+
+local function GetNPCSpawnPositions(npcId, map)
+    local npcDef = WO.NPCs and WO.NPCs.Get and WO.NPCs.Get(npcId)
+    local positions = {}
+
+    for _, spawn in ipairs(npcDef and npcDef.spawns or {}) do
+        if (not spawn.map or spawn.map == map) and isvector(spawn.pos) then
+            positions[#positions + 1] = spawn.pos
+        end
+    end
+
+    return positions
+end
+
+local function ResolveNPCWaypoint(npcId, map, spawnIndex)
+    local positions = GetNPCSpawnPositions(npcId, map)
+    if #positions == 0 then return nil end
+
+    if spawnIndex then
+        local index = math.Clamp(math.floor(tonumber(spawnIndex) or 1), 1, #positions)
+        return positions[index]
+    end
+
+    return positions[1]
+end
+
+local function ResolveStepWaypoint(step, state, stepIndex, map)
+    local explicit = step.waypoint
+
+    if istable(explicit) then
+        if (not explicit.map or explicit.map == map) and isvector(explicit.pos) then
+            return explicit.pos, explicit.radius
+        end
+
+        return nil
+    end
+
+    if isstring(step.waypointNPC) then
+        return ResolveNPCWaypoint(step.waypointNPC, map), step.waypointRadius
+    end
+
+    if step.type == "talk" and isstring(step.target) then
+        return ResolveNPCWaypoint(step.target, map), step.waypointRadius
+    end
+
+    if step.type == "kill" and isstring(step.target) then
+        local progress = tonumber((state.progress or {})[stepIndex]) or 0
+        return ResolveNPCWaypoint(step.target, map, progress + 1), step.waypointRadius
+    end
+
+    return nil
+end
+
+local function BuildWaypoint(questId, def, state, step, stepIndex, position, radius, turnIn)
+    local progress = tonumber((state.progress or {})[stepIndex]) or 0
+    local acceptedAt = tostring(state.acceptedAt or "")
+    local char = WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()
+    local characterId = tostring(char and char.id or "")
+    local key = characterId .. ":" .. tostring(questId) .. ":" .. acceptedAt
+    key = key .. (turnIn and ":turnin" or
+        (":" .. tostring(stepIndex) .. ":" .. tostring(progress)))
+    local text = step and (step.text or step.target or step.class) or nil
+    local npcId = turnIn and (def.turnInGiver or def.giver) or nil
+    local npcDef = npcId and WO.NPCs and WO.NPCs.Get and WO.NPCs.Get(npcId)
+
+    if turnIn then
+        text = WO.Lang:Get("quest.return_to", npcDef and npcDef.name or npcId or "")
+    end
+
+    return {
+        key = key,
+        questId = questId,
+        questName = def.name or questId,
+        text = text or def.description or def.name or questId,
+        position = position,
+        radius = math.max(1, tonumber(radius) or 180),
+        turnIn = turnIn == true,
+    }
+end
+
+--- Returns the next tracked objective/turn-in destination on the current map.
+--- Reaching its radius dismisses that marker until the objective progress changes.
+function WO.Quests.GetTrackedWaypoint()
+    local ply = LocalPlayer()
+    if not IsValid(ply) or not isfunction(ply.GetPos) then return nil end
+
+    local playerPosition = ply:GetPos()
+    local map = game.GetMap()
+    local states = GetStateSnapshot()
+    local questIds = {}
+
+    for questId in pairs(states or {}) do
+        questIds[#questIds + 1] = questId
+    end
+
+    table.sort(questIds, function(a, b) return tostring(a) < tostring(b) end)
+
+    for _, questId in ipairs(questIds) do
+        local state = states[questId]
+        local def = WO.Quests.Get(questId)
+
+        if def and state and state.status == "active" and state.tracked ~= false then
+            local allStepsDone = true
+            local candidate
+
+            for stepIndex, step in ipairs(def.steps or {}) do
+                local need = math.max(1, tonumber(step.amount) or 1)
+                local progress = math.max(0, tonumber((state.progress or {})[stepIndex]) or 0)
+
+                if progress < need then
+                    allStepsDone = false
+                    local position, radius = ResolveStepWaypoint(step, state, stepIndex, map)
+
+                    if isvector(position) then
+                        candidate = BuildWaypoint(questId, def, state, step,
+                            stepIndex, position, radius, false)
+                        break
+                    end
+                end
+            end
+
+            if not candidate and allStepsDone and def.turnInRequired == true then
+                local npcId = def.turnInGiver or def.giver
+                local position = ResolveNPCWaypoint(npcId, map)
+
+                if isvector(position) then
+                    candidate = BuildWaypoint(questId, def, state, nil,
+                        0, position, def.turnInWaypointRadius, true)
+                end
+            end
+
+            if candidate then
+                local key = candidate.key
+                local distanceSquared = playerPosition:DistToSqr(candidate.position)
+                local radiusSquared = candidate.radius * candidate.radius
+
+                if distanceSquared <= radiusSquared then
+                    dismissedWaypoints[key] = true
+                end
+
+                if not dismissedWaypoints[key] then
+                    return candidate
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+---------------------------------------------------------------------------
 -- Трекер HUD (используется hud-плагином)
 ---------------------------------------------------------------------------
 
@@ -315,4 +470,5 @@ end
 WO.Hook.Add("CharacterMenuOpening", "quest_ui_close", function()
     CloseLog()
     WO.Quests.LocalStates = {}
+    dismissedWaypoints = {}
 end)

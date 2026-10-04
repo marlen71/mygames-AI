@@ -23,6 +23,7 @@ WO.Admin.Permissions = {
     ["quest.complete"] = true,
     ["teleport"] = true,
     ["debug"] = true,
+    ["movement.noclip"] = true,
 }
 
 -- Публичные SAM permission IDs намеренно стабильны: их можно выдавать/снимать
@@ -35,6 +36,7 @@ WO.Admin.SAMPermissionNames = {
     ["quest.complete"] = "wo_quest_complete",
     ["teleport"] = "wo_teleport",
     ["debug"] = "wo_debug",
+    ["movement.noclip"] = "wo_noclip",
 }
 
 WO.Admin.SAMPermissionDescriptions = {
@@ -45,6 +47,7 @@ WO.Admin.SAMPermissionDescriptions = {
     ["quest.complete"] = "Warcraft Online: complete quests",
     ["teleport"] = "Warcraft Online: teleport players",
     ["debug"] = "Warcraft Online: use debug and configuration commands",
+    ["movement.noclip"] = "Warcraft Online: use noclip movement",
 }
 
 local function GetSAM()
@@ -117,8 +120,9 @@ function WO.Admin.IsAdmin(ply)
     if not IsValid(ply) then return false end
 
     if GetSAM() then
-        for _, samPermission in pairs(WO.Admin.SAMPermissionNames) do
-            if CheckSAMPermission(ply, samPermission) then
+        for permission, samPermission in pairs(WO.Admin.SAMPermissionNames) do
+            -- A movement-only grant must not confer broader character/admin access.
+            if permission ~= "movement.noclip" and CheckSAMPermission(ply, samPermission) then
                 return true
             end
         end

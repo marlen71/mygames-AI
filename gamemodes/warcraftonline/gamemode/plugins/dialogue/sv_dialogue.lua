@@ -1,6 +1,6 @@
 --[[
     Warcraft Online — диалоги (server): сессии, валидация, действия.
-    Клиент НИКОГДА не выбирает «текст» — только индекс валидного варианта.
+    Клиент НИКОГДА не выбирает текст или quest id — только индекс серверного варианта.
 ]]
 
 ---------------------------------------------------------------------------
@@ -49,6 +49,14 @@ local function QuestPrerequisitesMet(char, questDef)
     return true
 end
 
+local function IsListedByNPC(npcDef, questId)
+    for _, offeredId in ipairs(npcDef and npcDef.quests or {}) do
+        if offeredId == questId then return true end
+    end
+
+    return false
+end
+
 local function QuestProgressLabel(char, questDef, state)
     for index, step in ipairs(questDef.steps or {}) do
         local need = math.max(1, tonumber(step.amount) or 1)
@@ -62,51 +70,73 @@ local function QuestProgressLabel(char, questDef, state)
     return "Цели выполнены — можно сдать задание"
 end
 
+local function QuestOfferAvailable(char, npcDef, questId, questDef, state)
+    if not char or not istable(npcDef) or not questDef or questDef.giver ~= npcDef.id or
+        not IsListedByNPC(npcDef, questId) or
+        not QuestPrerequisitesMet(char, questDef) or
+        (char:GetLevel() or 1) < (questDef.level or 1) then
+        return false
+    end
+
+    if not state or state.status == "failed" then return true end
+
+    if state.status == "completed" and
+        (tonumber(questDef.repeatInterval) or 0) > 0 and
+        WO.Quests.GetRepeatAvailability then
+        local repeatReady = WO.Quests.GetRepeatAvailability(char, questId)
+        return repeatReady == true
+    end
+
+    return false
+end
+
+local function BuildQuestActionOption(char, npcDef, questId, fallbackText)
+    local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(questId)
+    local state = char and char.quests and char.quests[questId]
+
+    if not questDef or not istable(npcDef) or not IsListedByNPC(npcDef, questId) then return nil end
+
+    local isGiver = questDef.giver == npcDef.id
+    local isTurnIn = (questDef.turnInGiver or questDef.giver) == npcDef.id
+
+    if state and state.status == "active" and (isGiver or isTurnIn) then
+        local ready = WO.Quests.AreStepsDone(char, questId)
+        local label
+
+        if isTurnIn and questDef.turnInRequired and ready then
+            label = "Сдать задание: " .. questDef.name
+        else
+            label = "Моё задание: " .. QuestProgressLabel(char, questDef, state)
+        end
+
+        return { text = label, action = "quest:" .. questId }
+    end
+
+    if QuestOfferAvailable(char, npcDef, questId, questDef, state) then
+        local repeatOffer = state and
+            (state.status == "completed" or state.status == "failed")
+        local verb = repeatOffer and "Повторить: " or "Взять задание: "
+        return { text = verb .. (questDef.name or fallbackText or questId), action = "offer:" .. questId }
+    end
+
+    return nil
+end
+
 local function BuildNodeOptions(ply, npcDef, node)
     local char = ply:GetCharacter()
     local options = {}
 
     for _, option in ipairs(node.options or {}) do
-        local questId = string.match(option.action or "", "^quest:([%w_]+)$")
+        local questId = string.match(option.action or "", "^quest:([%w_]+)$") or
+            string.match(option.action or "", "^offer:([%w_]+)$")
 
         if not questId then
             options[#options + 1] = option
         else
-            local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(questId)
-            local offeredHere = false
+            local resolved = BuildQuestActionOption(char, npcDef, questId, option.text)
 
-            for _, offeredId in ipairs(npcDef.quests or {}) do
-                if offeredId == questId then offeredHere = true break end
-            end
-
-            local isGiver = questDef and questDef.giver == npcDef.id
-            local isTurnIn = questDef and (questDef.turnInGiver or questDef.giver) == npcDef.id
-            local state = char and char.quests and char.quests[questId]
-
-            if questDef and offeredHere and (isGiver or isTurnIn) then
-                if state and state.status == "active" then
-                    local ready = WO.Quests.AreStepsDone(char, questId)
-                    local label
-
-                    if isTurnIn and questDef.turnInRequired and ready then
-                        label = "Сдать задание: " .. questDef.name
-                    else
-                        label = "Проверить задание: " .. QuestProgressLabel(char, questDef, state)
-                    end
-
-                    options[#options + 1] = { text = label, action = option.action }
-                    options[#options + 1] = {
-                        text = "Отказаться от задания: " .. questDef.name,
-                        action = "abandon:" .. questId,
-                    }
-                elseif isGiver and (not state or state.status == "failed") and
-                    QuestPrerequisitesMet(char, questDef) and
-                    (char:GetLevel() or 1) >= (questDef.level or 1) then
-                    options[#options + 1] = {
-                        text = (state and "Повторить задание: " or "Взять задание: ") .. questDef.name,
-                        action = option.action,
-                    }
-                end
+            if resolved then
+                options[#options + 1] = resolved
             end
         end
     end
@@ -114,7 +144,42 @@ local function BuildNodeOptions(ply, npcDef, node)
     return options
 end
 
---- Отправляет узел диалога клиенту с серверно вычисленными quest options.
+--- Work-узел показывает максимум одно актуальное поручение: цепочку не нужно искать в списке.
+local function BuildWorkOptions(ply, npcDef, node)
+    local char = ply:GetCharacter()
+
+    for _, questId in ipairs(npcDef.quests or {}) do
+        local option = BuildQuestActionOption(char, npcDef, questId)
+
+        if option then
+            local questDef = WO.Quests.Get(questId)
+            local state = char.quests and char.quests[questId]
+            local ready = state and state.status == "active" and
+                WO.Quests.AreStepsDone(char, questId)
+            local message
+
+            if ready and questDef and questDef.turnInRequired then
+                message = "Хорошая работа. Можешь сдать поручение."
+            elseif state and state.status == "active" then
+                message = "Сначала выполни текущее поручение."
+            else
+                message = node.availableText or "Вот одно поручение, с которого можно начать."
+            end
+
+            return {
+                option,
+                { text = node.backText or "Назад", action = "next:" .. (node.backNode or "start") },
+            }, message
+        end
+    end
+
+    return {
+        { text = node.emptyCloseText or "До встречи!", action = "close" },
+        { text = node.backText or "Назад", action = "next:" .. (node.backNode or "start") },
+    }, node.emptyText or "Пока подходящих поручений нет. Загляни позже."
+end
+
+--- Отправляет узел диалога с вариантами, вычисленными на сервере.
 local function SendNode(ply, dialogueId, nodeId)
     local def = WO.Dialogue.Get(dialogueId)
     local node = def and def.nodes[nodeId]
@@ -128,17 +193,107 @@ local function SendNode(ply, dialogueId, nodeId)
 
     if not session then return end
 
+    local text = node.text or ""
+    local options
+
+    if node.work == true then
+        options, text = BuildWorkOptions(ply, session.npcDef, node)
+    else
+        options = BuildNodeOptions(ply, session.npcDef, node)
+    end
+
     session.nodeId = nodeId
-    session.options = BuildNodeOptions(ply, session.npcDef, node)
+    session.options = options
+    session.pendingQuestOffer = nil
+    session.pendingQuestNodeId = nil
 
     WO.Net.Send("Dialogue.Open", ply, {
         dialogueId = dialogueId,
         nodeId = nodeId,
         npcId = session.npcDef and session.npcDef.id or "",
         npcName = session.npcDef and session.npcDef.name or "",
-        text = node.text or "",
+        npcTitle = session.npcDef and session.npcDef.title or "",
+        text = text,
         options = session.options,
     })
+end
+
+---------------------------------------------------------------------------
+-- Предложение задания с отдельным подтверждением игрока
+---------------------------------------------------------------------------
+
+local function BuildQuestOffer(questDef)
+    local objectives = {}
+
+    for _, step in ipairs(questDef.steps or {}) do
+        objectives[#objectives + 1] = {
+            text = step.text or step.target or step.class or "Цель задания",
+            amount = math.max(1, tonumber(step.amount) or 1),
+        }
+    end
+
+    local rewardItems = {}
+
+    for _, entry in ipairs(questDef.rewards and questDef.rewards.items or {}) do
+        local itemDef = WO.Items and WO.Items.Get and WO.Items.Get(entry.class)
+        rewardItems[#rewardItems + 1] = {
+            name = itemDef and itemDef.name or entry.class,
+            amount = math.max(1, tonumber(entry.amount) or 1),
+        }
+    end
+
+    local acceptItems = {}
+
+    for _, entry in ipairs(questDef.acceptItems or {}) do
+        local itemDef = WO.Items and WO.Items.Get and WO.Items.Get(entry.class)
+        acceptItems[#acceptItems + 1] = {
+            name = itemDef and itemDef.name or entry.class,
+            amount = math.max(1, tonumber(entry.amount) or 1),
+        }
+    end
+
+    return {
+        questId = questDef.id,
+        name = questDef.name or questDef.id,
+        description = questDef.description or "",
+        objectives = objectives,
+        rewards = {
+            xp = math.max(0, tonumber(questDef.rewards and questDef.rewards.xp) or 0),
+            money = math.max(0, tonumber(questDef.rewards and questDef.rewards.money) or 0),
+            items = rewardItems,
+        },
+        acceptItems = acceptItems,
+    }
+end
+
+local function SendQuestOffer(ply, questId)
+    if not SessionValid(ply) then
+        WO.Net.Send("Dialogue.Finish", ply)
+        return false
+    end
+
+    local session = GetSession(ply)
+    local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(questId)
+    local char = ply:GetCharacter()
+    local state = char and char.quests and char.quests[questId]
+
+    if not questDef or not QuestOfferAvailable(char, session.npcDef, questId, questDef, state) then
+        SendNode(ply, session.dialogueId, session.nodeId)
+        return false
+    end
+
+    session.pendingQuestOffer = questId
+    session.pendingQuestNodeId = session.nodeId
+
+    local offer = BuildQuestOffer(questDef)
+    offer.dialogueId = session.dialogueId
+    offer.nodeId = session.nodeId
+    offer.npcId = session.npcDef and session.npcDef.id or ""
+    offer.npcName = session.npcDef and session.npcDef.name or ""
+    offer.npcTitle = session.npcDef and session.npcDef.title or ""
+
+    WO.Net.Send("Dialogue.QuestOffer", ply, offer)
+    return true
 end
 
 ---------------------------------------------------------------------------
@@ -169,6 +324,12 @@ function WO.Dialogue.Open(ply, npcDef, ent)
         dialogueId = dialogueId,
     }
 
+    -- Simply speaking with this NPC counts for an already-active talk objective.
+    -- This also lets existing characters finish legacy talk quests after dialogue cleanup.
+    if WO.Quests and WO.Quests.OnTalk then
+        WO.Quests.OnTalk(ply, npcDef.id)
+    end
+
     SendNode(ply, dialogueId, "start")
 end
 
@@ -197,12 +358,32 @@ local function RunAction(ply, action)
         return
     end
 
-    if verb == "quest" and arg ~= "" then
+    if action == "work" or verb == "work" then
         local session = GetSession(ply)
 
-        if session and WO.Quests and WO.Quests.OfferFromDialogue then
+        if session then
+            SendNode(ply, session.dialogueId, "work")
+        end
+
+        return
+    end
+
+    if verb == "offer" and arg ~= "" then
+        SendQuestOffer(ply, arg)
+        return
+    end
+
+    if verb == "quest" and arg ~= "" then
+        local session = GetSession(ply)
+        local char = ply:GetCharacter()
+        local state = char and char.quests and char.quests[arg]
+
+        if session and state and state.status == "active" and
+            WO.Quests and WO.Quests.OfferFromDialogue then
             WO.Quests.OfferFromDialogue(ply, arg, session.npcDef, session.ent)
             if SessionValid(ply) then SendNode(ply, session.dialogueId, session.nodeId) end
+        elseif session then
+            SendNode(ply, session.dialogueId, session.nodeId)
         end
 
         return
@@ -212,13 +393,8 @@ local function RunAction(ply, action)
         local session = GetSession(ply)
         local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(arg)
         local npcId = session and session.npcDef and session.npcDef.id
-        local listed = false
 
-        for _, offeredId in ipairs(session and session.npcDef and session.npcDef.quests or {}) do
-            if offeredId == arg then listed = true break end
-        end
-
-        if session and questDef and listed and
+        if session and questDef and IsListedByNPC(session.npcDef, arg) and
             (questDef.giver == npcId or (questDef.turnInGiver or questDef.giver) == npcId) then
             WO.Quests.Abandon(ply, arg)
             if SessionValid(ply) then SendNode(ply, session.dialogueId, session.nodeId) end
@@ -228,14 +404,12 @@ local function RunAction(ply, action)
     end
 
     if verb == "talk" and arg ~= "" then
-        -- Шаг квеста "talk" — разговор с указанным NPC
         if WO.Quests and WO.Quests.OnTalk then
             WO.Quests.OnTalk(ply, arg)
         end
 
         ClearSession(ply)
         WO.Net.Send("Dialogue.Finish", ply)
-
         return
     end
 
@@ -256,7 +430,6 @@ local function RunAction(ply, action)
         return
     end
 
-    -- Неизвестное действие — закрываем
     ClearSession(ply)
     WO.Net.Send("Dialogue.Finish", ply)
 end
@@ -274,6 +447,11 @@ function WO.Dialogue.OnChoose(ply, dialogueId, nodeId, optionIndex)
 
     local session = GetSession(ply)
 
+    if session.pendingQuestOffer then
+        SendQuestOffer(ply, session.pendingQuestOffer)
+        return false, "offer_pending"
+    end
+
     if session.dialogueId ~= dialogueId or session.nodeId ~= nodeId then
         SendNode(ply, session.dialogueId, session.nodeId)
         return false, "stale_node"
@@ -286,8 +464,37 @@ function WO.Dialogue.OnChoose(ply, dialogueId, nodeId, optionIndex)
         return false, "invalid_option"
     end
 
-    -- Действие выбирает СЕРВЕР из схемы — клиент прислал только индекс
+    -- Действие выбирает СЕРВЕР из схемы — клиент прислал только индекс.
     RunAction(ply, option.action)
+    return true
+end
+
+--- Подтверждает или отклоняет только ту заявку, которую сервер показал в активной сессии.
+function WO.Dialogue.OnQuestResponse(ply, questId, accepted)
+    if not SessionValid(ply) then
+        WO.Net.Send("Dialogue.Finish", ply)
+        return false, "invalid_session"
+    end
+
+    local session = GetSession(ply)
+
+    if not session.pendingQuestOffer or session.pendingQuestOffer ~= questId then
+        if session.pendingQuestOffer then SendQuestOffer(ply, session.pendingQuestOffer) end
+        return false, "stale_offer"
+    end
+
+    local offeredQuestId = session.pendingQuestOffer
+    session.pendingQuestOffer = nil
+    session.pendingQuestNodeId = nil
+
+    if accepted and WO.Quests and WO.Quests.OfferFromDialogue then
+        WO.Quests.OfferFromDialogue(ply, offeredQuestId, session.npcDef, session.ent)
+    end
+
+    if SessionValid(ply) then
+        SendNode(ply, session.dialogueId, session.nodeId)
+    end
+
     return true
 end
 

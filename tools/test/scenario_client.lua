@@ -55,10 +55,12 @@ MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud"),
 local hudShouldDraw = hook.GetTable().HUDShouldDraw
 local hudDrawTargetID = hook.GetTable().HUDDrawTargetID
 MOCK.Assert(hudShouldDraw and isfunction(hudShouldDraw.wo_hud_hide) and
-    hudShouldDraw.wo_hud_hide("CHudHealth") == nil and
-    hudShouldDraw.wo_hud_hide("CHudScoreboard") == nil and
-    hudDrawTargetID and hudDrawTargetID.wo_hud_hide_targetid() == nil,
-    "стандартный HUD и target ID не скрываются в лимбо до синхронизации персонажа")
+    hudShouldDraw.wo_hud_hide("CHudHealth") == false and
+    hudShouldDraw.wo_hud_hide("CHudScoreboard") == false and
+    hudShouldDraw.wo_hud_hide("CHudDeathNotice") == false and
+    hudShouldDraw.wo_hud_hide("any_other_stock_panel") == false and
+    hudDrawTargetID and hudDrawTargetID.wo_hud_hide_targetid() == false,
+    "весь стандартный HUD, killfeed и target ID скрыты даже в лимбо")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() == 17, "все расы видны на клиенте")
 MOCK.Assert(WO.Models ~= nil and WO.Models.GetRace ~= nil, "каталог моделей виден на клиенте")
 local themedNameRaces = {
@@ -190,6 +192,10 @@ local buttonActionCount = 0
 local responsiveButton = WO.UI.Button(nil, "Проверить", function()
     buttonActionCount = buttonActionCount + 1
 end)
+local sharedButtonDoClick = responsiveButton.DoClick
+MOCK.Assert(isfunction(sharedButtonDoClick) and isfunction(responsiveButton.woAction) and
+    responsiveButton.DoClick == sharedButtonDoClick,
+    "каждая WO-кнопка использует общий зарегистрированный DoClick-диспетчер")
 responsiveButton:DoClick()
 responsiveButton:SetBusy(true, WO.Lang:Get("ui.pending"))
 responsiveButton:DoClick() -- disabled buttons never dispatch a second request
@@ -198,6 +204,55 @@ MOCK.Assert(buttonActionCount == 1 and responsiveButton:IsEnabled() == false,
 responsiveButton:SetBusy(false)
 MOCK.Assert(responsiveButton:IsEnabled() and responsiveButton.woText == "Проверить",
     "WO-кнопка возвращает текст и доступность после завершения запроса")
+
+MOCK.TakeOutbox()
+WO.Dialogue.OpenUI({
+    dialogueId = "trader_marla",
+    nodeId = "start",
+    npcId = "trader_marla",
+    npcName = "Торговка Марла",
+    text = "Добро пожаловать.",
+    options = { { text = "Торговать", action = "vendor" } },
+})
+local dialogueWindow = FindLatestLiveFrame()
+local dialogueWidth, dialogueHeight = dialogueWindow:GetSize()
+local dialogueX = dialogueWindow:GetPos()
+local tradeOption = MOCK.FindPanelByText("Торговать")
+MOCK.Assert(dialogueWindow and dialogueWidth >= 350 and dialogueHeight >= 400 and
+    dialogueX > ScrW() / 2 and tradeOption ~= nil,
+    "диалог открывается справа в компактном WoW-подобном окне с понятным вариантом")
+tradeOption:DoClick()
+local dialogueChoose = MOCK.FindInbox(MOCK.TakeOutbox(), "Dialogue.Choose")
+MOCK.Assert(dialogueChoose and dialogueChoose[1].args[1] == "trader_marla" and
+    dialogueChoose[1].args[2] == "start" and dialogueChoose[1].args[3] == 1 and
+    tradeOption:IsEnabled() == false,
+    "кнопка диалога сразу отправляет серверу только индекс варианта и ждёт ответ")
+WO.Dialogue.CloseUI()
+
+MOCK.TakeOutbox()
+WO.Dialogue.OpenQuestOfferUI({
+    dialogueId = "hunter_intro",
+    nodeId = "work",
+    npcId = "hunter_dyrne",
+    npcName = "Охотник",
+    questId = "boar_hunt",
+    name = "Кабаны у фермы",
+    description = "Победите четырёх кабанов и вернитесь за наградой.",
+    objectives = { { text = "Победите кабанов", amount = 4 } },
+    rewards = { xp = 100, money = 35, items = {} },
+    acceptItems = { { name = "Охотничий нож", amount = 1 } },
+})
+local questOfferWindow = FindLatestLiveFrame()
+local acceptOffer = MOCK.FindPanelByText("Принять")
+local declineOffer = MOCK.FindPanelByText("Не сейчас")
+MOCK.Assert(questOfferWindow and acceptOffer and declineOffer,
+    "карточка задания показывает цель, награду и выбор принять/отложить")
+acceptOffer:DoClick()
+local questResponse = MOCK.FindInbox(MOCK.TakeOutbox(), "Dialogue.QuestResponse")
+MOCK.Assert(questResponse and questResponse[1].args[1] == "boar_hunt" and
+    questResponse[1].args[2] == true,
+    "принятие задания отправляет серверу подтверждение для текущего предложения")
+WO.Dialogue.CloseUI()
 
 print("[scenario] client load OK")
 
@@ -552,10 +607,11 @@ LocalPlayer():SetNW2String("wo_class", "warrior")
 LocalPlayer():SetNW2Int("wo_level", 3)
 MOCK.Assert(hudShouldDraw.wo_hud_hide("CHudHealth") == false and
     hudShouldDraw.wo_hud_hide("CHudScoreboard") == false and
+    hudShouldDraw.wo_hud_hide("CHudDeathNotice") == false and
     hudDrawTargetID.wo_hud_hide_targetid() == false and
     hudShouldDraw.wo_hud_hide("CHudCrosshair") == false and
     hudShouldDraw.wo_hud_hide("CHudWeaponSelection") == false,
-    "WoW HUD replaces both the stock crosshair and weapon selector")
+    "WoW HUD replaces all stock HUD elements, killfeed, target names, crosshair and weapon selector")
 WO.MenuUI.Close()
 
 local localWeaponPlayer = LocalPlayer()
@@ -1070,6 +1126,62 @@ local trackerLines = WO.Quests.GetTrackerLines()
 
 MOCK.Assert(#trackerLines > 0, "трекер HUD получает строки: " .. #trackerLines)
 
+do
+local previousMapName = MOCK.mapName
+local previousQuestStates = WO.Quests.LocalStates
+local previousLocalPosition = LocalPlayer():GetPos()
+MOCK.mapName = "rp_lordaeron"
+LocalPlayer():SetPos(Vector(0, 0, 0))
+WO.Quests.LocalStates = {
+    boar_hunt = { status = "active", progress = { [1] = 1 }, tracked = true },
+}
+local boarWaypoint = WO.Quests.GetTrackedWaypoint()
+MOCK.Assert(boarWaypoint and boarWaypoint.questId == "boar_hunt" and
+    boarWaypoint.position == WO.Config.NPCSpawnPoints.elwynn_boar[1].pos and
+    boarWaypoint.text == "Победите кабанов",
+    "принятое и отслеживаемое задание показывает точку следующего кабана")
+MOCK.drawnTextValues = {}
+local waypointPolygonsBefore = MOCK.surfacePolyCalls or 0
+WO.HUD.DrawQuestWaypoint()
+local waypointDrawText = table.concat(MOCK.drawnTextValues, " ")
+MOCK.Assert(string.find(waypointDrawText, "Кабаны у фермы", 1, true) and
+    string.find(waypointDrawText, "Победите кабанов", 1, true) and
+    (MOCK.surfacePolyCalls or 0) >= waypointPolygonsBefore + 2,
+    "HUD показывает название задания, цель, расстояние и повёрнутую стрелку")
+LocalPlayer():SetPos(boarWaypoint.position)
+MOCK.Assert(WO.Quests.GetTrackedWaypoint() == nil,
+    "метка исчезает после входа в радиус точки")
+WO.Quests.LocalStates.boar_hunt.progress[2] = 1
+LocalPlayer():SetPos(Vector(0, 0, 0))
+local nextBoarWaypoint = WO.Quests.GetTrackedWaypoint()
+MOCK.Assert(nextBoarWaypoint and
+    nextBoarWaypoint.position == WO.Config.NPCSpawnPoints.elwynn_boar[2].pos,
+    "после продвижения квеста маршрут переключается на следующую точку кабана")
+WO.Quests.LocalStates = {
+    supplies_for_the_road = { status = "active", progress = {}, tracked = true },
+}
+local breadWaypoint = WO.Quests.GetTrackedWaypoint()
+MOCK.Assert(breadWaypoint and breadWaypoint.position == WO.Config.NPCSpawnPoints.trader_marla[1].pos,
+    "сбор хлеба ведёт к торговцу, у которого хлеб доступен")
+WO.Quests.LocalStates.supplies_for_the_road.progress[1] = 3
+local turnInWaypoint = WO.Quests.GetTrackedWaypoint()
+MOCK.Assert(turnInWaypoint and turnInWaypoint.turnIn == true and
+    turnInWaypoint.position == WO.Config.NPCSpawnPoints.marshal_dughal[1].pos,
+    "после сбора предметов метка указывает NPC для сдачи задания")
+WO.Quests.LocalStates.supplies_for_the_road.tracked = false
+MOCK.Assert(WO.Quests.GetTrackedWaypoint() == nil,
+    "отключённое отслеживание скрывает навигационную метку")
+WO.Quests.LocalStates = {
+    boar_hunt = { status = "active", progress = {}, tracked = true },
+}
+MOCK.mapName = "gm_construct"
+MOCK.Assert(WO.Quests.GetTrackedWaypoint() == nil,
+    "map-specific waypoint не показывается на другой карте")
+WO.Quests.LocalStates = previousQuestStates or WO.Quests.LocalStates
+LocalPlayer():SetPos(previousLocalPosition)
+MOCK.mapName = previousMapName
+end
+
 WO.Quests.OpenLog()
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeUI, "журнал квестов создаёт панели")
 local originalQuestLog = FindLatestLiveFrame()
@@ -1155,8 +1267,8 @@ MOCK.NetDeliver({ name = "Dialogue.Open", args = { {
 } } }, 8, nil)
 
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeDlg, "окно диалога создано")
-local dialogueOption = MOCK.FindPanelByText("1. Пока")
-MOCK.Assert(dialogueOption ~= nil, "вариант диалога представлен доступной кнопкой")
+local dialogueOption = MOCK.FindPanelByText("Пока")
+MOCK.Assert(dialogueOption ~= nil, "вариант диалога представлен доступной кнопкой без числового префикса")
 MOCK.TakeOutbox()
 dialogueOption:DoClick()
 local dialogueChoose = MOCK.FindInbox(MOCK.TakeOutbox(), "Dialogue.Choose")

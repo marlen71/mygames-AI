@@ -65,6 +65,22 @@ local function PrerequisitesDone(char, def)
     return true
 end
 
+--- Availability and remaining cooldown for a completed repeatable quest.
+function WO.Quests.GetRepeatAvailability(char, questId, now)
+    local def = WO.Quests.Get(questId)
+    local state = WO.Quests.GetState(char, questId)
+    local interval = tonumber(def and def.repeatInterval) or 0
+
+    if interval <= 0 or not state or state.status ~= "completed" then
+        return false, 0
+    end
+
+    local availableAt = (tonumber(state.completedAt) or 0) + interval
+    local remaining = math.max(0, availableAt - (tonumber(now) or WO.Util.Time()))
+
+    return remaining <= 0, remaining
+end
+
 local function IsQuestgiverInteractionValid(ply, npcDef, ent, questId, interaction)
     if not IsValid(ply) or not ply:HasCharacter() or not istable(npcDef) or
         not IsValid(ent) or ent:GetClass() ~= "wo_npc" or not isfunction(ent.GetNPCID) or
@@ -119,10 +135,21 @@ function WO.Quests.Accept(ply, questId, npcDef, ent)
     if state and state.status == "failed" then
         char.quests[questId] = nil
         state = nil
+    elseif state and state.status == "completed" then
+        if (tonumber(def.repeatInterval) or 0) <= 0 then
+            return false, "already_completed"
+        end
+
+        local repeatReady = WO.Quests.GetRepeatAvailability(char, questId)
+
+        if not repeatReady then return false, "cooldown" end
+
+        char.quests[questId] = nil
+        state = nil
     end
 
     if state then
-        return false, state.status == "completed" and "already_completed" or "already_active"
+        return false, "already_active"
     end
 
     if (char:GetLevel() or 1) < (def.level or 1) then
@@ -679,11 +706,19 @@ function WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
     local state = WO.Quests.GetState(char, questId)
 
     if state and state.status == "completed" then
-        SendEvent(ply, { type = "info", questId = questId, text = WO.Lang:Get("quest.already_completed") })
-        return false
-    end
+        local repeatReady = WO.Quests.GetRepeatAvailability(char, questId)
 
-    if state and state.status == "failed" then
+        if not repeatReady then
+            local message = (tonumber(def.repeatInterval) or 0) > 0 and
+                "Это поручение можно будет повторить примерно через 15 минут." or
+                WO.Lang:Get("quest.already_completed")
+            SendEvent(ply, { type = "info", questId = questId, text = message })
+            return false
+        end
+
+        char.quests[questId] = nil
+        state = nil
+    elseif state and state.status == "failed" then
         char.quests[questId] = nil
         state = nil
     end

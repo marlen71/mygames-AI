@@ -11,10 +11,12 @@ WO.Quests.Register({
     giver = "marshal_dughal",
     turnInGiver = "marshal_dughal",
     turnInRequired = true,
+    repeatInterval = 900, -- simple job returns about 15 minutes after turn-in
 
     steps = {
         { type = "collect", class = "bread", amount = 3, consume = true,
-            text = "Соберите хлеб" },
+            waypointNPC = "trader_marla", waypointRadius = 180,
+            text = "Купите хлеб у торговки" },
     },
 
     rewards = {

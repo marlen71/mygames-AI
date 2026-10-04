@@ -2,6 +2,16 @@
     Warcraft Online — боевая система (server): GMod-хуки.
 ]]
 
+-- Use a predictable, non-zero fall-damage curve (speed / 8, Source units).
+-- The resulting engine damage is still routed through WO.Combat below.
+hook.Add("GetFallDamage", "wo_realistic_fall_damage", function(ply, speed)
+    if not IsValid(ply) or not isfunction(ply.IsPlayer) or not ply:IsPlayer() then
+        return 0
+    end
+
+    return math.max(0, (tonumber(speed) or 0) / 8)
+end)
+
 -- Маршрутизация стандартного урона через наш pipeline
 hook.Add("EntityTakeDamage", "wo_combat_damage", function(target, dmginfo)
     if not IsValid(target) or not target:IsPlayer() then return end

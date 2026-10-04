@@ -19,7 +19,9 @@
     Действия (action):
         "close"            — закрыть диалог
         "next:<nodeId>"    — перейти к узлу
-        "quest:<questId>"  — предложить квест (или показать состояние)
+        "work"             — показать одно доступное поручение
+        "offer:<questId>"  — открыть карточку задания с принятием/отказом
+        "quest:<questId>"  — показать состояние или сдать активный квест
         "vendor"           — открыть торговлю этого NPC
 ]]
 
@@ -85,6 +87,19 @@ WO.Net.Register("Dialogue.Open", {
     end,
 })
 
+WO.Net.Register("Dialogue.QuestOffer", {
+    direction = "toclient",
+    write = function(data)
+        net.WriteTable(data)
+    end,
+    read = function()
+        return net.ReadTable()
+    end,
+    handler = function(_, data)
+        WO.Hook.Run("DialogueQuestOffered", data)
+    end,
+})
+
 WO.Net.Register("Dialogue.Finish", {
     direction = "toclient",
     handler = function()
@@ -113,6 +128,30 @@ WO.Net.Register("Dialogue.Choose", {
     handler = function(ply, dialogueId, nodeId, optionIndex)
         if SERVER then
             WO.Dialogue.OnChoose(ply, dialogueId, nodeId, optionIndex)
+        end
+    end,
+})
+
+WO.Net.Register("Dialogue.QuestResponse", {
+    direction = "toserver",
+    rate = { max = 8, window = 1 },
+    write = function(questId, accepted)
+        net.WriteString(questId or "")
+        net.WriteBool(accepted == true)
+    end,
+    read = function()
+        return net.ReadString(), net.ReadBool()
+    end,
+    validate = function(ply, questId, accepted)
+        if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
+        if not isstring(questId) or questId == "" then return false, "invalid_quest" end
+        if not isbool(accepted) then return false, "invalid_response" end
+
+        return true
+    end,
+    handler = function(ply, questId, accepted)
+        if SERVER then
+            WO.Dialogue.OnQuestResponse(ply, questId, accepted)
         end
     end,
 })

@@ -18,22 +18,6 @@ local hudDrawErrors = {}
 -- Скрытие стандартного HUD
 ---------------------------------------------------------------------------
 
-local HIDE = {
-    CHudHealth = true,
-    CHudBattery = true,
-    CHudAmmo = true,
-    CHudSecondaryAmmo = true,
-    CHudCrosshair = true,
-    CHudScoreboard = true,
-    CHudDamageIndicator = true,
-    CHudGeiger = true,
-    CHudSuitPower = true,
-    CHudVehicle = true,
-    CHudTrain = true,
-    CHudGMod = true,
-    CHudWeaponSelection = true,
-}
-
 local function HasCustomHUD()
     local ply = LocalPlayer()
 
@@ -41,18 +25,15 @@ local function HasCustomHUD()
         WO.Character.GetLocal and WO.Character.GetLocal() ~= nil
 end
 
-hook.Add("HUDShouldDraw", "wo_hud_hide", function(name)
-    -- Preserve the stock HUD while in limbo / before the character snapshot arrives.
-    if not HasCustomHUD() then return nil end
-
-    if HIDE[name] then
-        return false
-    end
+-- Suppress every stock HUD element (including death notice/killfeed) in every
+-- player state. Warcraft Online renders its own HUD and UI independently.
+hook.Add("HUDShouldDraw", "wo_hud_hide", function()
+    return false
 end)
 
--- Hide the engine target ID; the F3 combat-target information banner is intentionally disabled.
+-- Suppress the engine target ID and default player-name text even in limbo.
 hook.Add("HUDDrawTargetID", "wo_hud_hide_targetid", function()
-    if HasCustomHUD() then return false end
+    return false
 end)
 
 ---------------------------------------------------------------------------
@@ -771,6 +752,72 @@ function WO.HUD.DrawQuestTracker()
     end
 end
 
+local function DrawWaypointArrow(centerX, centerY, relativeYaw)
+    local radians = math.rad(relativeYaw)
+    local forwardX, forwardY = math.sin(radians), -math.cos(radians)
+    local sideX, sideY = math.cos(radians), math.sin(radians)
+
+    local function Triangle(length, halfWidth)
+        local tipX, tipY = centerX + forwardX * length, centerY + forwardY * length
+        local baseX, baseY = centerX - forwardX * (length * 0.75),
+            centerY - forwardY * (length * 0.75)
+
+        return {
+            { x = tipX, y = tipY },
+            { x = baseX + sideX * halfWidth, y = baseY + sideY * halfWidth },
+            { x = baseX - sideX * halfWidth, y = baseY - sideY * halfWidth },
+        }
+    end
+
+    surface.SetDrawColor(7, 9, 14, 255)
+    surface.DrawPoly(Triangle(15, 10))
+    surface.SetDrawColor(WO.UI.Colors.accent)
+    surface.DrawPoly(Triangle(12, 7))
+end
+
+--- Navigation badge for the next tracked quest objective or turn-in NPC.
+function WO.HUD.DrawQuestWaypoint()
+    if not (WO.Quests and WO.Quests.GetTrackedWaypoint) then return end
+
+    local waypoint = WO.Quests.GetTrackedWaypoint()
+    if not istable(waypoint) or not isvector(waypoint.position) then return end
+
+    local ply = LocalPlayer()
+    if not IsValid(ply) or not isfunction(ply.GetPos) then return end
+
+    local playerPosition = ply:GetPos()
+    local delta = waypoint.position - playerPosition
+    local distance = delta:Length()
+    if distance <= 0 then return end
+
+    local eyeAngles = isfunction(ply.EyeAngles) and ply:EyeAngles() or angle_zero
+    local eyeYaw = eyeAngles and tonumber(eyeAngles.y) or 0
+    local bearing = math.deg(math.atan2(delta.y, delta.x))
+    local relativeYaw = (bearing - eyeYaw + 180) % 360 - 180
+    local width = math.min(390, ScrW() - 32)
+    local height = 58
+    local x = (ScrW() - width) / 2
+    local y = 136
+    local arrowX = x + 27
+    local arrowY = y + height / 2
+    local textX = x + 52
+    local textWidth = math.max(80, width - 124)
+
+    WO.UI.DrawPanelOutlined(x, y, width, height, WO.UI.Colors.panelDark,
+        WO.UI.Colors.accentDark)
+    DrawWaypointArrow(arrowX, arrowY, relativeYaw)
+
+    WO.UI.DrawTextFit(waypoint.questName or WO.Lang:Get("quest.waypoint_title"),
+        "WO.Small", textX, y + 6, WO.UI.Colors.accent,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, textWidth, 22)
+    WO.UI.DrawTextFit(waypoint.text or WO.Lang:Get("quest.waypoint_title"),
+        "WO.Tiny", textX, y + 31, WO.UI.Colors.textDim,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, textWidth, 18)
+    WO.UI.DrawTextFit(WO.Lang:Get("quest.distance", math.max(1,
+        math.Round(distance / 52.4934))), "WO.Small", x + width - 62,
+        y + 19, WO.UI.Colors.text, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 52, 20)
+end
+
 ---------------------------------------------------------------------------
 -- Отрисовка
 ---------------------------------------------------------------------------
@@ -843,6 +890,7 @@ local function EnsureHUDCanvas()
         DrawHUDSection("player frame", WO.HUD.DrawPlayerFrame)
         -- F3 still selects a combat target, but no target-information banner is drawn.
         DrawHUDSection("quest tracker", WO.HUD.DrawQuestTracker)
+        DrawHUDSection("quest waypoint", WO.HUD.DrawQuestWaypoint)
         DrawHUDSection("weapon selector", WO.HUD.DrawWeaponSelector)
     end
 

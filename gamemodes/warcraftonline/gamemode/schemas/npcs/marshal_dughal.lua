@@ -12,6 +12,8 @@ WO.NPCs.Register({
     scale = 1,
     spawns = WO.Config.NPCSpawnPoints.marshal_dughal or {},
     dialogue = "marshal_intro",
-    quests = { "supplies_for_the_road", "boar_hunt", "wolves_of_elwynn" },
+    -- Story chain first; the repeatable bread delivery is offered when no main
+    -- task is available (or after the story sequence has finished).
+    quests = { "boar_hunt", "wolves_of_elwynn", "supplies_for_the_road" },
     interactRange = WO.Config.InteractDistance,
 })
