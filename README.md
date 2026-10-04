@@ -69,7 +69,7 @@ warcraftonline/gamemode` и сообщения `[WO] Plugin loaded: ...` для 
 | **Валюта** | Монеты (gold/silver/copper), серверный контроль |
 | **Сеть** | Rate-limit, валидаторы, дельта-синхронизация, server authority |
 | **Безопасность** | Валидация имён/возраста/данных, анти-дюп (машина состояний), транзакции |
-| **Админ** | SAM permissions (`WO.Admin`) + серверный data-driven каталог команд; noclip доступен только с отдельным SAM-правом `wo_noclip` (вне SAM — обычным GMod-администраторам); GMod admin fallback только без SAM |
+| **Админ** | SAM permissions (`WO.Admin`) + серверный data-driven каталог команд; noclip запрещён всем, включая администраторов; GMod admin fallback только без SAM |
 
 ---
 
@@ -408,14 +408,13 @@ return {
 
 ## Debug-команды (только админы)
 
-Если SAM загружен, плагин регистрирует в нём права `wo_character_edit`,
+Если SAM загружен, плагин регистрирует права `wo_character_edit`,
 `wo_item_give`, `wo_money_give`, `wo_npc_spawn`, `wo_quest_complete`,
-`wo_teleport`, `wo_debug` и `wo_noclip` (по умолчанию уровень `admin`).
-Обычным игрокам noclip запрещён; выдавайте `wo_noclip` только нужным группам
-через штатную настройку SAM. Право на noclip само по себе не даёт другие
-админ-возможности. При наличии SAM встроенные
-`IsAdmin`/`IsSuperAdmin` не используются как обход разрешений. GMod fallback
-включается только если SAM вообще не загружен.
+`wo_teleport` и `wo_debug` (по умолчанию уровень `admin`). Noclip запрещён
+всем игрокам, включая GMod/SAM-администраторов; старое SAM-право `wo_noclip`,
+если оно осталось в конфигурации сервера, не даёт доступ. При наличии SAM
+встроенные `IsAdmin`/`IsSuperAdmin` не используются как обход разрешений.
+GMod fallback включается только если SAM вообще не загружен.
 
 | Команда | Действие |
 |---|---|

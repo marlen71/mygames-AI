@@ -438,9 +438,9 @@ sam = {
 }
 WO.Admin.RegisteredSAMPermissions = nil
 MOCK.Assert(WO.Admin.RegisterSAMPermissions(), "SAM права регистрируются")
-MOCK.Assert(table.Count(registeredSAMPermissions) == 8 and
+MOCK.Assert(table.Count(registeredSAMPermissions) == 7 and
     registeredSAMPermissions.wo_debug == "admin" and
-    registeredSAMPermissions.wo_noclip == "admin", "в SAM добавлены восемь WO permissions")
+    registeredSAMPermissions.wo_noclip == nil, "в SAM добавлены семь WO permissions, без noclip")
 
 local permissionPly = MOCK.NewEntity("player")
 permissionPly.__admin = true
@@ -449,14 +449,14 @@ permissionPly.HasPermission = function(self, permission)
     return self.__samPermissions[permission] == true
 end
 local noClipHook = hook.GetTable().PlayerNoClip and
-    hook.GetTable().PlayerNoClip.wo_admin_noclip_permission
+    hook.GetTable().PlayerNoClip.wo_noclip_forbidden
 MOCK.Assert(isfunction(noClipHook) and noClipHook(permissionPly, true) == false and
     noClipHook(permissionPly, false) == true and noClipHook(permissionPly, nil) == false,
-    "noclip блокируется без права, но игрок всегда может выйти из режима")
+    "noclip запрещён для администратора, а выход из режима всегда разрешён")
 permissionPly.__samPermissions.wo_noclip = true
-MOCK.Assert(WO.Admin.Can(permissionPly, "movement.noclip") and
-    noClipHook(permissionPly, true) == true and not WO.Admin.IsAdmin(permissionPly),
-    "SAM отдельно разрешает noclip, не выдавая обладателю права админ-доступ к другим системам")
+MOCK.Assert(not WO.Admin.Can(permissionPly, "movement.noclip") and
+    noClipHook(permissionPly, true) == false and not WO.Admin.IsAdmin(permissionPly),
+    "старое SAM-право wo_noclip не выдаётся и не позволяет включить noclip")
 permissionPly.__samPermissions.wo_noclip = nil
 MOCK.Assert(not WO.Admin.IsAdmin(permissionPly),
     "SAM deny не обходится встроенным Player:IsAdmin")
