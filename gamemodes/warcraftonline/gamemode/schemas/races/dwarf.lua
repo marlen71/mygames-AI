@@ -2,7 +2,7 @@
 WO.Races.Register({
     id = "dwarf",
     name = WO.Lang:Get("race.dwarf"),
-    description = "Стойкие мастера горного дела. Модели доступны при установленном WoW-паке.",
+    description = "Стойкие мастера горного дела. Для создания нужен локально доступный файл модели.",
     models = WO.Models.GetRace("dwarf"),
     genders = { "male", "female" },
     modelScale = 0.94,

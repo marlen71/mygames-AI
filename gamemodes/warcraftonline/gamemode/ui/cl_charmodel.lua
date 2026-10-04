@@ -34,13 +34,14 @@ local PREVIEW_RETRY_INTERVAL = 0.75
 
 local function IsModelMounted(modelPath)
     if not isstring(modelPath) or modelPath == "" then return false end
-    if WO.Models and WO.Models.Exists and not WO.Models.Exists(modelPath) then return false end
-    if util.IsValidModel and not util.IsValidModel(modelPath) then return false end
 
-    -- Preview is a visual-only client feature. Character/race eligibility is
-    -- enforced by the picker and revalidated by the server; do not hide a model
-    -- that is already mounted just because player_manager registration differs.
-    return true
+    -- DModelPanel uses the local model cache directly. No Workshop registry or
+    -- package lookup is required; the character picker/server validate eligibility.
+    if util and isfunction(util.IsValidModel) then
+        return util.IsValidModel(modelPath) == true
+    end
+
+    return WO.Models and WO.Models.Exists and WO.Models.Exists(modelPath) == true or false
 end
 
 local function SchedulePreviewRetry(self)

@@ -1,7 +1,7 @@
 --[[
     Warcraft Online — общая часть книги заклинаний.
-    Данные заклинаний живут в schemas/spells; изучение, выбор и применение
-    проходят через серверную валидацию.
+    Данные живут в schemas/spells; прогрессия магии выдаётся consumable-свитками,
+    а обучение, выбор и применение повторно валидируются сервером.
 ]]
 
 WO.Spells = WO.Spells or {}
@@ -34,6 +34,9 @@ function WO.Spells.Register(def)
     def.basePower = math.max(0, tonumber(def.basePower) or 0)
     def.powerPerRank = math.max(0, tonumber(def.powerPerRank) or 0)
     def.spellPowerScale = math.max(0, tonumber(def.spellPowerScale) or 0)
+    def.elementType = isstring(def.elementType) and def.elementType or "life"
+    def.scrollPrice = math.max(1, math.floor(tonumber(def.scrollPrice) or
+        (WO.Config.MagicScrolls and WO.Config.MagicScrolls.learningPrice) or 40))
 
     WO.Spells.Registry[def.id] = def
     return true
@@ -47,6 +50,104 @@ function WO.Spells.GetAll()
     return WO.Spells.Registry
 end
 
+function WO.Spells.GetScrollClass(spellId, targetRank)
+    local rank = math.max(1, math.floor(tonumber(targetRank) or 1))
+
+    if rank == 1 then
+        return "spell_scroll_" .. tostring(spellId) .. "_learn"
+    end
+
+    return "spell_scroll_" .. tostring(spellId) .. "_rank_" .. rank
+end
+
+--- Builds the scroll item definitions and Malygos stock from registered spell schemas.
+-- Called only after schemas/spells have been included; repeated calls are idempotent.
+function WO.Spells.BuildScrollCatalog()
+    if not (WO.Items and WO.Items.Register and WO.Items.Get) then return false end
+
+    local config = WO.Config.MagicScrolls or {}
+    local spellIDs, stock, buyback = {}, {}, {}
+
+    for spellId in pairs(WO.Spells.Registry) do
+        spellIDs[#spellIDs + 1] = spellId
+    end
+
+    table.sort(spellIDs)
+
+    for _, spellId in ipairs(spellIDs) do
+        local spell = WO.Spells.Get(spellId)
+
+        for targetRank = 1, spell.maxRank do
+            local class = WO.Spells.GetScrollClass(spellId, targetRank)
+            local priceMultiplier = targetRank == 1 and 1 or
+                ((tonumber(config.rankPriceMultiplier) or 1.5) +
+                    (targetRank - 2) * (tonumber(config.rankPriceStep) or 0.5))
+            local price = math.max(1, math.floor(spell.scrollPrice * priceMultiplier))
+            local requiredLevel = spell.requiredLevel + targetRank - 1
+            local isLearning = targetRank == 1
+            local label = isLearning and "Свиток: " .. spell.name or
+                "Свиток ранга " .. targetRank .. ": " .. spell.name
+            local description = isLearning and
+                ("Используйте, чтобы изучить «" .. spell.name .. "». Требуемый уровень: " .. requiredLevel .. ".") or
+                ("Устанавливает ранг " .. targetRank .. " заклинания «" .. spell.name ..
+                    "», заменяя меньший ранг. Требуемый уровень: " .. requiredLevel .. ".")
+
+            if not WO.Items.Get(class) then
+                WO.Items.Register({
+                    id = class,
+                    name = label,
+                    type = "scroll",
+                    category = "magic",
+                    model = "models/props_lab/clipboard.mdl",
+                    weight = 0.1,
+                    stackable = true,
+                    maxStack = math.max(1, math.floor(tonumber(config.stackSize) or 20)),
+                    rarity = targetRank >= 4 and "rare" or "uncommon",
+                    description = description,
+                    requirements = { class = "mage", level = requiredLevel },
+                    spellScroll = {
+                        spellId = spellId,
+                        targetRank = targetRank,
+                        requiredLevel = requiredLevel,
+                    },
+                    consumeOnUse = true,
+                    useHandler = function(ply, instance)
+                        if not (WO.Spells and isfunction(WO.Spells.UseScroll)) then
+                            return false, "spell_system_unavailable"
+                        end
+
+                        return WO.Spells.UseScroll(ply, instance)
+                    end,
+                    price = { buy = price, sell = math.max(1, math.floor(price * 0.4)) },
+                })
+            end
+
+            stock[#stock + 1] = {
+                class = class,
+                price = price,
+                amount = math.max(1, math.floor(tonumber(config.vendorStockAmount) or 20)),
+            }
+            buyback[#buyback + 1] = class
+        end
+    end
+
+    local vendor = WO.NPCs and WO.NPCs.Get and WO.NPCs.Get("malygos_scroll_vendor")
+
+    if vendor and istable(vendor.vendor) then
+        vendor.vendor.stock = stock
+        vendor.vendor.buybackClasses = buyback
+        vendor.vendor.sellRate = math.Clamp(tonumber(config.sellRate) or 0.25, 0, 1)
+    end
+
+    WO.Spells.ScrollCatalogReady = true
+
+    return true
+end
+
+WO.Hook.Add("SchemasLoaded", "spells_scroll_catalog", function()
+    WO.Spells.BuildScrollCatalog()
+end)
+
 WO.Net.Register("Spell.Sync", {
     direction = "toclient",
     write = function(data) net.WriteTable(data) end,
@@ -58,6 +159,8 @@ WO.Net.Register("Spell.Sync", {
     end,
 })
 
+-- Legacy packet is deliberately not sufficient to learn a spell. The server
+-- rejects it unless a matching, server-owned scroll is used via Inventory.Use.
 WO.Net.Register("Spell.Learn", {
     direction = "toserver",
     rate = { max = 4, window = 5 },
@@ -70,8 +173,10 @@ WO.Net.Register("Spell.Learn", {
         if not IsValid(weapon) or weapon:GetClass() ~= WO.Spells.WeaponClass then return false, "book_not_active" end
         return true
     end,
-    handler = function(ply, spellId)
-        if SERVER and WO.Spells.LearnOrUpgrade then WO.Spells.LearnOrUpgrade(ply, spellId) end
+    handler = function(ply)
+        -- Compatibility packet only: progress is never granted without consuming
+        -- the matching server-owned scroll from the player's inventory.
+        if SERVER then WO.Notify(ply, "error", "Для изучения используйте соответствующий свиток.") end
     end,
 })
 

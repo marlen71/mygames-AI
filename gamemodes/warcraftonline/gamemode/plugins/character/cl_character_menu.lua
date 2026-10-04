@@ -134,7 +134,7 @@ local function CreateCharacterCard(parent, entry, onSelect)
     card:SetPaintBackground(false)
     card.selected = false
 
-    -- No civilian fallback: unavailable Workshop models show the shared placeholder.
+    -- No civilian fallback: unavailable local models show the shared placeholder.
     local model = WO.UI.CreateCharacterModel(card)
 
     if isstring(entry.model) and entry.model ~= "" then
@@ -160,6 +160,15 @@ local function CreateCharacterCard(parent, entry, onSelect)
             WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, 24)
         WO.UI.DrawTextFit(info, "WO.Tiny", w / 2, 212,
             WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, 22)
+
+        local level = math.max(1, tonumber(entry.level) or 1)
+        local needed = math.max(1, tonumber(entry.needed) or WO.Config.GetXPForLevel(level))
+        local experience = math.max(0, tonumber(entry.experience) or 0)
+        WO.UI.DrawTextFit(WO.Lang:Get("xp.remaining", math.max(0, needed - experience)),
+            "WO.Tiny", w / 2, 232, WO.UI.Colors.textDim,
+            TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 16, 14)
+        WO.UI.DrawBar(12, 249, w - 24, 6, experience / needed,
+            WO.UI.Colors.xp, WO.UI.Colors.xpBg, nil)
     end
 
     card.OnMousePressed = function()

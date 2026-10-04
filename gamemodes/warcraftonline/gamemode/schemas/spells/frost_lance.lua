@@ -2,6 +2,8 @@ WO.Spells.Register({
     id = "frost_lance",
     name = "Ледяное копьё",
     element = "Лёд",
+    elementType = "frost",
+    scrollPrice = 48,
     type = "damage",
     description = "Ледяной луч поражает цель на большом расстоянии.",
     requiredLevel = 1,
@@ -13,7 +15,4 @@ WO.Spells.Register({
     powerPerRank = 9,
     spellPowerScale = 0.55,
     damageType = WO.Enums.DamageType.FROST,
-    particle = "pfx8_07",
-    impactParticle = "pfx1_06~",
-    impactEffect = "cball_bounce",
 })

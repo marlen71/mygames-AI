@@ -2,6 +2,8 @@ WO.Spells.Register({
     id = "lightning_strike",
     name = "Удар молнии",
     element = "Молния",
+    elementType = "lightning",
+    scrollPrice = 60,
     type = "damage",
     description = "Фиолетовый разряд бьёт цель сквозь дальний луч.",
     requiredLevel = 1,
@@ -13,7 +15,4 @@ WO.Spells.Register({
     powerPerRank = 10,
     spellPowerScale = 0.65,
     damageType = WO.Enums.DamageType.NATURE,
-    particle = "pfx1_08_~a",
-    impactParticle = "pfx1_0e",
-    impactEffect = "TeslaHitBoxes",
 })

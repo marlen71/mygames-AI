@@ -25,16 +25,9 @@ WO.Workshop.Collections = {
     },
 }
 
-WO.Workshop.PlayableCharacterPack = {
-    id = 3796529373,
-    title = "World of Warcraft (1.12.1) – Playable Characters Megapack (All Outfits)",
-    url = "https://steamcommunity.com/sharedfiles/filedetails/?id=3796529373",
-}
-
--- Clients download these addons automatically. The dedicated server must also
--- subscribe/mount them to pass runtime model/SWEP/NPC-class validation.
+-- Clients download only external NPC/framework/weapon assets used by gameplay.
+-- Character models are resolved from local files and are not a required Workshop addon.
 WO.Workshop.RequiredAddons = {
-    { id = 3796529373, title = "Playable Characters Megapack" },
     { id = 3798571666, title = "Creatures Megapack" },
     { id = 1847505933, title = "Draconic Base" },
     { id = 712848264, title = "TFA CS:O / Nexon SWEPs Part 1" },

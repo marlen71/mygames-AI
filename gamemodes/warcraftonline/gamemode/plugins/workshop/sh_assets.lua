@@ -550,9 +550,8 @@ end
 if WO.Models and WO.Models.RefreshRaceLists then
     WO.Models.RefreshRaceLists()
 
-    -- Workshop addons may finish mounting shortly after the player joins. Rebuild
-    -- the validated client/server model lists briefly during startup; later UI
-    -- opens also trigger an on-demand refresh if a previously missing model appears.
+    -- Locally installed model registrations may become available shortly after
+    -- startup. Rebuild the validated lists briefly; UI opens can refresh on demand.
     timer.Create("wo_workshop_race_model_refresh", 2, 15, function()
         WO.Models.RefreshRaceLists()
     end)

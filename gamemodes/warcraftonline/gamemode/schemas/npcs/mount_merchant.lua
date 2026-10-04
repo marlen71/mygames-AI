@@ -19,6 +19,8 @@ WO.NPCs.Register({
             { class = "mount_stone", price = 500, amount = 1 },
             { class = "mount_oats", price = 12, amount = 30 },
             { class = "mount_training_kit", price = 150, amount = 10 },
+            { class = "mount_healing_salve", price = 35, amount = 10 },
+            { class = "mount_barding", price = 180, amount = 5 },
         },
         sellRate = 0,
         buybackClasses = {},

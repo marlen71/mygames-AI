@@ -8,6 +8,7 @@ local currentText = ""
 local hoverTargetInfo = nil
 local hoverDisplayInfo = nil
 local hoverAlpha = 0
+local nextUseRequestAt = 0
 
 local function IsResourceEntity(ent)
     if not IsValid(ent) or not isfunction(ent.GetClass) then return false end
@@ -92,6 +93,46 @@ function WO.Interaction.UpdateClientTarget()
         hoverTargetInfo = nil
     end
 end
+
+-- The engine's +use event is not reliable for every physics-backed loot entity
+-- (notably when its model/collision bounds are tiny). Route aimed interactions
+-- through the normal server validator as well, and suppress the engine event
+-- only when the HUD has a live, in-range interactive target.
+function WO.Interaction.RequestCurrentTarget(ply)
+    ply = IsValid(ply) and ply or LocalPlayer()
+
+    if not IsValid(ply) or not ply:HasCharacter() or not ply:Alive() or
+        not IsValid(currentEnt) or CurTime() < nextUseRequestAt then
+        return false
+    end
+
+    if not WO.Interaction.CanInteract(currentEnt, ply) then
+        WO.Interaction.UpdateClientTarget()
+        return false
+    end
+
+    local entIndex = isfunction(currentEnt.EntIndex) and currentEnt:EntIndex() or 0
+
+    if entIndex <= 0 then return false end
+
+    nextUseRequestAt = CurTime() + 0.25
+    WO.Net.SendToServer("Interact.Request", entIndex)
+    return true
+end
+
+hook.Add("PlayerBindPress", "wo_interaction_use_request", function(ply, bind, pressed)
+    if not pressed or not isstring(bind) or
+        not string.find(string.lower(bind), "+use", 1, true) then
+        return
+    end
+
+    if gui and isfunction(gui.IsGameUIVisible) and gui.IsGameUIVisible() then return end
+    if vgui and isfunction(vgui.GetKeyboardFocus) and IsValid(vgui.GetKeyboardFocus()) then return end
+
+    if WO.Interaction.RequestCurrentTarget(ply) then
+        return true
+    end
+end)
 
 timer.Create("wo_interaction_trace", 0.25, 0, function()
     WO.Interaction.UpdateClientTarget()

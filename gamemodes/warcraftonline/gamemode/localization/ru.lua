@@ -39,9 +39,9 @@ WO.Lang.Register("ru", {
     ["character.rotate_left"] = "Повернуть влево",
     ["character.rotate_right"] = "Повернуть вправо",
     ["character.rotate_hint"] = "Потяните мышью или используйте кнопки поворота",
-    ["character.model_preview_unavailable"] = "3D-превью недоступно: модель пока не обнаружена в смонтированном контенте.",
-    ["character.no_models_available"] = "В этой сессии не обнаружены доступные модели рас. Обновите меню; при повторе проверьте Workshop-монтирование клиента и сервера.",
-    ["character.model_unavailable"] = "Модель не обнаружена в смонтированном контенте этой сессии. Повторите попытку после обновления меню.",
+    ["character.model_preview_unavailable"] = "3D-превью недоступно. Проверьте, что файл модели установлен локально.",
+    ["character.no_models_available"] = "Для этой расы и пола не найдено локально доступных моделей.",
+    ["character.model_unavailable"] = "Эта модель недоступна на сервере. Выберите другую локально доступную модель расы.",
 
     ["character.step.race"] = "Раса",
     ["character.step.gender"] = "Пол",
@@ -91,7 +91,7 @@ WO.Lang.Register("ru", {
     ["settings.auto_collect_off"] = "Автосбор: ВЫКЛ",
     ["settings.auto_collect_hint"] = "При включении сервер автоматически подбирает рядом квестовые, редкие и ценные предметы, а также монеты. Обычные предметы без активной цели квеста не подбираются.",
     ["settings.auto_collect_status"] = "Настройка синхронизируется с сервером…",
-    ["weapon.selector_title"] = "ОРУЖИЕ · 1–6 / колёсико",
+    ["weapon.selector_title"] = "ОРУЖИЕ · 1–0 / колёсико",
     ["menu.players"] = "Игроки на сервере",
     ["menu.server_players"] = "Игроков",
     ["menu.no_players"] = "Список игроков пуст",
@@ -160,6 +160,11 @@ WO.Lang.Register("ru", {
     ["item.type.currency"] = "Валюта",
     ["item.type.misc"] = "Разное",
     ["item.type.special"] = "Особый",
+    ["item.type.mount"] = "Маунт",
+    ["mount.level"] = "Уровень маунта",
+    ["mount.health"] = "Здоровье",
+    ["mount.hunger"] = "Сытость",
+    ["mount.armor"] = "Броня маунта",
 
     ["item.weight"] = "Вес",
     ["item.damage"] = "Урон",
@@ -236,7 +241,10 @@ WO.Lang.Register("ru", {
     -----------------------------------------------------------------------
     -- Прогресс
     -----------------------------------------------------------------------
-    ["xp.gain"] = "+%d опыта",
+    ["xp.gain"] = "+%d XP",
+    ["xp.progress"] = "%d / %d XP до следующего уровня",
+    ["xp.compact"] = "%d/%d XP · ещё %d XP",
+    ["xp.remaining"] = "осталось %d XP",
     ["xp.reason.kill"] = "За убийство",
     ["xp.reason.quest"] = "За задание",
     ["levelup.text"] = "Вы достигли %d уровня!",

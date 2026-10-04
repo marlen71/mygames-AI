@@ -6,7 +6,9 @@
 
 WO.WeaponSelector = WO.WeaponSelector or {}
 
-local MAX_VISIBLE_WEAPONS = 6
+local MAX_VISIBLE_WEAPONS = 10
+local PENDING_SELECTION_TIMEOUT = 0.9
+local pendingSelection
 
 local function GetWeaponClass(weapon)
     if not IsValid(weapon) or not isfunction(weapon.GetClass) then return nil end
@@ -48,7 +50,7 @@ function WO.WeaponSelector.GetWeapons(ply)
     if not IsValid(ply) or not isfunction(ply.GetWeapons) then return {} end
 
     local active = isfunction(ply.GetActiveWeapon) and ply:GetActiveWeapon() or nil
-    local activeClass = GetWeaponClass(active)
+    local serverActiveClass = GetWeaponClass(active)
     local entries, seen = {}, {}
 
     for _, weapon in ipairs(ply:GetWeapons() or {}) do
@@ -67,7 +69,8 @@ function WO.WeaponSelector.GetWeapons(ply)
                 name = GetWeaponName(weapon, class),
                 slot = tonumber(slot) or 0,
                 slotPos = tonumber(slotPos) or 0,
-                active = class == activeClass,
+                active = class == serverActiveClass,
+                serverActive = class == serverActiveClass,
             }
         end
     end
@@ -78,7 +81,39 @@ function WO.WeaponSelector.GetWeapons(ply)
         return a.class < b.class
     end)
 
+    local now = isfunction(CurTime) and CurTime() or 0
+
+    if pendingSelection then
+        local pendingOwned = false
+
+        for _, entry in ipairs(entries) do
+            if entry.class == pendingSelection.class then
+                pendingOwned = true
+                break
+            end
+        end
+
+        if serverActiveClass == pendingSelection.class or not pendingOwned or
+            now >= pendingSelection.expires then
+            pendingSelection = nil
+        end
+    end
+
+    local logicalActiveClass = pendingSelection and pendingSelection.class or serverActiveClass
+
+    for _, entry in ipairs(entries) do
+        entry.active = entry.class == logicalActiveClass
+        entry.pending = pendingSelection ~= nil and entry.class == pendingSelection.class
+    end
+
     return entries
+end
+
+local function SetVisibleKey(entry, index)
+    entry.index = index
+    entry.slot = index
+    -- The last standard weapon key is 0, not the two-character string "10".
+    entry.key = index == 10 and 0 or index
 end
 
 function WO.WeaponSelector.GetVisibleWeapons(ply)
@@ -87,8 +122,7 @@ function WO.WeaponSelector.GetVisibleWeapons(ply)
 
     if count <= MAX_VISIBLE_WEAPONS then
         for index, entry in ipairs(allWeapons) do
-            entry.slot = index
-            entry.index = index
+            SetVisibleKey(entry, index)
         end
 
         return allWeapons
@@ -109,8 +143,7 @@ function WO.WeaponSelector.GetVisibleWeapons(ply)
 
     for index = firstIndex, firstIndex + MAX_VISIBLE_WEAPONS - 1 do
         local entry = allWeapons[index]
-        entry.slot = index - firstIndex + 1
-        entry.index = index
+        SetVisibleKey(entry, index - firstIndex + 1)
         visible[#visible + 1] = entry
     end
 
@@ -131,6 +164,11 @@ function WO.WeaponSelector.SelectClass(class)
 
     if not found then return false end
 
+    pendingSelection = {
+        class = class,
+        expires = (isfunction(CurTime) and CurTime() or 0) + PENDING_SELECTION_TIMEOUT,
+    }
+
     WO.Net.SendToServer("Weapons.Select", class)
     return true
 end
@@ -138,6 +176,7 @@ end
 function WO.WeaponSelector.SelectSlot(slot)
     slot = math.floor(tonumber(slot) or 0)
 
+    if slot == 0 then slot = 10 end
     if slot < 1 or slot > MAX_VISIBLE_WEAPONS then return false end
 
     for _, entry in ipairs(WO.WeaponSelector.GetVisibleWeapons()) do
@@ -201,9 +240,10 @@ hook.Add("PlayerBindPress", "wo_weapon_selector_bind", function(ply, bind, press
         return true
     end
 
-    local slot = tonumber(string.match(bind or "", "^slot([1-6])$"))
+    local digit = string.match(bind or "", "^slot([0-9])$")
+    local slot = digit and tonumber(digit) or nil
 
-    if slot then
+    if slot ~= nil then
         if pressed then WO.WeaponSelector.SelectSlot(slot) end
         return true
     end

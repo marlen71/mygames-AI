@@ -39,9 +39,9 @@ WO.Lang.Register("en", {
     ["character.rotate_left"] = "Rotate Left",
     ["character.rotate_right"] = "Rotate Right",
     ["character.rotate_hint"] = "Drag the model or use the rotation buttons",
-    ["character.model_preview_unavailable"] = "3D preview temporarily unavailable; waiting for the model to mount.",
-    ["character.no_models_available"] = "No race models were detected in this session. Refresh the menu; if this repeats, check Workshop mounting on the client and server.",
-    ["character.model_unavailable"] = "The model was not detected in this session's mounted content. Refresh the menu and try again.",
+    ["character.model_preview_unavailable"] = "3D preview unavailable. Check that this model file is installed locally.",
+    ["character.no_models_available"] = "No local model paths are available for this race and gender.",
+    ["character.model_unavailable"] = "This model is not available on the server. Choose another locally available race model.",
 
     ["character.step.race"] = "Race",
     ["character.step.gender"] = "Gender",
@@ -87,7 +87,7 @@ WO.Lang.Register("en", {
     ["settings.auto_collect_off"] = "Auto-collect: OFF",
     ["settings.auto_collect_hint"] = "When enabled, the server automatically collects nearby quest, rare, and valuable items, plus coins. Ordinary items are ignored unless an active quest needs them.",
     ["settings.auto_collect_status"] = "Syncing this setting with the server…",
-    ["weapon.selector_title"] = "WEAPONS · 1–6 / wheel",
+    ["weapon.selector_title"] = "WEAPONS · 1–0 / wheel",
     ["menu.players"] = "Players on Server",
     ["menu.server_players"] = "Players",
     ["menu.no_players"] = "The player list is empty",
@@ -156,6 +156,11 @@ WO.Lang.Register("en", {
     ["item.type.currency"] = "Currency",
     ["item.type.misc"] = "Miscellaneous",
     ["item.type.special"] = "Special",
+    ["item.type.mount"] = "Mount",
+    ["mount.level"] = "Mount level",
+    ["mount.health"] = "Health",
+    ["mount.hunger"] = "Hunger",
+    ["mount.armor"] = "Mount armor",
 
     ["item.weight"] = "Weight",
     ["item.damage"] = "Damage",
@@ -233,6 +238,9 @@ WO.Lang.Register("en", {
     -- Progress
     -----------------------------------------------------------------------
     ["xp.gain"] = "+%d XP",
+    ["xp.progress"] = "%d / %d XP to next level",
+    ["xp.compact"] = "%d/%d XP · %d XP left",
+    ["xp.remaining"] = "%d XP remaining",
     ["xp.reason.kill"] = "For killing",
     ["xp.reason.quest"] = "For quest",
     ["levelup.text"] = "You have reached level %d!",

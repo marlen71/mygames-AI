@@ -49,7 +49,7 @@ hook.Add("HUDShouldDraw", "wo_hud_hide", function(name)
     end
 end)
 
--- Стандартный target ID заменяется собственным target frame; false подавляет native label.
+-- Hide the engine target ID; the F3 combat-target information banner is intentionally disabled.
 hook.Add("HUDDrawTargetID", "wo_hud_hide_targetid", function()
     if HasCustomHUD() then return false end
 end)
@@ -120,7 +120,7 @@ function WO.HUD.DrawPlayerFrame()
 
     if not char then return end
 
-    local w, h = math.Clamp(ScrW() * 0.25, 320, 360), 132
+    local w, h = math.Clamp(ScrW() * 0.25, 320, 360), 148
     local x, y = 24, math.max(12, ScrH() - h - 24)
     local portraitSize = 94
     local portraitX, portraitY = x + 10, y + 10
@@ -171,10 +171,13 @@ function WO.HUD.DrawPlayerFrame()
     end
 
     local xpData = WO.Leveling and WO.Leveling.ClientData or {}
-    local xp = tonumber(xpData.experience) or tonumber(char.experience) or 0
-    local xpNeeded = math.max(1, tonumber(xpData.needed) or 1)
+    local xp = math.max(0, tonumber(xpData.experience) or tonumber(char.experience) or 0)
+    local xpNeeded = math.max(1, tonumber(xpData.needed) or WO.Config.GetXPForLevel(level))
     local xpBarY = y + h - 9
+    local xpText = WO.Lang:Get("xp.compact", xp, xpNeeded, math.max(0, xpNeeded - xp))
 
+    WO.UI.DrawTextFit(xpText, "WO.Tiny", x + 9, y + h - 29,
+        WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 18, 16)
     WO.UI.DrawBar(x + 9, xpBarY, w - 18, 5, xp / xpNeeded,
         WO.UI.Colors.xp, WO.UI.Colors.xpBg, nil)
 
@@ -674,7 +677,7 @@ function WO.HUD.DrawWeaponSelector()
 
         WO.UI.DrawPanelOutlined(x + 6, rowY, width - 12, rowHeight - 3,
             rowColor, borderColor, WO.UI.Metrics.radiusSmall)
-        WO.UI.DrawTextFit(tostring(entry.slot or index), "WO.Number",
+        WO.UI.DrawTextFit(tostring(entry.key or entry.slot or index), "WO.Number",
             x + 24, rowY + (rowHeight - 3) / 2, WO.UI.Colors.accent,
             TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 26, rowHeight - 8)
         WO.UI.DrawTextFit(entry.name or entry.class or "?", "WO.Small",
@@ -813,6 +816,9 @@ local function EnsureHUDCanvas()
     hudCanvas.Paint = function()
         local ply = LocalPlayer()
 
+        -- Avoid retaining a stale portrait/banner after a live Lua refresh.
+        if IsValid(targetPortrait) then targetPortrait:SetVisible(false) end
+
         if not IsValid(ply) then
             HideHUDModels()
             return
@@ -831,7 +837,7 @@ local function EnsureHUDCanvas()
         end
 
         DrawHUDSection("player frame", WO.HUD.DrawPlayerFrame)
-        DrawHUDSection("target frame", WO.HUD.DrawTargetFrame)
+        -- F3 still selects a combat target, but no target-information banner is drawn.
         DrawHUDSection("quest tracker", WO.HUD.DrawQuestTracker)
         DrawHUDSection("weapon selector", WO.HUD.DrawWeaponSelector)
     end

@@ -17,6 +17,32 @@ local function CurrentBook()
     return WO.Spells.LocalBook or { ranks = {}, selected = "", points = 0, level = 1 }
 end
 
+local function RefreshBookProgress(data)
+    if not IsValid(bookFrame) then return end
+
+    local book = CurrentBook()
+    local char = WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()
+    data = istable(data) and data or (WO.Leveling and WO.Leveling.ClientData) or {}
+    local level = math.max(1, tonumber(data.level) or tonumber(book.level) or
+        tonumber(char and char.level) or 1)
+    local needed = math.max(1, tonumber(data.needed) or WO.Config.GetXPForLevel(level))
+    local experience = math.max(0, tonumber(data.experience) or tonumber(char and char.experience) or 0)
+
+    if IsValid(bookFrame.pointsLabel) then
+        bookFrame.pointsLabel:SetDisplayText("Очки заклинаний: " .. tostring(book.points or 0) ..
+            "    Уровень: " .. tostring(level))
+    end
+
+    if IsValid(bookFrame.xpLabel) then
+        bookFrame.xpLabel:SetDisplayText(WO.Lang:Get("xp.compact", experience, needed,
+            math.max(0, needed - experience)))
+    end
+
+    if IsValid(bookFrame.xpBar) then
+        bookFrame.xpBar:SetFraction(experience / needed)
+    end
+end
+
 local function RebuildBook()
     if not IsValid(bookFrame) or not IsValid(bookFrame.spellList) then return end
 
@@ -24,12 +50,7 @@ local function RebuildBook()
     scroll:Clear()
 
     local book = CurrentBook()
-    local pointsLabel = bookFrame.pointsLabel
-
-    if IsValid(pointsLabel) then
-        pointsLabel:SetDisplayText("Очки заклинаний: " .. tostring(book.points or 0) ..
-            "    Уровень: " .. tostring(book.level or 1))
-    end
+    RefreshBookProgress()
 
     for _, spellId in ipairs(spellOrder) do
         local spell = WO.Spells.Get(spellId)
@@ -70,15 +91,14 @@ local function RebuildBook()
             end
 
             if rank < spell.maxRank then
-                local requiredLevel = (spell.requiredLevel or 1) + rank
-                local canTrain = (book.points or 0) > 0 and (book.level or 1) >= requiredLevel
-                local label = rank == 0 and "Изучить" or "Улучшить"
-                local trainButton = WO.UI.Button(row, label, function()
-                    WO.Net.SendToServer("Spell.Learn", spellId)
-                end)
-                trainButton:SetPos(455, 47)
-                trainButton:SetSize(110, 28)
-                trainButton:SetEnabled(canTrain)
+                local targetRank = rank + 1
+                local requiredLevel = (spell.requiredLevel or 1) + targetRank - 1
+                local status = (book.level or 1) < requiredLevel and
+                    ("Нужен ур. " .. requiredLevel) or (rank == 0 and "Свиток изучения" or
+                    ("Свиток ранга " .. targetRank))
+                local scrollLabel = WO.UI.Label(row, status, "WO.Small", WO.UI.Colors.warn)
+                scrollLabel:SetPos(455, 48)
+                scrollLabel:SetSize(130, 26)
             end
         end
     end
@@ -101,12 +121,20 @@ function WO.Spells.OpenBook()
     end
 
     bookFrame.pointsLabel = WO.UI.Label(bookFrame, "", "WO.Subtitle", WO.UI.Colors.accent)
-    bookFrame.pointsLabel:SetPos(18, 48)
-    bookFrame.pointsLabel:SetSize(width - 36, 24)
+    bookFrame.pointsLabel:SetPos(18, 45)
+    bookFrame.pointsLabel:SetSize(width - 36, 22)
+
+    bookFrame.xpLabel = WO.UI.Label(bookFrame, "", "WO.Tiny", WO.UI.Colors.textDim)
+    bookFrame.xpLabel:SetPos(18, 68)
+    bookFrame.xpLabel:SetSize(width - 36, 16)
+
+    bookFrame.xpBar = WO.UI.ProgressBar(bookFrame, WO.UI.Colors.xp, WO.UI.Colors.xpBg)
+    bookFrame.xpBar:SetPos(18, 86)
+    bookFrame.xpBar:SetSize(width - 36, 6)
 
     bookFrame.spellList = WO.UI.Scroll(bookFrame)
-    bookFrame.spellList:SetPos(16, 80)
-    bookFrame.spellList:SetSize(width - 32, height - 96)
+    bookFrame.spellList:SetPos(16, 99)
+    bookFrame.spellList:SetSize(width - 32, height - 115)
 
     RebuildBook()
 
@@ -118,6 +146,8 @@ end
 WO.Hook.Add("SpellbookSynced", "spell_ui_refresh", function()
     RebuildBook()
 end)
+
+WO.Hook.Add("LevelingSynced", "spell_ui_xp_progress", RefreshBookProgress)
 
 WO.Hook.Add("CharacterMenuOpening", "spell_ui_close", CloseBook)
 

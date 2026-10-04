@@ -358,8 +358,15 @@ function WO.World.PickupItem(ply, ent)
 
     local instance = ent.ItemInstance
 
-    if not istable(instance) then
+    if not istable(instance) or not isstring(instance.uid) or
+        not isstring(instance.class) or ent.ItemUID ~= instance.uid then
         return false, "no_instance"
+    end
+
+    local def = WO.Items.Get(instance.class)
+
+    if not def or not WO.Items.IsInventoryAllowed(def) then
+        return false, "invalid_item"
     end
 
     -- Состояние должно быть WORLD
@@ -389,19 +396,19 @@ function WO.World.PickupItem(ply, ent)
     end
 
     -- Пытаемся положить (стекуем если возможно)
-    local def = WO.Items.Get(instance.class)
     local placed = false
 
-    if def and def.stackable then
+    if def.stackable then
         local stack = container:FindStack(def.id, def.maxStack)
 
         if stack and (stack.amount or 1) + (instance.amount or 1) <= def.maxStack then
+            if not WO.Items.SetState(instance, WO.Items.State.DESTROYED) then
+                ent.PickupLock = nil
+                return false, "state_transition_failed"
+            end
+
             stack.amount = (stack.amount or 1) + (instance.amount or 1)
-
             WO.Inventory.SendDelta(ply, "update", stack)
-
-            WO.Items.SetState(instance, WO.Items.State.DESTROYED) -- стек поглощён
-
             placed = true
         end
     end
@@ -415,7 +422,10 @@ function WO.World.PickupItem(ply, ent)
             return false, "no_space"
         end
 
-        WO.Items.SetState(instance, WO.Items.State.INVENTORY)
+        if not WO.Items.SetState(instance, WO.Items.State.INVENTORY) then
+            ent.PickupLock = nil
+            return false, "state_transition_failed"
+        end
 
         local ok, reason = container:AddItem(instance)
 

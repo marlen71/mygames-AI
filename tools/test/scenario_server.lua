@@ -17,6 +17,7 @@ MOCK.mountedFiles = {
     ["models/mailer/wow_characters/wowanim_skyhunterNL.mdl"] = true,
     ["models/mailer/wow_characters/wowanim_gnome_male.mdl"] = true,
     ["models/mailer/wow_characters/wowanim_c_stoneconstruct.mdl"] = true,
+    ["models/mailer/wow_characters/wowanim_malygos.mdl"] = true,
 }
 
 -- Runtime registry mocks only the three exact required Workshop NPC classes.
@@ -56,11 +57,30 @@ MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud") and
     "плагины персонажа, HUD, книги заклинаний, маунтов и настроек загрузились")
 MOCK.Assert(MOCK.clientFilesAdded["warcraftonline/gamemode/plugins/character/sh_plugin.lua"],
     "сервер отправил клиенту метаданные character через AddCSLuaFile")
+
+do
+weapons.Register({ Base = "weapon_base", WOTestInherited = true }, "wo_test_merge_parent")
+local childDefinition = { Base = "wo_test_merge_parent", WOTestOwn = true }
+MOCK.Assert(WO.Weapons.Register(childDefinition, "wo_test_merge_child") == true and
+    weapons.GetStored("wo_test_merge_child").WOTestInherited == true and
+    weapons.GetStored("wo_test_merge_child").WOTestOwn == true and
+    weapons.GetStored("wo_test_merge_child").Base == "weapon_base",
+    "MergeBase применяет цепочку наследования без рекурсии и сохраняет поля дочернего SWEP")
+local registeredChild = weapons.GetStored("wo_test_merge_child")
+MOCK.Assert(WO.Weapons.Register({ Base = "wo_test_merge_parent", WOTestOwn = true },
+    "wo_test_merge_child") == true and weapons.GetStored("wo_test_merge_child") == registeredChild,
+    "повторная идентичная регистрация SWEP идемпотентна")
+weapons.Register({ Base = "wo_test_merge_cycle_b" }, "wo_test_merge_cycle_a")
+weapons.Register({ Base = "wo_test_merge_cycle_a" }, "wo_test_merge_cycle_b")
+MOCK.Assert(WO.Weapons.Register({ Base = "wo_test_merge_cycle_a" },
+    "wo_test_merge_cycle_child") == false and weapons.GetStored("wo_test_merge_cycle_child") == nil,
+    "циклические базовые SWEP отклоняются без stack overflow")
 local savedLocalPlayer = LocalPlayer
 LocalPlayer = nil
 local serverUUID = WO.Util.UUID()
 LocalPlayer = savedLocalPlayer
 MOCK.Assert(WO.Util.IsUUID(serverUUID), "UUID создаётся на сервере без LocalPlayer")
+end
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы зарегистрированы: " ..
     (WO.Races.GetIDs and #WO.Races.GetIDs() or 0))
 local concatenatedHumanModel = "models/mailer/character/human/male/humanmale00_99.mdl"
@@ -187,22 +207,37 @@ MOCK.Assert(WO.Spells and table.Count(WO.Spells.GetAll()) == 7 and
     WO.Config.Mounts.horseClass == "wow_npc_8883" and
     WO.Items.Get("mount_stone").uniquePerCharacter == true,
     "зарегистрированы семь spells и защищённый exact-class mount stone")
-local requestedParticles = {
-    ["pfx1_08~"] = true, ["pfx1_0e"] = true, ["pfx1_08#"] = true,
-    ["pfx1_08_~a"] = true, ["pfx1_08_"] = true, ["pfx1_08_~"] = true,
-    ["pfx1_06"] = true, ["pfx1_06~"] = true, ["pfx1_04"] = true,
-    ["pfx8_07"] = true, ["pfx2_03"] = true,
+do
+local spellElementEffects = {
+    firebolt = { element = "fire", effect = "Explosion" },
+    water_bolt = { element = "water", effect = "WaterSurfaceExplosion" },
+    air_burst = { element = "air", effect = "cball_bounce" },
+    earth_shard = { element = "earth", effect = "ThumperDust" },
+    frost_lance = { element = "frost", effect = "GlassImpact" },
+    lightning_strike = { element = "lightning", effect = "TeslaHitBoxes" },
+    healing_wave = { element = "life", effect = "VortDispel" },
 }
-local foundParticles = {}
-for _, spell in pairs(WO.Spells.GetAll()) do
-    if spell.particle then foundParticles[spell.particle] = true end
-    if spell.trailParticle then foundParticles[spell.trailParticle] = true end
-    if spell.impactParticle then foundParticles[spell.impactParticle] = true end
+local allSpellEffectsMatch = true
+for spellID, expected in pairs(spellElementEffects) do
+    local spell = WO.Spells.Get(spellID)
+    local effect = spell and WO.Config.SpellEffects[spell.elementType]
+    allSpellEffectsMatch = allSpellEffectsMatch and spell ~= nil and
+        spell.elementType == expected.element and istable(effect) and
+        isstring(effect.castSound) and isstring(effect.impactSound) and
+        effect.effect == expected.effect and tonumber(effect.effectScale) ~= nil
 end
-for particle in pairs(requestedParticles) do
-    MOCK.Assert(foundParticles[particle] == true,
-        "spell schemas include requested impact particle " .. particle)
+local scrollVendor = WO.NPCs.Get("malygos_scroll_vendor")
+local requiredAddonsExcludeCharacterPack = true
+for _, addon in ipairs(WO.Workshop.RequiredAddons or {}) do
+    if addon.id == 3796529373 then requiredAddonsExcludeCharacterPack = false end
 end
+MOCK.Assert(allSpellEffectsMatch and scrollVendor and
+    scrollVendor.model == "models/mailer/wow_characters/wowanim_malygos.mdl" and
+    #scrollVendor.vendor.stock == 35 and #scrollVendor.vendor.buybackClasses == 35 and
+    requiredAddonsExcludeCharacterPack and
+    WO.Items.Get(WO.Spells.GetScrollClass("firebolt", 1)) and
+    WO.Items.Get(WO.Spells.GetScrollClass("firebolt", 5)),
+    "зарегистрированы элементальные эффекты, 35 уровней свитков и Малигос без workshop-зависимости моделей персонажей")
 
 local starterKnifeDef = WO.Items.Get("starter_knife")
 local arcaneHandsDef = WO.Items.Get("arcane_hands")
@@ -332,6 +367,7 @@ WO.Admin.SAMReady = nil
 
 print("[scenario] load OK: plugins=" .. table.Count(WO.Plugins.GetAll()) ..
     " races=" .. #WO.Races.GetIDs() .. " items=" .. table.Count(WO.Items.GetAll()))
+end
 
 ---------------------------------------------------------------------------
 -- 2. Вход игрока (лимбо + меню)
@@ -522,14 +558,40 @@ MOCK.Assert(magePrimary == "wo_magic_grimoire" and
     magePlayer:GetWeapon("wo_magic_grimoire").WOItemUID == nil,
     "маг получает только grimoire, старый Warp Magic wand удаляется при обновлении")
 
+do
+local function AddSpellScroll(ply, spellId, targetRank)
+    local class = WO.Spells.GetScrollClass(spellId, targetRank)
+    if WO.Inventory.GiveItem(ply, class, 1) == false then return nil, class end
+
+    local container = WO.Inventory.GetContainer(ply:GetCharacter())
+
+    for uid, instance in pairs(container:GetItems()) do
+        if instance.class == class then return uid, class end
+    end
+
+    return nil, class
+end
+
 MOCK.Assert(WO.Spells.PointsAvailable(mageCharacter) == 1 and
-    WO.Spells.LearnOrUpgrade(magePlayer, "healing_wave") == true and
+    WO.Spells.LearnOrUpgrade(magePlayer, "healing_wave") == false and
+    WO.Spells.GetRank(mageCharacter, "healing_wave") == 0,
+    "сервер запрещает изучение заклинания без принадлежащего игроку свитка")
+local learningUID = AddSpellScroll(magePlayer, "healing_wave", 1)
+MOCK.Assert(learningUID and WO.Inventory.UseItem(magePlayer, learningUID) == true and
     WO.Spells.GetRank(mageCharacter, "healing_wave") == 1 and
+    WO.Inventory.GetContainer(mageCharacter):CountItem("spell_scroll_healing_wave_learn") == 0 and
     WO.Spells.Select(magePlayer, "healing_wave") == true,
-    "маг изучает и выбирает заклинание за доступное очко уровня")
-local noSpellPoints, noSpellPointsReason = WO.Spells.LearnOrUpgrade(magePlayer, "firebolt")
-MOCK.Assert(noSpellPoints == false and noSpellPointsReason == "no_points",
-    "сервер не выдаёт spell ranks сверх доступных очков")
+    "маг изучает заклинание расходуемым свитком, который удаляется после успеха")
+local noSpellPointsUID = AddSpellScroll(magePlayer, "firebolt", 1)
+local noSpellPoints, noSpellPointsReason = WO.Inventory.UseItem(magePlayer, noSpellPointsUID)
+MOCK.Assert(noSpellPoints == false and noSpellPointsReason == "no_points" and
+    WO.Spells.GetRank(mageCharacter, "firebolt") == 0 and
+    WO.Inventory.GetContainer(mageCharacter):CountItem("spell_scroll_firebolt_learn") == 1,
+    "сервер не расходует свиток, если у мага недостаточно доступных очков")
+MOCK.TakeOutbox()
+MOCK.NetDeliver({ name = "Spell.Learn", args = { "firebolt" } }, 8, magePlayer)
+MOCK.Assert(WO.Spells.GetRank(mageCharacter, "firebolt") == 0,
+    "legacy Spell.Learn packet не позволяет получить ранг без свитка")
 MOCK.TakeOutbox()
 WO.Spells.Sync(magePlayer)
 local spellSyncOutbox = MOCK.TakeOutbox()
@@ -563,9 +625,21 @@ spellAlly:SetPos(Vector(5000, 0, 0))
 local selfHealed, selfTarget = WO.Spells.Apply(magePlayer, "healing_wave", spellAlly)
 MOCK.Assert(selfHealed == true and selfTarget == magePlayer and magePlayer:Health() > 30,
     "healing spell безопасно перенаправляется на владельца за пределами радиуса")
+local rankTwoScrollUID = AddSpellScroll(magePlayer, "firebolt", 2)
+local prematureRankTwo, prematureRankReason = WO.Inventory.UseItem(magePlayer, rankTwoScrollUID)
+MOCK.Assert(prematureRankTwo == false and prematureRankReason == "level" and
+    WO.Spells.GetRank(mageCharacter, "firebolt") == 0,
+    "уровневый свиток нельзя использовать раньше минимального уровня")
 mageCharacter.level = 2
-MOCK.Assert(WO.Spells.LearnOrUpgrade(magePlayer, "firebolt") == true,
-    "повышение уровня открывает новое очко для следующего spell")
+MOCK.Assert(WO.Inventory.UseItem(magePlayer, noSpellPointsUID) == true and
+    WO.Spells.GetRank(mageCharacter, "firebolt") == 1,
+    "покупка и использование свитка изучения открывается на нужном уровне")
+mageCharacter.level = 4
+local rankThreeScrollUID = AddSpellScroll(magePlayer, "firebolt", 3)
+MOCK.Assert(rankThreeScrollUID and WO.Inventory.UseItem(magePlayer, rankThreeScrollUID) == true and
+    WO.Spells.GetRank(mageCharacter, "firebolt") == 3,
+    "старый ранг заменяется более высоким свитком после проверки уровня и очков")
+end
 local spellEnemy = MOCK.NewEntity("npc")
 spellEnemy:SetHealth(200)
 spellEnemy:SetMaxHealth(200)
@@ -842,7 +916,8 @@ MOCK.Assert(MatchPoints(wolfSpawnPoints, {
 -- Статические quest/vendor NPC размещаются только на своей подтверждённой карте.
 WO.NPCs.SpawnAll()
 
-MOCK.Assert(#WO.NPCs.Spawned == 4, "четыре статических NPC заспавнены: " .. #WO.NPCs.Spawned)
+MOCK.Assert(#WO.NPCs.Spawned == 5,
+    "пять статических NPC заспавнены, включая Малигоса: " .. #WO.NPCs.Spawned)
 
 local function FindNPC(id)
     for _, ent in ipairs(WO.NPCs.Spawned) do
@@ -1092,10 +1167,28 @@ math.random = function(minimum, maximum)
     return minimum
 end
 
+do
 local participantTarget = activeBoars[1]
+local xpBeforeNPCDeath = char.experience or 0
+local levelBeforeNPCDeath = char.level or 1
+local expectedNPCXP, expectedNPCLevel = xpBeforeNPCDeath + 44, levelBeforeNPCDeath
+while expectedNPCLevel < (WO.Config.MaxLevel or 60) and
+    expectedNPCXP >= WO.Config.GetXPForLevel(expectedNPCLevel) do
+    expectedNPCXP = expectedNPCXP - WO.Config.GetXPForLevel(expectedNPCLevel)
+    expectedNPCLevel = expectedNPCLevel + 1
+end
+MOCK.TakeOutbox()
 participantTarget:SetHealth(0)
 WO.NPCs.HandleKilled(participantTarget, ply)
+local npcXPOutbox = MOCK.TakeOutbox()
+local clearXPMessage = false
+for _, message in ipairs(MOCK.FindInbox(npcXPOutbox, "Notify.Show")) do
+    if message.args[2] == "+44 XP" then clearXPMessage = true end
+end
+MOCK.Assert(char.level == expectedNPCLevel and char.experience == expectedNPCXP and clearXPMessage,
+    "убийца получает 44 XP сразу, с учётом level-up, и видит понятное уведомление +44 XP")
 participantTarget:Remove()
+end
 WO.NPCs.SyncQuestSpawns("boar_hunt")
 MOCK.Assert(#FindNPCs("elwynn_boar") == 3,
     "убийство участником задания не создаёт замену даже при синхронизации группы")
@@ -1111,6 +1204,8 @@ math.random = originalRandom
 MOCK.Assert(boarQuest.status == "active" and boarQuest.progress[2] == 4 and
     #FindNPCs("elwynn_boar") == 0,
     "четыре кабана завершают прогресс, но не закрывают квест без отчёта Охотнику")
+local wolfQuest
+do
 local lootCoins, lootItems = 0, 0
 local function CountLoot()
     local coins, items = 0, 0
@@ -1138,10 +1233,11 @@ MOCK.Assert(IsValid(lootItem), "loot item создан в мире")
 ply:SetPos(lootItem:GetPos())
 lootItem.PickupCooldown = 0
 local lootedClass = lootItem.ItemInstance.class
-MOCK.Assert(WO.World.PickupItem(ply, lootItem) == true and
+lootItem:Use(ply, ply)
+MOCK.Assert(not IsValid(lootItem) and
     WO.Inventory.GetContainer(char):CountItem(lootedClass) > 0 and
     WO.World.PickupItem(ply, lootItem) == false,
-    "физическая добыча подбирается только один раз")
+    "нажатие E переносит серверный NPC-loot в инвентарь ровно один раз")
 local coinPile
 for _, ent in ipairs(ents.GetAll()) do
     if ent:GetClass() == "wo_coin_pile" then coinPile = ent break end
@@ -1150,10 +1246,10 @@ MOCK.Assert(IsValid(coinPile), "монеты представлены отдел
 ply:SetPos(coinPile:GetPos())
 coinPile.PickupCooldown = 0
 local moneyBeforeCoinPickup = WO.Currency.Get(ply)
-MOCK.Assert(WO.World.PickupCoins(ply, coinPile) == true and
-    WO.Currency.Get(ply) > moneyBeforeCoinPickup and
+coinPile:Use(ply, ply)
+MOCK.Assert(not IsValid(coinPile) and WO.Currency.Get(ply) > moneyBeforeCoinPickup and
     WO.World.PickupCoins(ply, coinPile) == false,
-    "физические монеты зачисляются ровно один раз")
+    "нажатие E зачисляет физические монеты ровно один раз")
 
 -- Cabana hunt turns in at Hunter, not Marshal; the Marshal then gives the wolf task.
 ply:SetPos(marshal:GetPos())
@@ -1178,7 +1274,7 @@ local wolfOfferIndex, wolfOffer = FindDialogueOption(ply, "quest:wolves_of_elwyn
 MOCK.Assert(wolfOfferIndex ~= nil and wolfOffer.text:find("Взять задание", 1, true) and
     ChooseDialogueAction(ply, "quest:wolves_of_elwynn"),
     "после отчёта Маршал динамически выдаёт поручение на волков")
-local wolfQuest = char.quests["wolves_of_elwynn"]
+wolfQuest = char.quests["wolves_of_elwynn"]
 local wolfProgressIndex, wolfProgressOption = FindDialogueOption(ply, "quest:wolves_of_elwynn")
 MOCK.Assert(wolfProgressIndex and wolfProgressOption.text:find("0/4", 1, true) and
     FindDialogueOption(ply, "abandon:wolves_of_elwynn"),
@@ -1246,6 +1342,7 @@ MOCK.RunTimers(1.0) -- settle death hooks and fixed-point quest cleanup
 MOCK.Assert(wolfQuest.status == "active" and wolfQuest.progress[1] == 4 and
     #FindNPCs("black_wolf") == 0,
     "четыре волка дают готовность, не завершая ручной turn-in")
+end
 ply:SetPos(marshal:GetPos())
 marshal:Use(ply, ply)
 local readyWolfIndex, readyWolfOption = FindDialogueOption(ply, "quest:wolves_of_elwynn")
@@ -1310,6 +1407,36 @@ MOCK.Assert(trainingUID and WO.Inventory.UseItem(ply, trainingUID) == true and
 MOCK.Assert(WO.Inventory.UseItem(ply, mountUID) == true and
     #ents.FindByClass("wow_npc_8883") == 1,
     "сытая улучшенная лошадь снова вызывается одним камнем")
+do
+summonedHorse = ents.FindByClass("wow_npc_8883")[1]
+summonedHorse:SetHealth(50)
+WO.Hook.Run("CombatPostDamage", { target = summonedHorse })
+MOCK.Assert(mountInstance.data.health == 50,
+    "текущая HP лошади сохраняется в принадлежащем игроку камне")
+MOCK.Assert(WO.Inventory.GiveItem(ply, "mount_healing_salve", 1) == true,
+    "лечебный предмет маунта доступен в инвентаре")
+local salveUID
+for uid, instance in pairs(WO.Inventory.GetContainer(char):GetItems()) do
+    if instance.class == "mount_healing_salve" then salveUID = uid break end
+end
+MOCK.Assert(salveUID and WO.Inventory.UseItem(ply, salveUID) == true and
+    mountInstance.data.health == 110 and summonedHorse:Health() == 110,
+    "лечебный бальзам восстанавливает здоровье конкретного summoned маунта")
+MOCK.Assert(WO.Inventory.GiveItem(ply, "mount_barding", 1) == true,
+    "для конкретной лошади можно получить предмет улучшения брони")
+local bardingUID
+for uid, instance in pairs(WO.Inventory.GetContainer(char):GetItems()) do
+    if instance.class == "mount_barding" then bardingUID = uid break end
+end
+local armorTest = { target = summonedHorse, amount = 100 }
+MOCK.Assert(bardingUID and WO.Inventory.UseItem(ply, bardingUID) == true and
+    mountInstance.data.armorLevel == 1 and
+    summonedHorse:GetNW2Int("wo_mount_armor", 0) == 1,
+    "сервер применяет mount-specific броню и отражает улучшение в runtime NPC")
+WO.Hook.Run("CombatCalculate", armorTest)
+MOCK.Assert(armorTest.amount == 94,
+    "улучшение брони действительно снижает урон по принадлежащему маунту")
+end
 WO.Mounts.Toggle(ply, mountInstance)
 MOCK.Assert(#ents.FindByClass("wow_npc_8883") == 0 and
     WO.Inventory.GetContainer(char):CountItem("mount_stone") == 1,

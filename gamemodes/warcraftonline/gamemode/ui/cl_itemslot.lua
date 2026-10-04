@@ -118,6 +118,34 @@ local function BuildTooltipLines(item)
         }
     end
 
+    -- Mount stone instance data is synchronized from the server, never supplied
+    -- by the client action request. Show health, hunger, level, and upgrades here.
+    if isstring(def.mountClass) then
+        local mountConfig = WO.Config.Mounts or {}
+        local mountDefinition = mountConfig.definitions and mountConfig.definitions[def.mountClass] or {}
+        local data = istable(item.data) and item.data or {}
+        local maximumLevel = math.max(1, tonumber(mountDefinition.maximumLevel) or
+            tonumber(mountConfig.maximumLevel) or 5)
+        local level = math.Clamp(math.floor(tonumber(data.level) or 1), 1, maximumLevel)
+        local maximumHealth = math.max(1, math.floor((tonumber(mountDefinition.baseHealth) or 120) +
+            (level - 1) * (tonumber(mountDefinition.healthPerLevel) or 35)))
+        local health = math.Clamp(math.floor(tonumber(data.health) or maximumHealth), 0, maximumHealth)
+        local maximumHunger = math.max(1, tonumber(mountDefinition.maximumHunger) or
+            tonumber(mountConfig.maximumHunger) or 100)
+        local hunger = math.Clamp(math.floor(tonumber(data.hunger) or maximumHunger), 0, maximumHunger)
+        local armorLevel = math.max(0, math.floor(tonumber(data.armorLevel) or 0))
+
+        lines[#lines + 1] = { text = WO.Lang:Get("mount.level") .. ": " .. level .. "/" .. maximumLevel,
+            font = "WO.Body", color = WO.UI.Colors.accent }
+        lines[#lines + 1] = { text = WO.Lang:Get("mount.health") .. ": " .. health .. "/" .. maximumHealth,
+            font = "WO.Small", color = health > 0 and WO.UI.Colors.good or WO.UI.Colors.bad }
+        lines[#lines + 1] = { text = WO.Lang:Get("mount.hunger") .. ": " .. hunger .. "/" .. maximumHunger,
+            font = "WO.Small", color = hunger > 0 and WO.UI.Colors.textDim or WO.UI.Colors.bad }
+        lines[#lines + 1] = { text = WO.Lang:Get("mount.armor") .. ": " .. armorLevel .. "/" ..
+            math.max(0, tonumber(mountDefinition.maximumArmorLevel) or 0),
+            font = "WO.Small", color = WO.UI.Colors.textDim }
+    end
+
     -- Вес
     if def.weight then
         lines[#lines + 1] = { text = WO.Lang:Get("item.weight") .. ": " .. tostring(def.weight), font = "WO.Small", color = WO.UI.Colors.textDim }

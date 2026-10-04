@@ -2,6 +2,8 @@ WO.Spells.Register({
     id = "air_burst",
     name = "Порыв воздуха",
     element = "Воздух",
+    elementType = "air",
+    scrollPrice = 40,
     type = "damage",
     description = "Сгусток голубой энергии поражает цель на расстоянии.",
     requiredLevel = 1,
@@ -13,7 +15,4 @@ WO.Spells.Register({
     powerPerRank = 7,
     spellPowerScale = 0.5,
     damageType = WO.Enums.DamageType.NATURE,
-    particle = "pfx1_08~",
-    impactParticle = "pfx1_06~",
-    impactEffect = "AirboatGunHeavyImpact",
 })

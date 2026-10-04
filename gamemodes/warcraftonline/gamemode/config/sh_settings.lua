@@ -116,6 +116,10 @@ WO.Config.NPCSpawnPoints = {
     mount_merchant = {
         { map = "gm_construct", pos = Vector(850, -520, -144), ang = Angle(0, 0, 0) },
     },
+    -- Пробная явная точка Малигоса рядом с торговой зоной; геометрию проверить в live GMod.
+    malygos_scroll_vendor = {
+        { map = "gm_construct", pos = Vector(1110, -560, -144), ang = Angle(0, 180, 0) },
+    },
     black_wolf = {
         { map = "gm_construct", spawnKey = "wolf_01", questId = "wolves_of_elwynn",
             pos = Vector(-4887.5, -3415.5, 250), ang = Angle(0, 0, 0), level = 1 },
@@ -138,12 +142,86 @@ WO.Config.NPCSpawnPoints = {
     },
 }
 
+WO.Config.MagicScrolls = {
+    sellRate = 0.25,
+    stackSize = 20,
+    learningPrice = 40,
+    rankPriceMultiplier = 1.5,
+    rankPriceStep = 0.5,
+    vendorStockAmount = 20,
+}
+
+-- These are built-in GMod sounds/effects, grouped by spell element so the
+-- grimoire never depends on a mismatched shared zap or optional particle pack.
+WO.Config.SpellEffects = {
+    fire = {
+        castSound = "ambient/fire/fire_small1.wav",
+        impactSound = "ambient/fire/fire_medburn.wav",
+        effect = "Explosion",
+        effectScale = 0.55,
+    },
+    water = {
+        castSound = "ambient/water/water_splash1.wav",
+        impactSound = "ambient/water/water_splash2.wav",
+        effect = "WaterSurfaceExplosion",
+        effectScale = 0.7,
+    },
+    air = {
+        castSound = "ambient/wind/wind_snippet1.wav",
+        impactSound = "ambient/wind/wind_snippet1.wav",
+        effect = "cball_bounce",
+        effectScale = 0.6,
+    },
+    earth = {
+        castSound = "physics/concrete/rock_impact_hard1.wav",
+        impactSound = "physics/concrete/rock_impact_hard1.wav",
+        effect = "ThumperDust",
+        effectScale = 0.65,
+    },
+    frost = {
+        castSound = "physics/glass/glass_impact_bullet1.wav",
+        impactSound = "physics/glass/glass_impact_bullet2.wav",
+        effect = "GlassImpact",
+        effectScale = 0.6,
+    },
+    lightning = {
+        castSound = "ambient/energy/zap1.wav",
+        impactSound = "ambient/energy/zap5.wav",
+        effect = "TeslaHitBoxes",
+        effectScale = 0.7,
+    },
+    life = {
+        castSound = "items/medshot4.wav",
+        impactSound = "items/medshot4.wav",
+        effect = "VortDispel",
+        effectScale = 0.65,
+    },
+}
+
 WO.Config.Mounts = {
     horseClass = "wow_npc_8883",
     stoneItem = "mount_stone",
     maximumLevel = 5,
     maximumHunger = 100,
     hungerPerMinute = 1,
+    definitions = {
+        ["wow_npc_8883"] = {
+            name = "Лошадь",
+            maximumLevel = 5,
+            baseHealth = 120,
+            healthPerLevel = 35,
+            maximumHunger = 100,
+            maximumArmorLevel = 3,
+            armorReductionPerLevel = 0.06,
+            feedItem = "mount_oats",
+            trainingItem = "mount_training_kit",
+            healingItem = "mount_healing_salve",
+            armorItem = "mount_barding",
+            hungerPerFeed = 35,
+            healAmount = 60,
+            minimumArmorLevel = 2,
+        },
+    },
 }
 
 -- Радиусы взаимного знакомства (Source units); сервер применяет их к актуальным позициям.

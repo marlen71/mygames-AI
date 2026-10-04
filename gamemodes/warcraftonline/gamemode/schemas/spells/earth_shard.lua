@@ -2,6 +2,8 @@ WO.Spells.Register({
     id = "earth_shard",
     name = "Каменный осколок",
     element = "Земля",
+    elementType = "earth",
+    scrollPrice = 42,
     type = "damage",
     description = "Поднимает кислотный сгусток земли и наносит урон.",
     requiredLevel = 1,
@@ -13,7 +15,4 @@ WO.Spells.Register({
     powerPerRank = 8,
     spellPowerScale = 0.5,
     damageType = WO.Enums.DamageType.NATURE,
-    particle = "pfx2_03",
-    impactParticle = "pfx1_06",
-    impactEffect = "cball_bounce",
 })

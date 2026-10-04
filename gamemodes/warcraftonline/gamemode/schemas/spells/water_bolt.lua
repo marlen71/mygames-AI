@@ -2,6 +2,8 @@ WO.Spells.Register({
     id = "water_bolt",
     name = "Водяной снаряд",
     element = "Вода",
+    elementType = "water",
+    scrollPrice = 40,
     type = "damage",
     description = "Снаряд водной стихии бьёт выбранную цель.",
     requiredLevel = 1,
@@ -13,7 +15,4 @@ WO.Spells.Register({
     powerPerRank = 7,
     spellPowerScale = 0.5,
     damageType = WO.Enums.DamageType.FROST,
-    particle = "pfx1_08_~",
-    impactParticle = "pfx1_0e",
-    impactEffect = "WaterImpact",
 })

@@ -21,14 +21,23 @@ WO.NPCs.Register({
     attackRange = 96,
     sightRange = 900,
     interactRange = 0,
+    xpReward = 44,
+    xpPerLevel = 5,
     loot = {
         currency = { min = 2, max = 5, chance = 0.80, levelScale = 0.05 },
-        items = {
-            { class = "wolf_pelt", chance = 0.42, levelScale = 0.035 },
-            { class = "wolf_fang", chance = 0.28, levelScale = 0.025 },
-            { class = "bread", chance = 0.07, levelScale = 0.01 },
-            { class = "health_potion", chance = 0.025, levelScale = 0.008 },
+        themed = {
+            chance = 0.82,
+            levelScale = 0.015,
+            items = {
+                { class = "wolf_pelt", weight = 60 },
+                { class = "wolf_fang", weight = 40 },
+            },
+        },
+        rareItems = {
+            { class = "health_potion", chance = 0.02, levelScale = 0.004 },
             { class = "iron_sword", chance = 0.003, levelScale = 0.001 },
+            { class = "leather_helmet", chance = 0.002, levelScale = 0.001 },
+            { class = "spell_scroll_firebolt_learn", chance = 0.001, levelScale = 0.0005 },
         },
     },
     spawns = WO.Config.NPCSpawnPoints.black_wolf or {},

@@ -90,10 +90,21 @@ function WO.Spells.Sync(ply)
     return true
 end
 
-function WO.Spells.LearnOrUpgrade(ply, spellId)
+function WO.Spells.LearnOrUpgrade(ply, spellId, scrollInstance)
     if not IsValid(ply) or not ply:HasCharacter() then return false, "no_character" end
 
     local char = ply:GetCharacter()
+
+    if not istable(scrollInstance) or not isstring(scrollInstance.uid) or
+        not isstring(scrollInstance.class) then
+        return false, "required_scroll"
+    end
+
+    local container = WO.Inventory and WO.Inventory.GetContainer and WO.Inventory.GetContainer(char)
+    local ownedScroll = container and container:GetItem(scrollInstance.uid)
+
+    if ownedScroll ~= scrollInstance then return false, "required_scroll" end
+
     local spell = WO.Spells.Get(spellId)
 
     if not spell then return false, "unknown_spell" end
@@ -102,28 +113,40 @@ function WO.Spells.LearnOrUpgrade(ply, spellId)
         return false, "class"
     end
 
-    local book = EnsureBook(char)
-    local rank = WO.Spells.GetRank(char, spellId)
-    local nextRank = rank + 1
+    local scrollDef = WO.Items.Get(scrollInstance.class)
+    local scrollData = scrollDef and scrollDef.spellScroll
+    local targetRank = scrollData and math.floor(tonumber(scrollData.targetRank) or 0) or 0
 
-    if nextRank > spell.maxRank then
-        return false, "max_rank"
+    if not scrollData or scrollData.spellId ~= spellId or targetRank < 1 or
+        targetRank > spell.maxRank or
+        scrollInstance.class ~= WO.Spells.GetScrollClass(spellId, targetRank) then
+        return false, "wrong_scroll"
     end
 
+    local book = EnsureBook(char)
+    local currentRank = WO.Spells.GetRank(char, spellId)
+
+    if targetRank <= currentRank then
+        WO.Notify(ply, "error", "У вас уже изучен этот ранг или более высокий.")
+        return false, "rank_already_known"
+    end
+
+    local requiredLevel = spell.requiredLevel + targetRank - 1
     local level = math.max(1, math.floor(tonumber(char.level) or 1))
-    local requiredLevel = spell.requiredLevel + rank
 
     if level < requiredLevel then
-        WO.Notify(ply, "error", "Для следующего ранга нужен уровень " .. requiredLevel .. ".")
+        WO.Notify(ply, "error", "Для этого свитка нужен уровень " .. requiredLevel .. ".")
         return false, "level"
     end
 
-    if WO.Spells.PointsAvailable(char) < 1 then
-        WO.Notify(ply, "error", "Нет свободного очка заклинаний. Очко выдаётся за уровень.")
+    local pointsNeeded = targetRank - currentRank
+
+    if WO.Spells.PointsAvailable(char) < pointsNeeded then
+        WO.Notify(ply, "error", "Недостаточно очков заклинаний для этого ранга.")
         return false, "no_points"
     end
 
-    book.ranks[spellId] = nextRank
+    book.ranks[spellId] = targetRank
 
     if not book.selected or book.selected == "" then
         book.selected = spellId
@@ -131,11 +154,43 @@ function WO.Spells.LearnOrUpgrade(ply, spellId)
 
     if WO.SaveQueue then WO.SaveQueue.MarkDirty(char) end
     WO.Spells.Sync(ply)
-    WO.Notify(ply, "success", (rank == 0 and "Изучено: " or "Улучшено: ") ..
-        spell.name .. " (" .. nextRank .. "/" .. spell.maxRank .. ")")
-    WO.Hook.Run("SpellRankChanged", char, spellId, nextRank)
+    WO.Notify(ply, "success", (currentRank == 0 and "Изучено: " or "Уровень повышен: ") ..
+        spell.name .. " (" .. targetRank .. "/" .. spell.maxRank .. ")")
+    WO.Hook.Run("SpellRankChanged", char, spellId, targetRank)
 
-    return true, nextRank
+    return true, targetRank
+end
+
+function WO.Spells.UseScroll(ply, instance)
+    if not IsValid(ply) or not ply:HasCharacter() then return false, "no_character" end
+    if not istable(instance) or not isstring(instance.class) then return false, "invalid_scroll" end
+
+    local def = WO.Items.Get(instance.class)
+    local scroll = def and def.spellScroll
+
+    if not istable(scroll) then return false, "invalid_scroll" end
+
+    local spell = WO.Spells.Get(scroll.spellId)
+
+    if not spell or instance.class ~= WO.Spells.GetScrollClass(scroll.spellId, scroll.targetRank) then
+        return false, "invalid_scroll"
+    end
+
+    local rank = math.floor(tonumber(scroll.targetRank) or 0)
+    local requiredLevel = spell.requiredLevel + rank - 1
+    local char = ply:GetCharacter()
+
+    if char.class ~= "mage" then
+        WO.Notify(ply, "error", "Магические свитки может использовать только маг.")
+        return false, "class"
+    end
+
+    if math.floor(tonumber(char.level) or 1) < requiredLevel then
+        WO.Notify(ply, "error", "Для этого свитка нужен уровень " .. requiredLevel .. ".")
+        return false, "level"
+    end
+
+    return WO.Spells.LearnOrUpgrade(ply, scroll.spellId, instance)
 end
 
 function WO.Spells.Select(ply, spellId)

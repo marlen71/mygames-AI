@@ -381,6 +381,34 @@ local function ScaledChance(entry, level)
     return math.Clamp(chance, 0, 1)
 end
 
+local function DropLootEntry(def, origin, entry)
+    if not istable(entry) or not isstring(entry.class) then return false end
+
+    local amount = math.max(1, math.floor(tonumber(entry.amount) or 1))
+
+    if entry.minAmount or entry.maxAmount then
+        local minimum = math.max(1, math.floor(tonumber(entry.minAmount) or 1))
+        local maximum = math.max(minimum, math.floor(tonumber(entry.maxAmount) or minimum))
+        amount = math.random(minimum, maximum)
+    end
+
+    local instance = WO.Items.CreateInstance(entry.class, amount)
+
+    if not instance then return false end
+
+    local ok, reason = WO.World.SpawnLootItem(instance,
+        LootPosition(origin), LootVelocity())
+
+    if not ok then
+        WO.Items.SetState(instance, WO.Items.State.DESTROYED)
+        WO.Warn("NPC item loot failed for '" .. def.id .. "/" .. entry.class ..
+            "': " .. tostring(reason))
+        return false
+    end
+
+    return true
+end
+
 local function DropNPCLoot(ent, def)
     if ent.WO_NPCLootDropped then return end
 
@@ -402,29 +430,48 @@ local function DropNPCLoot(ent, def)
         if not ok then WO.Warn("NPC coin loot failed for '" .. def.id .. "': " .. tostring(reason)) end
     end
 
-    for _, entry in ipairs(loot.items or {}) do
-        if istable(entry) and isstring(entry.class) and
-            math.random() <= ScaledChance(entry, level) then
-            local amount = math.max(1, math.floor(tonumber(entry.amount) or 1))
+    -- One weighted thematic drop per death keeps common creature loot useful
+    -- without creating a pile of unrelated or duplicate items.
+    local themed = loot.themed
 
-            if entry.minAmount or entry.maxAmount then
-                local minimum = math.max(1, math.floor(tonumber(entry.minAmount) or 1))
-                local maximum = math.max(minimum, math.floor(tonumber(entry.maxAmount) or minimum))
-                amount = math.random(minimum, maximum)
-            end
+    if istable(themed) and istable(themed.items) and
+        math.random() <= ScaledChance(themed, level) then
+        local candidates, totalWeight = {}, 0
 
-            local instance = WO.Items.CreateInstance(entry.class, amount)
+        for _, entry in ipairs(themed.items) do
+            if istable(entry) then
+                local weight = math.max(0, tonumber(entry.weight) or 0)
 
-            if instance then
-                local ok, reason = WO.World.SpawnLootItem(instance,
-                    LootPosition(origin), LootVelocity())
-
-                if not ok then
-                    WO.Items.SetState(instance, WO.Items.State.DESTROYED)
-                    WO.Warn("NPC item loot failed for '" .. def.id .. "/" .. entry.class ..
-                        "': " .. tostring(reason))
+                if isstring(entry.class) and weight > 0 then
+                    totalWeight = totalWeight + weight
+                    candidates[#candidates + 1] = { entry = entry, ceiling = totalWeight }
                 end
             end
+        end
+
+        if totalWeight > 0 then
+            local roll = math.random() * totalWeight
+
+            for _, candidate in ipairs(candidates) do
+                if roll <= candidate.ceiling then
+                    DropLootEntry(def, origin, candidate.entry)
+                    break
+                end
+            end
+        end
+    elseif not istable(themed) then
+        -- Backwards-compatible per-item chances for older creature schemas.
+        for _, entry in ipairs(loot.items or {}) do
+            if istable(entry) and math.random() <= ScaledChance(entry, level) then
+                DropLootEntry(def, origin, entry)
+            end
+        end
+    end
+
+    -- Rare equipment and spell scrolls are separate, low-probability rolls.
+    for _, entry in ipairs(loot.rareItems or {}) do
+        if istable(entry) and math.random() <= ScaledChance(entry, level) then
+            DropLootEntry(def, origin, entry)
         end
     end
 end
@@ -446,6 +493,17 @@ function WO.NPCs.HandleKilled(ent, attacker)
     if IsValid(attacker) and attacker:IsPlayer() and attacker:HasCharacter() and
         not ent.WO_NPCKillEventSent then
         ent.WO_NPCKillEventSent = true
+
+        -- XP is awarded directly to the killer; no pickup entity or client claim
+        -- participates in the reward. Creature schemas own the base/level scaling.
+        local xpReward = math.floor((tonumber(def.xpReward) or 0) +
+            math.max(0, level - (tonumber(def.minLevel) or 1)) *
+                (tonumber(def.xpPerLevel) or 0))
+
+        if xpReward > 0 and WO.Leveling and WO.Leveling.AddXP then
+            WO.Leveling.AddXP(attacker, xpReward, "kill:" .. tostring(def.id))
+        end
+
         WO.Hook.Run("NPCKilled", def, attacker, level)
     end
 

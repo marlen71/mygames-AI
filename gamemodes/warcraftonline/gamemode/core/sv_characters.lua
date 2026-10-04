@@ -144,6 +144,8 @@ function WO.Character.LoadList(ply)
             name = row.name or "",
             surname = row.surname or "",
             level = tonumber(row.level) or 1,
+            experience = tonumber(row.experience) or 0,
+            needed = WO.Config.GetXPForLevel(tonumber(row.level) or 1),
             race = row.race or "human",
             class = row.class or "warrior",
             gender = row.gender or "male",
@@ -282,8 +284,8 @@ function WO.Character.Load(ply, charId)
     local char = RowToCharacter(rows[1])
 
     -- Валидируем сохранённые данные до привязки к игроку. Модель не подменяется
-    -- гражданской: если раса/модель больше не доступна в Workshop, выбор безопасно
-    -- отклоняется, чтобы администратор восстановил аддон или пересоздал персонажа.
+    -- гражданской: если её локальный файл отсутствует, выбор безопасно отклоняется,
+    -- чтобы администратор восстановил модель или пересоздал персонажа.
     local clean, warnings = WO.Character.SanitizeLoaded(char)
 
     for _, warning in ipairs(warnings) do

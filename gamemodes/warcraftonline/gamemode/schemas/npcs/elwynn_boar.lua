@@ -20,13 +20,23 @@ WO.NPCs.Register({
     },
     attackRange = 96,
     interactRange = 0,
+    xpReward = 44,
+    xpPerLevel = 5,
     loot = {
         currency = { min = 1, max = 4, chance = 0.72, levelScale = 0.05 },
-        items = {
-            { class = "boar_meat", chance = 0.50, levelScale = 0.04, amount = 1 },
-            { class = "boar_tusk", chance = 0.30, levelScale = 0.03 },
-            { class = "health_potion", chance = 0.02, levelScale = 0.008 },
+        themed = {
+            chance = 0.86,
+            levelScale = 0.012,
+            items = {
+                { class = "boar_meat", weight = 65, amount = 1 },
+                { class = "boar_tusk", weight = 35 },
+            },
+        },
+        rareItems = {
+            { class = "health_potion", chance = 0.018, levelScale = 0.004 },
             { class = "iron_sword", chance = 0.002, levelScale = 0.001 },
+            { class = "wooden_shield", chance = 0.0015, levelScale = 0.0005 },
+            { class = "spell_scroll_water_bolt_learn", chance = 0.001, levelScale = 0.0005 },
         },
     },
     spawns = WO.Config.NPCSpawnPoints.elwynn_boar or {},

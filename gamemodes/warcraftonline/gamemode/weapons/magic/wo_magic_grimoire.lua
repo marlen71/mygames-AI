@@ -33,26 +33,34 @@ function SWEP:Deploy()
     return true
 end
 
-local function PlayCastEffects(spell, startPos, hitPos)
+local function PlayCastEffects(caster, spell, startPos, hitPos, target)
     if not spell then return end
 
-    local function particle(name, position)
-        if isstring(name) and name ~= "" and isfunction(ParticleEffect) then
-            pcall(ParticleEffect, name, position, Angle(0, 0, 0))
-        end
+    local element = WO.Config.SpellEffects and WO.Config.SpellEffects[spell.elementType]
+    element = element or (WO.Config.SpellEffects and WO.Config.SpellEffects.life) or {}
+
+    if IsValid(caster) and isstring(element.castSound) and element.castSound ~= "" then
+        caster:EmitSound(element.castSound, 70, 100)
     end
 
-    particle(spell.trailParticle, startPos)
-    particle(spell.particle, hitPos)
-    particle(spell.impactParticle, hitPos)
+    if IsValid(target) and isstring(element.impactSound) and element.impactSound ~= "" then
+        target:EmitSound(element.impactSound, 68, 100)
+    elseif IsValid(caster) and isstring(element.impactSound) and element.impactSound ~= "" then
+        caster:EmitSound(element.impactSound, 60, 100)
+    end
 
     if util and isfunction(util.Effect) and isfunction(EffectData) then
         local effectData = EffectData()
         effectData:SetOrigin(hitPos)
 
-        if isfunction(effectData.SetStart) then effectData:SetStart(startPos) end
+        if isfunction(effectData.SetScale) then
+            effectData:SetScale(math.Clamp(tonumber(element.effectScale) or 1, 0.1, 2))
+        end
 
-        util.Effect(spell.impactEffect or "cball_bounce", effectData, true, true)
+        if isfunction(effectData.SetStart) then effectData:SetStart(startPos) end
+        if IsValid(target) and isfunction(effectData.SetEntity) then effectData:SetEntity(target) end
+
+        util.Effect(element.effect or "cball_explode", effectData, true, true)
     end
 end
 
@@ -126,17 +134,16 @@ function SWEP:PrimaryAttack()
         end
     elseif not IsValid(target) or (isfunction(target.IsWorld) and target:IsWorld()) then
         WO.Notify(owner, "info", "Заклинание не задело цель.")
-        PlayCastEffects(spell, startPos, hitPos)
+        PlayCastEffects(owner, spell, startPos, hitPos, nil)
         return
     end
 
     owner:SetNW2Int("wo_mana", math.max(0, owner:GetMana() - manaCost))
-    owner:EmitSound("ambient/energy/zap1.wav", 70, 115)
 
     local applied, affected = WO.Spells.Apply(owner, spellId, target)
 
     if applied then
-        PlayCastEffects(spell, startPos, hitPos)
+        PlayCastEffects(owner, spell, startPos, hitPos, affected)
     end
 end
 

@@ -2,6 +2,8 @@ WO.Spells.Register({
     id = "firebolt",
     name = "Огненный снаряд",
     element = "Огонь",
+    elementType = "fire",
+    scrollPrice = 45,
     type = "damage",
     description = "Красный огненный снаряд с уроном по цели.",
     requiredLevel = 1,
@@ -13,8 +15,4 @@ WO.Spells.Register({
     powerPerRank = 8,
     spellPowerScale = 0.55,
     damageType = WO.Enums.DamageType.FIRE,
-    trailParticle = "pfx1_04",
-    particle = "pfx1_08_",
-    impactParticle = "pfx1_0e",
-    impactEffect = "cball_bounce",
 })

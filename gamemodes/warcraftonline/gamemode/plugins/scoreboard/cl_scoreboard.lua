@@ -192,6 +192,15 @@ local function BuildCharactersPage(parent)
             (race and race.name or char.race) .. "  ·  " ..
             (class and class.name or char.class), "WO.Body", 16, 60,
             WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 32, 24)
+
+        local xp = WO.Leveling and WO.Leveling.ClientData or {}
+        local needed = math.max(1, tonumber(xp.needed) or WO.Config.GetXPForLevel(level))
+        local experience = math.max(0, tonumber(xp.experience) or tonumber(char.experience) or 0)
+        WO.UI.DrawTextFit(WO.Lang:Get("xp.remaining", math.max(0, needed - experience)),
+            "WO.Tiny", 16, 84, WO.UI.Colors.textDim,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 32, 14)
+        WO.UI.DrawBar(16, 98, w - 32, 8, experience / needed,
+            WO.UI.Colors.xp, WO.UI.Colors.xpBg, nil)
     end
 
     local logoutButton = WO.UI.Button(details, WO.Lang:Get("character.logout"), function()
@@ -245,8 +254,17 @@ local function BuildOverviewPage(parent)
                 (race and race.name or char.race) .. "  ·  " ..
                 (class and class.name or char.class), "WO.Body", 22, 66,
                 WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 24)
+            local xp = WO.Leveling and WO.Leveling.ClientData or {}
+            local needed = math.max(1, tonumber(xp.needed) or WO.Config.GetXPForLevel(level))
+            local experience = math.max(0, tonumber(xp.experience) or tonumber(char.experience) or 0)
+            local progressText = WO.Lang:Get("xp.compact", experience, needed,
+                math.max(0, needed - experience))
+            WO.UI.DrawTextFit(progressText, "WO.Tiny",
+                22, 104, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 18)
+            WO.UI.DrawBar(22, 126, w - 44, 8, experience / needed,
+                WO.UI.Colors.xp, WO.UI.Colors.xpBg, nil)
             WO.UI.DrawTextFit(WO.Lang:Get("menu.server_players") .. ": " .. #player.GetAll(),
-                "WO.Small", 22, 108, WO.UI.Colors.textDim,
+                "WO.Small", 22, 148, WO.UI.Colors.textDim,
                 TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 20)
         else
             WO.UI.DrawTextFit(WO.Lang:Get("menu.no_character"), "WO.Subtitle", 20, 22,

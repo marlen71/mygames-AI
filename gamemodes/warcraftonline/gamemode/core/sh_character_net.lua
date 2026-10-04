@@ -44,6 +44,8 @@ WO.Net.Register("Character.List", {
                 gender = net.ReadString(),
                 model = net.ReadString(),
                 lastPlayed = net.ReadUInt(32),
+                experience = net.ReadUInt(32),
+                needed = net.ReadUInt(32),
             }
         end
 

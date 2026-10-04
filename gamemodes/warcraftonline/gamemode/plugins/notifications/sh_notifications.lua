@@ -16,14 +16,16 @@ setmetatable(WO.Notify, {
         end
 
         if SERVER then
-            if istable(target) then
+            -- Check entities first: in test doubles (and some plugins) a Player
+            -- may also be represented by a Lua table, but is not a recipient list.
+            if IsValid(target) then
+                WO.Net.Send("Notify.Show", target, notifyType, text, sound or "")
+            elseif istable(target) then
                 for _, ply in ipairs(target) do
                     if IsValid(ply) then
                         WO.Net.Send("Notify.Show", ply, notifyType, text, sound or "")
                     end
                 end
-            elseif IsValid(target) then
-                WO.Net.Send("Notify.Show", target, notifyType, text, sound or "")
             end
         else
             WO.Notify.Show(notifyType, text, sound)

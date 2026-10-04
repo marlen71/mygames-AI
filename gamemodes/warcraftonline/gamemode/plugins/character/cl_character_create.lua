@@ -213,7 +213,7 @@ end
 
 local stepBuilders = {}
 
--- Шаг 1: раса. Недоступные (не смонтированные) модели в выборе не показываются.
+-- Шаг 1: раса. Показываем только локально доступные модели расы и пола.
 stepBuilders[1] = function(parent, modelPanel)
     local scroll = WO.UI.Scroll(parent)
 
@@ -769,7 +769,7 @@ function WO.CharacterUI.OpenCreate()
             WO.UI.Metrics.radius)
     end
 
-    -- Без расы из Workshop показывается понятный пустой preview, а не citizen.
+    -- Если локальной модели пока нет — показываем понятный placeholder, не citizen.
     local modelPanel = WO.UI.CreateCharacterModel(createFrame)
     modelPanel.spin = true
     WO.CharacterUI.PreviewModel = modelPanel

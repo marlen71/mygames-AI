@@ -375,8 +375,11 @@ print("[scenario] Main menu and OpenCreate OK")
 MOCK.NetDeliver({ name = "Character.List", args = {
     1,
     "abc", "Тест", "Герой", 3, "human", "warrior", "male",
-    "models/mailer/character/human/male/humanmale00_00.mdl", 0,
+    "models/mailer/character/human/male/humanmale00_00.mdl", 0, 150, 600,
 } }, 8, nil)
+MOCK.Assert(WO.Character.GetList()[1].experience == 150 and
+    WO.Character.GetList()[1].needed == 600,
+    "список персонажей синхронизирует XP до следующего уровня для карточки")
 
 MOCK.NetDeliver({ name = "Character.OpenMenu", args = {} }, 8, nil)
 local loadSavedButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.load"))
@@ -471,6 +474,42 @@ local selectedWeaponMessages = MOCK.FindInbox(selectedWeaponOutbox, "Weapons.Sel
 MOCK.Assert(#selectedWeaponMessages == 1 and
     selectedWeaponMessages[1].args[1] == "tfa_cso_coldsteelblade",
     "селектор запрашивает у сервера выбор только оружия из локального списка")
+
+-- More than six and more than ten SWEPs must still expose the complete numeric
+-- window; the tenth standard slot is bound to key 0.
+for index = 1, 10 do
+    local class = string.format("wo_selector_test_%02d", index)
+    weapons.Register({ PrintName = "Test weapon " .. index, Slot = index, SlotPos = 0 }, class)
+    localWeaponPlayer:Give(class)
+end
+local allSelectorWeapons = WO.WeaponSelector.GetWeapons(localWeaponPlayer)
+local numericWindow = WO.WeaponSelector.GetVisibleWeapons(localWeaponPlayer)
+local expectedKeys = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 }
+local numericWindowValid = #allSelectorWeapons == 12 and #numericWindow == 10
+for index, key in ipairs(expectedKeys) do
+    numericWindowValid = numericWindowValid and numericWindow[index] ~= nil and
+        numericWindow[index].key == key
+end
+MOCK.Assert(numericWindowValid,
+    "селектор показывает десять SWEP одновременно и подписывает десятый клавишей 0")
+
+for _, key in ipairs(expectedKeys) do
+    MOCK.AdvanceTime(1) -- let the previous optimistic selection expire
+    local visible = WO.WeaponSelector.GetVisibleWeapons(localWeaponPlayer)
+    local expected
+
+    for _, entry in ipairs(visible) do
+        if entry.key == key then expected = entry.class break end
+    end
+
+    MOCK.TakeOutbox()
+    local bind = "slot" .. tostring(key)
+    MOCK.Assert(expected ~= nil and weaponBind(localWeaponPlayer, bind, true) == true,
+        "keyboard slot bind is consumed for key " .. tostring(key))
+    local slotMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Weapons.Select")
+    MOCK.Assert(#slotMessages == 1 and slotMessages[1].args[1] == expected,
+        "keyboard key " .. tostring(key) .. " selects its visible owned SWEP")
+end
 
 local aimWeapon = MOCK.NewEntity("weapon")
 aimWeapon.__weaponClass = "wo_test_melee"
@@ -721,6 +760,15 @@ MOCK.Assert(resourceHoverInfo and resourceHoverInfo.entity == hoverItem and
     resourceHoverInfo.description == WO.Items.Get("wolf_pelt").description and
     resourceHoverInfo.amount == 2,
     "подсказка ресурса собирает название, описание и количество из безопасной схемы/NW2")
+local interactionBind = hook.GetTable().PlayerBindPress.wo_interaction_use_request
+MOCK.TakeOutbox()
+MOCK.Assert(isfunction(interactionBind) and
+    interactionBind(LocalPlayer(), "+use", true) == true,
+    "клавиша E отправляет серверно проверяемый запрос подбора физического loot")
+local interactionRequests = MOCK.FindInbox(MOCK.TakeOutbox(), "Interact.Request")
+MOCK.Assert(#interactionRequests == 1 and
+    interactionRequests[1].args[1] == hoverItem:EntIndex(),
+    "клиент запрашивает взаимодействие только с прицельной сущностью")
 MOCK.frameTime = 0.25
 MOCK.drawnTextValues = {}
 hook.GetTable().HUDPaint.wo_interaction_paint()
@@ -805,6 +853,23 @@ local panelsBeforeSheet = #MOCK.createdPanels
 WO.CharacterUI.OpenSheet()
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeSheet,
     "лист персонажа создаётся после синхронизации статов")
+local expectedXPRemaining = WO.Lang:Get("xp.compact", 10, 100, 90)
+local sheetShowsXPRemaining = false
+for _, panel in ipairs(MOCK.createdPanels) do
+    if (rawget(panel, "woText") or ""):find(expectedXPRemaining, 1, true) then
+        sheetShowsXPRemaining = true
+    end
+end
+MOCK.Assert(sheetShowsXPRemaining,
+    "лист персонажа показывает точное количество XP до следующего уровня")
+MOCK.drawnTextValues = {}
+WO.HUD.DrawPlayerFrame()
+local hudShowsXPRemaining = false
+for _, text in ipairs(MOCK.drawnTextValues) do
+    if text:find(expectedXPRemaining, 1, true) then hudShowsXPRemaining = true end
+end
+MOCK.Assert(hudShowsXPRemaining,
+    "основной HUD выводит числом оставшийся XP рядом со шкалой")
 
 local panelsBeforeUI = #MOCK.createdPanels
 
@@ -863,7 +928,18 @@ MOCK.Assert(magicSWEP and isfunction(magicSWEP.PrimaryAttack) and
     isfunction(magicSWEP.SecondaryAttack), "новый spellbook SWEP содержит ЛКМ и ПКМ обработчики")
 magicSWEP.SecondaryAttack(fakeMagicWeapon)
 MOCK.Assert(#MOCK.createdPanels > spellPanelsBefore,
-    "ПКМ нового SWEP открывает самостоятельное окно выбора и изучения заклинаний")
+    "ПКМ нового SWEP открывает книгу выбора заклинаний и подсказки о нужных свитках")
+do
+    local spellbookXPText = WO.Lang:Get("xp.compact", 10, 100, 90)
+    local spellbookShowsXP = false
+
+    for _, panel in ipairs(MOCK.createdPanels) do
+        if rawget(panel, "woText") == spellbookXPText then spellbookShowsXP = true end
+    end
+
+    MOCK.Assert(spellbookShowsXP,
+        "книга заклинаний показывает оставшийся XP рядом с уровнем мага")
+end
 
 -- Диалог
 local panelsBeforeDlg = #MOCK.createdPanels
