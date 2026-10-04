@@ -43,6 +43,9 @@ MOCK.Assert(WO.UI.Scroll ~= nil, "WO.UI.Scroll существует")
 MOCK.Assert(WO.UI.Button ~= nil, "WO.UI.Button существует")
 MOCK.Assert(WO.UI.CreateCharacterModel ~= nil, "WO.UI.CreateCharacterModel существует")
 MOCK.Assert(WO.UI.Colors ~= nil and WO.UI.Metrics ~= nil, "тема загружена")
+MOCK.Assert(WO.Config.Sounds.ui_open == "ui/buttonclickrelease.wav" and
+    WO.Config.Sounds.ui_close == "ui/buttonclickrelease.wav",
+    "звуки открытия/закрытия используют встроенный UI asset, а не отсутствующую папку menu")
 MOCK.Assert(MOCK.fonts["WO.Body"].weight >= 600 and MOCK.fonts["WO.Small"].size >= 15 and
     MOCK.fonts["WO.Tiny"].size >= 13,
     "глобальные UI-шрифты стали крупнее и плотнее")

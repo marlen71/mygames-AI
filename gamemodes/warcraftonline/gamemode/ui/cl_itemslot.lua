@@ -377,7 +377,7 @@ AccessorFunc(SLOT, "slotSize", "SlotSize")
 function SLOT:Init()
     self.item = nil
     self.itemIcon = nil
-    self.itemIconMaterial = nil
+    self.itemIconMaterial = false
     self.itemModelPath = nil
     self:SetSize(WO.UI.Metrics.slotSize, WO.UI.Metrics.slotSize)
     self.slotColor = WO.UI.Colors.panelLight
@@ -443,7 +443,7 @@ function SLOT:Paint(w, h)
     -- Иконка предмета (материал, модель или гарантированный текстовый fallback).
     if item and def then
         local drewIcon = false
-        local mat = rawget(self, "itemIconMaterial")
+        local mat = self.itemIconMaterial
 
         if mat then
             surface.SetMaterial(mat)
@@ -469,7 +469,7 @@ function SLOT:UpdateIcon()
     end
 
     self.itemIcon = nil
-    self.itemIconMaterial = nil
+    self.itemIconMaterial = false
     self.itemModelPath = nil
 
     local item = self.item
@@ -477,9 +477,9 @@ function SLOT:UpdateIcon()
 
     if not item or not def then return end
 
-    self.itemIconMaterial = LoadIconMaterial(def.icon)
+    self.itemIconMaterial = LoadIconMaterial(def.icon) or false
 
-    if rawget(self, "itemIconMaterial") then return end
+    if self.itemIconMaterial then return end
     if not isstring(def.model) or def.model == "" then return end
 
     local panel = vgui.Create("DModelPanel", self)
