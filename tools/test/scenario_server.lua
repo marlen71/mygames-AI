@@ -578,7 +578,20 @@ end
 local slotData = table.Copy(createData)
 local ordinarySlotPlayer = MakeSlotTestPlayer("STEAM_0:1:10001", false)
 local regularSlotResults = {}
-for _ = 1, 3 do
+local originalUUID = WO.Util.UUID
+local injectDuplicateID = true
+WO.Util.UUID = function()
+    if injectDuplicateID then
+        injectDuplicateID = false
+        return char.id -- deliberately collide with an existing row on the first attempt
+    end
+
+    return originalUUID()
+end
+local regularFirstOK, regularFirstResult = WO.Character.Create(ordinarySlotPlayer, slotData)
+WO.Util.UUID = originalUUID
+regularSlotResults[#regularSlotResults + 1] = { ok = regularFirstOK, result = regularFirstResult }
+for _ = 1, 2 do
     local ok, result = WO.Character.Create(ordinarySlotPlayer, slotData)
     regularSlotResults[#regularSlotResults + 1] = { ok = ok, result = result }
 end
@@ -588,12 +601,13 @@ for _ = 1, 6 do
     local ok, result = WO.Character.Create(slotAdminPlayer, slotData)
     adminSlotResults[#adminSlotResults + 1] = { ok = ok, result = result }
 end
-MOCK.Assert(regularSlotResults[1].ok and regularSlotResults[2].ok and
+MOCK.Assert(not injectDuplicateID and regularSlotResults[1].ok and
+    regularSlotResults[1].result.id ~= char.id and regularSlotResults[2].ok and
     regularSlotResults[3].ok == false and regularSlotResults[3].result == "character_limit" and
     adminSlotResults[1].ok and adminSlotResults[2].ok and adminSlotResults[3].ok and
     adminSlotResults[4].ok and adminSlotResults[5].ok and
     adminSlotResults[6].ok == false and adminSlotResults[6].result == "character_limit",
-    "Character.Create соблюдает пределы 2/5 даже при прямых серверных запросах")
+    "Character.Create повторяет создание при конфликте ID и соблюдает пределы 2/5")
 
 print("[scenario] create OK: " .. char:GetFullName() .. " lvl " .. char:GetLevel())
 

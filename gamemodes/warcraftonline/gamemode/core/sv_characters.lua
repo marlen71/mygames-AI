@@ -208,7 +208,7 @@ function WO.Character.Create(ply, data)
     end
 
     local char = WO.Character.New({
-        id = WO.Util.UUID(),
+        id = nil, -- назначается уникальный ID внутри транзакции перед INSERT
         steamid = steamid,
         steamid64 = ply:SteamID64(),
         name = result.name,
@@ -232,7 +232,6 @@ function WO.Character.Create(ply, data)
 
     -- Сохраняем в БД. Лимит повторно проверяется внутри транзакции,
     -- чтобы параллельные запросы не могли обойти ограничение слотов.
-    local row = CharacterToRow(char)
     local limitReached = false
 
     local saved = WO.Database:Transaction(function()
@@ -248,6 +247,37 @@ function WO.Character.Create(ply, data)
             limitReached = true
             return
         end
+
+        -- util.CRC-backed UUIDs are probabilistic. Check the primary key and
+        -- retry here so an extremely rare collision never forces the player
+        -- to resubmit character creation manually.
+        local uniqueID
+
+        for _ = 1, 16 do
+            local candidate = WO.Util.UUID()
+
+            if WO.Util.IsUUID(candidate) then
+                local idCount = tonumber(WO.Database:FetchValue(
+                    "SELECT COUNT(*) FROM wo_characters WHERE id = ?", candidate
+                ))
+
+                if idCount == nil then
+                    error("character id lookup failed")
+                end
+
+                if idCount == 0 then
+                    uniqueID = candidate
+                    break
+                end
+            end
+        end
+
+        if not uniqueID then
+            error("could not generate a unique character id")
+        end
+
+        char.id = uniqueID
+        local row = CharacterToRow(char)
 
         if not WO.Database:Insert("wo_characters", row) then
             error("insert failed")
