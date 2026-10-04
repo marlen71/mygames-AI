@@ -297,11 +297,13 @@ end
 ---------------------------------------------------------------------------
 
 local damageNumbers = {}
+local lastAimTrace = nil
+local DAMAGE_NUMBER_LIFETIME = 1.6
 
-local function DrawOutlinedText(text, font, x, y, color, alignX, alignY)
+local function DrawOutlinedText(text, font, x, y, color, alignX, alignY, outlineColor)
     if draw.SimpleTextOutlined then
         draw.SimpleTextOutlined(text, font, x, y, color, alignX, alignY,
-            1, Color(8, 10, 14, 230))
+            1, outlineColor or Color(8, 10, 14, 230))
     else
         draw.SimpleText(text, font, x, y, color, alignX, alignY)
     end
@@ -351,37 +353,116 @@ function WO.HUD.DrawPlayerNameplates()
     end
 end
 
-function WO.HUD.DrawHoverNPC()
+local aimedNPCTarget = nil
+
+local function IsNPCNameplateTarget(target)
+    if not IsValid(target) then return false end
+    if isfunction(target.IsNPC) and target:IsNPC() then return true end
+
+    return isfunction(target.GetNW2String) and
+        target:GetNW2String("wo_npc_id", "") ~= ""
+end
+
+local function GetNPCDefinition(target)
+    if not IsValid(target) or not isfunction(target.GetNW2String) then return nil end
+
+    local npcID = target:GetNW2String("wo_npc_id", "")
+    return npcID ~= "" and WO.NPCs and WO.NPCs.Get and WO.NPCs.Get(npcID) or nil
+end
+
+local function UpdateAimedNPCTarget(ply, attackTrace)
+    local hitEntity = attackTrace and attackTrace.Entity
+
+    if attackTrace and attackTrace.Hit and IsValid(hitEntity) then
+        aimedNPCTarget = IsNPCNameplateTarget(hitEntity) and hitEntity or nil
+        return
+    end
+
+    aimedNPCTarget = nil
+
+    if not isfunction(ply.GetShootPos) or not isfunction(ply.GetAimVector) or
+        not util or not isfunction(util.TraceLine) then return end
+
+    local startPos = ply:GetShootPos()
+    local aim = ply:GetAimVector()
+    if not isvector(startPos) or not isvector(aim) then return end
+
+    local range = math.Clamp(tonumber(WO.Config.NPCHoverTraceRange) or 1800, 128, 8192)
+    local trace = util.TraceLine({
+        start = startPos,
+        endpos = startPos + aim * range,
+        filter = ply,
+        mask = MASK_SHOT or MASK_SOLID,
+    })
+    local target = trace and trace.Entity or nil
+
+    aimedNPCTarget = IsNPCNameplateTarget(target) and target or nil
+end
+
+local function GetAimedEntity(ply)
+    if not lastAimTrace and isfunction(WO.HUD.GetAimTrace) then
+        lastAimTrace = WO.HUD.GetAimTrace(ply)
+        UpdateAimedNPCTarget(ply, lastAimTrace)
+    end
+
+    return aimedNPCTarget
+end
+
+function WO.HUD.GetHoveredNPC()
     local ply = LocalPlayer()
-    if not IsValid(ply) or not isfunction(ply.GetEyeTrace) then return end
+    if not IsValid(ply) then return nil end
 
-    local trace = ply:GetEyeTrace()
-    local target = trace and trace.Entity
+    local target = GetAimedEntity(ply)
+    if not IsNPCNameplateTarget(target) then return nil end
 
-    if not IsValid(target) or target:GetNW2String("wo_npc_id", "") == "" then return end
+    return target, GetNPCDefinition(target)
+end
+
+function WO.HUD.DrawHoverNPC()
+    local target, npcDefinition = WO.HUD.GetHoveredNPC()
+    if not IsValid(target) then return end
 
     local name = target:GetNW2String("wo_name", target.PrintName or target:GetClass())
     local level = math.max(1, target:GetNW2Int("wo_level", 1))
     local maxHealth = math.max(1, isfunction(target.GetMaxHealth) and target:GetMaxHealth() or 1)
     local health = math.Clamp(isfunction(target.Health) and target:Health() or 0, 0, maxHealth)
-    local center = isfunction(target.WorldSpaceCenter) and target:WorldSpaceCenter() or target:GetPos()
-    local screen = (center + Vector(0, 0, 38)):ToScreen()
+    local height = 56
 
-    if not screen.visible then return end
+    if isfunction(target.OBBMaxs) then
+        local bounds = target:OBBMaxs()
+        if isvector(bounds) then height = math.max(height, bounds.z + 12) end
+    end
 
-    local width, height = 248, 66
+    local screen = (target:GetPos() + Vector(0, 0, height)):ToScreen()
+    if not screen or not screen.visible then return end
+
+    local width, panelHeight = 260, 60
     local x = math.Clamp(screen.x - width / 2, 8, ScrW() - width - 8)
-    local y = math.Clamp(screen.y - height - 8, 8, ScrH() - height - 8)
+    local y = math.Clamp(screen.y - panelHeight - 10, 8, ScrH() - panelHeight - 8)
+    local hostile = npcDefinition and npcDefinition.hostile == true
+    local frameColor = hostile and WO.UI.Colors.health or WO.UI.Colors.accentDark
+    local nameColor = hostile and WO.UI.Colors.text or WO.UI.Colors.accent
 
-    WO.UI.DrawPanelOutlined(x, y, width, height, Color(10, 14, 22, 228),
-        WO.UI.Colors.accentDark)
-    WO.UI.DrawTextFit(name, "WO.Small", x + 10, y + 7, WO.UI.Colors.text,
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, width - 20, 20)
-    WO.UI.DrawTextFit("Уровень " .. level, "WO.Tiny", x + 10, y + 27,
-        WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 85, 15)
-    WO.UI.DrawBar(x + 98, y + 31, width - 110, 14, health / maxHealth,
+    WO.UI.DrawPanelOutlined(x, y, width, panelHeight, Color(10, 14, 22, 230), frameColor)
+    WO.UI.DrawTextFit(name, "WO.Small", x + 10, y + 7, nameColor,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, width - 94, 20)
+    WO.UI.DrawTextFit(WO.Lang:Get("hud.level_short") .. " " .. level, "WO.Tiny",
+        x + width - 82, y + 9, WO.UI.Colors.textDim,
+        TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP, 72, 16)
+    WO.UI.DrawBar(x + 10, y + 33, width - 20, 16, health / maxHealth,
         WO.UI.Colors.health, WO.UI.Colors.healthBg, health .. " / " .. maxHealth)
 end
+
+hook.Add("PreDrawHalos", "wo_npc_aim_highlight", function()
+    if not HasCustomHUD() or not halo or not isfunction(halo.Add) then return end
+
+    local target, npcDefinition = WO.HUD.GetHoveredNPC()
+    if not IsValid(target) then return end
+
+    local color = npcDefinition and npcDefinition.hostile and
+        WO.UI.Colors.health or WO.UI.Colors.accent
+    halo.Add({ target }, Color(color.r, color.g, color.b, 170), 2, 2, 1, true, false)
+end)
 
 function WO.HUD.DrawDamageNumbers()
     local now = CurTime()
@@ -390,21 +471,28 @@ function WO.HUD.DrawDamageNumbers()
         local entry = damageNumbers[index]
         local age = now - entry.started
 
-        if age >= 1.45 then
+        if age >= DAMAGE_NUMBER_LIFETIME then
             table.remove(damageNumbers, index)
         else
             local screen = entry.position:ToScreen()
 
             if screen.visible then
-                local alpha = math.floor(255 * math.Clamp(1 - age / 1.45, 0, 1))
-                local rise = age * 38
+                local progress = math.Clamp(age / DAMAGE_NUMBER_LIFETIME, 0, 1)
+                local alpha = math.floor(255 * ((1 - progress) ^ 1.15))
+                local rise = age * 48
+                local drift = entry.driftX * progress
                 local text = (entry.critical and "CRIT  " or "") .. "-" ..
                     tostring(math.floor(entry.amount + 0.5))
                 local color = entry.critical and Color(255, 208, 92, alpha) or
-                    Color(255, 118, 91, alpha)
+                    Color(255, 238, 208, alpha)
+                local outline = Color(8, 10, 14, math.floor(alpha * 0.9))
 
-                DrawOutlinedText(text, entry.critical and "WO.Subtitle" or "WO.Body",
-                    screen.x, screen.y - rise, color, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+                if alpha > 0 then
+                    DrawOutlinedText(text, entry.critical and "WO.Subtitle" or "WO.Body",
+                        screen.x + entry.offsetX + drift,
+                        screen.y + entry.offsetY - rise, color,
+                        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, outline)
+                end
             end
         end
     end
@@ -413,11 +501,17 @@ end
 function WO.HUD.AddDamageNumber(data)
     if not istable(data) or not isvector(data.position) then return end
 
+    local amount = math.max(0, tonumber(data.amount) or 0)
+    if amount <= 0 then return end
+
     damageNumbers[#damageNumbers + 1] = {
         position = data.position,
-        amount = math.max(0, tonumber(data.amount) or 0),
+        amount = amount,
         critical = data.critical == true,
         started = CurTime(),
+        offsetX = math.Rand(-16, 16),
+        offsetY = math.Rand(-8, 8),
+        driftX = math.Rand(-10, 10),
     }
 
     if #damageNumbers > 32 then table.remove(damageNumbers, 1) end
@@ -513,6 +607,8 @@ end
 function WO.HUD.DrawCrosshair()
     local ply = LocalPlayer()
     local cx, cy, trace = WO.HUD.GetCrosshairPosition(ply)
+    lastAimTrace = trace
+    if IsValid(ply) then UpdateAimedNPCTarget(ply, trace) end
     local target = trace and trace.Entity
     local color = Color(240, 202, 115, 235)
 

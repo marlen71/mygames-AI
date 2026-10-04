@@ -1616,9 +1616,23 @@ function surface.GetFontName() return "default" end
 draw = draw or {}
 MOCK.drawTextCalls = MOCK.drawTextCalls or 0
 MOCK.drawnTextValues = MOCK.drawnTextValues or {}
-function draw.SimpleText(text)
+MOCK.drawTextDetails = MOCK.drawTextDetails or {}
+function draw.SimpleText(text, font, x, y, color, alignX, alignY)
     MOCK.drawTextCalls = MOCK.drawTextCalls + 1
-    MOCK.drawnTextValues[#MOCK.drawnTextValues + 1] = tostring(text or "")
+    local value = tostring(text or "")
+    MOCK.drawnTextValues[#MOCK.drawnTextValues + 1] = value
+    MOCK.drawTextDetails[#MOCK.drawTextDetails + 1] = {
+        text = value, font = font, x = x, y = y, color = color,
+        alignX = alignX, alignY = alignY,
+    }
+    return 0, 0
+end
+function draw.SimpleTextOutlined(text, font, x, y, color, alignX, alignY,
+    outlineWidth, outlineColor)
+    draw.SimpleText(text, font, x, y, color, alignX, alignY)
+    local detail = MOCK.drawTextDetails[#MOCK.drawTextDetails]
+    detail.outlineWidth = outlineWidth
+    detail.outlineColor = outlineColor
     return 0, 0
 end
 function draw.NoTexture() end

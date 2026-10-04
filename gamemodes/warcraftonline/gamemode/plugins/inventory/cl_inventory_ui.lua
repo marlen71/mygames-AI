@@ -114,14 +114,33 @@ local function CreateResourcesPanel(parent)
         local money = WO.Currency.ClientAmount or 0
         local moneyText = WO.Currency.Format and WO.Currency.Format(money) or tostring(money)
         local data = WO.Inventory.ClientData
-        local capacity = data and ((data.width or 0) * (data.height or 0)) or 0
+        local width = tonumber(data and data.width) or 0
+        local height = tonumber(data and data.height) or 0
+        local capacity = width * height
+        local overflowCount = 0
+
+        for _, item in ipairs(GetItems()) do
+            local x, y = tonumber(item.x), tonumber(item.y)
+
+            if not x or not y or x < 1 or y < 1 or x > width or y > height then
+                overflowCount = overflowCount + 1
+            end
+        end
+
+        local countText = WO.Lang:Get("inventory.items_count") .. ": " .. #GetItems() ..
+            "  /  " .. capacity
+        local countColor = WO.UI.Colors.textDim
+
+        if overflowCount > 0 then
+            countText = WO.Lang:Get("inventory.overflow_label") .. ": " .. overflowCount
+            countColor = WO.UI.Colors.bad
+        end
 
         WO.UI.DrawTextFit(WO.Lang:Get("currency.name") .. ": " .. moneyText,
             "WO.Small", 12, h / 2, WO.UI.Colors.accent,
             TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, math.max(0, w * 0.48 - 12), h - 4)
-        WO.UI.DrawTextFit(WO.Lang:Get("inventory.items_count") .. ": " .. #GetItems() ..
-            "  /  " .. capacity, "WO.Small", w - 12, h / 2,
-            WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER,
+        WO.UI.DrawTextFit(countText, "WO.Small", w - 12, h / 2,
+            countColor, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER,
             math.max(0, w * 0.48 - 12), h - 4)
     end
 

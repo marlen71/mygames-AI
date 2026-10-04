@@ -13,19 +13,57 @@ end)
 -- Уведомления о критах (опционально)
 ---------------------------------------------------------------------------
 
-local function SendDamageNumber(attacker, target, amount, critical)
-    if not IsValid(target) or not isfunction(target.GetPos) then return end
+local function IsDamageNumberTarget(target)
+    if not IsValid(target) then return false end
+    if isfunction(target.IsPlayer) and target:IsPlayer() then return true end
+    if isfunction(target.IsNPC) and target:IsNPC() then return true end
+    if target.WO_NPCDefinition ~= nil then return true end
 
-    local position = target:GetPos() + Vector(0, 0, 52)
+    return isfunction(target.GetNW2String) and
+        target:GetNW2String("wo_npc_id", "") ~= ""
+end
+
+local function GetDamageNumberPosition(target)
+    local position = target:GetPos()
+    local height = 52
+
+    if isfunction(target.OBBMaxs) then
+        local maximum = target:OBBMaxs()
+
+        if isvector(maximum) then
+            height = math.max(height, maximum.z + 10)
+        end
+    elseif isfunction(target.GetModelBounds) then
+        local _, maximum = target:GetModelBounds()
+
+        if isvector(maximum) then
+            height = math.max(height, maximum.z + 10)
+        end
+    end
+
+    return position + Vector(0, 0, math.Clamp(height, 52, 512))
+end
+
+local function SendDamageNumber(attacker, target, amount, critical)
+    if not IsDamageNumberTarget(target) or not isfunction(target.GetPos) then return end
+
+    amount = tonumber(amount) or 0
+    if amount <= 0 then return end
+
     local data = {
-        position = position,
-        amount = math.max(0, tonumber(amount) or 0),
+        position = GetDamageNumberPosition(target),
+        amount = amount,
         critical = critical == true,
     }
     local recipients = {}
 
-    if IsValid(attacker) and attacker:IsPlayer() then recipients[attacker] = true end
-    if IsValid(target) and target:IsPlayer() then recipients[target] = true end
+    if IsValid(attacker) and isfunction(attacker.IsPlayer) and attacker:IsPlayer() then
+        recipients[attacker] = true
+    end
+
+    if IsValid(target) and isfunction(target.IsPlayer) and target:IsPlayer() then
+        recipients[target] = true
+    end
 
     for recipient in pairs(recipients) do
         WO.Net.Send("Combat.DamageNumber", recipient, data)

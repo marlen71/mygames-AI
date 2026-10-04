@@ -132,6 +132,33 @@ MOCK.Assert(migratedInventory.width == 10 and migratedInventory.height == 6 and
     migratedInventory:ItemCount() == 2 and
     migratedInventory:CountItem("wooden_shield") == 2,
     "загрузка игнорирует старые размеры контейнера и сохраняет содержимое в сетке 10x6")
+
+local overCapacityItems = {}
+for index = 1, 61 do
+    local itemData = WO.Items.Serialize(WO.Items.CreateInstance("wooden_shield", 1))
+    itemData.x = (index - 1) % 10 + 1
+    itemData.y = math.floor((index - 1) / 10) + 1
+    overCapacityItems[index] = itemData
+end
+local overCapacity = WO.Container.Deserialize({
+    id = "legacy-over-capacity", width = 10, height = 6,
+    items = overCapacityItems,
+})
+local preservedOverflow = overCapacity:Serialize()
+local overCapacityReloaded = WO.Container.Deserialize(preservedOverflow)
+local visibleUID
+for uid, instance in pairs(overCapacityReloaded:GetItems()) do
+    if instance.x == 1 and instance.y == 1 then
+        visibleUID = uid
+        break
+    end
+end
+if visibleUID then overCapacityReloaded:RemoveItem(visibleUID) end
+overCapacityReloaded:RebuildGrid()
+MOCK.Assert(overCapacity:ItemCount() == 61 and overCapacity:CountUnplacedItems() == 1 and
+    #preservedOverflow.items == 61 and overCapacityReloaded:ItemCount() == 60 and
+    overCapacityReloaded:CountUnplacedItems() == 0,
+    "61-й предмет сохраняется вне сетки, переживает сериализацию и восстанавливается после освобождения ячейки")
 MOCK.Assert(WO.Models ~= nil and WO.Models.Catalog ~= nil, "каталог моделей Mailer на месте")
 MOCK.Assert(WO.Plugins.IsLoaded("workshop") and WO.Workshop.ModelOr ~= nil,
     "Workshop adapter загружен отдельным плагином")
@@ -654,7 +681,43 @@ MOCK.Assert(combatInfo.critical == false,
     "canCrit=false отключает повторный critical roll в общем damage pipeline")
 MOCK.Assert(#damageMessages == 2 and damageMessages[1].args[1].amount > 0 and
     isvector(damageMessages[1].args[1].position),
-    "число нанесённого урона синхронизируется атакующему и цели с world-позицией")
+    "число урона по игроку отправляется атакующему и цели с world-позицией")
+
+local npcDamageTarget = MOCK.NewEntity("npc")
+npcDamageTarget:SetPos(Vector(12, 24, 32))
+npcDamageTarget:SetNW2String("wo_npc_id", "black_wolf")
+npcDamageTarget:SetHealth(180)
+npcDamageTarget:SetMaxHealth(200)
+npcDamageTarget.__methods.OBBMaxs = function() return Vector(20, 20, 96) end
+MOCK.TakeOutbox()
+WO.Combat.Damage(ply, npcDamageTarget, {
+    amount = 27,
+    type = WO.Enums.DamageType.PHYSICAL,
+    canCrit = false,
+})
+local npcDamageMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Combat.DamageNumber")
+MOCK.Assert(#npcDamageMessages == 1 and npcDamageMessages[1].args[1].amount == 27 and
+    npcDamageMessages[1].args[1].position.z == 138,
+    "урон по NPC отображается атакующему над моделью, с учётом высоты hitbox")
+
+local externalDamage = {
+    GetDamage = function() return 13 end,
+    GetInflictor = function() return nil end,
+    GetAttacker = function() return ply end,
+}
+MOCK.TakeOutbox()
+hook.GetTable().PostEntityTakeDamage.wo_combat_engine_damage_feedback(
+    npcDamageTarget, externalDamage, true)
+local externalDamageMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Combat.DamageNumber")
+MOCK.Assert(#externalDamageMessages == 1 and externalDamageMessages[1].args[1].amount == 13,
+    "урон внешних Workshop SWEP по NPC тоже создаёт combat text без двойной отправки")
+
+local damagedProp = MOCK.NewEntity("prop_physics")
+MOCK.TakeOutbox()
+hook.GetTable().PostEntityTakeDamage.wo_combat_engine_damage_feedback(
+    damagedProp, externalDamage, true)
+MOCK.Assert(#MOCK.FindInbox(MOCK.TakeOutbox(), "Combat.DamageNumber") == 0,
+    "обычный физический prop не засоряет боевой HUD damage numbers")
 print("[scenario] combat OK: pipeline executed (hp " .. tostring(hpBefore) .. ")")
 
 ---------------------------------------------------------------------------

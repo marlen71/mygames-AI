@@ -53,6 +53,8 @@ WO.Config.InventoryHeight = 6
 -- Items with this schema price (buy or sell) and above are considered valuable
 -- for the optional server-authoritative auto-collect setting.
 WO.Config.AutoCollectValueThreshold = 15
+-- Aim-trace range used only to recognize an NPC for the HUD nameplate/halo.
+WO.Config.NPCHoverTraceRange = 1800
 
 -- Draconic Base templates use SWEP.UseHands = true and GMod c_arms models.
 -- Registered player-model hand mappings are preferred; this is the safe fallback.

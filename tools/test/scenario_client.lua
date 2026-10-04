@@ -620,27 +620,76 @@ hoverNPC:SetNW2String("wo_name", "Волк")
 hoverNPC:SetNW2Int("wo_level", 4)
 hoverNPC:SetHealth(72)
 hoverNPC:SetMaxHealth(120)
-local localTrace = LocalPlayer().__methods.GetEyeTrace
-LocalPlayer().__methods.GetEyeTrace = function()
-    return { Entity = hoverNPC, Hit = true, HitPos = hoverNPC:GetPos() }
+hoverNPC.__methods.OBBMaxs = function() return Vector(16, 16, 96) end
+local oldNPCTraceLine = util.TraceLine
+util.TraceLine = function()
+    return { Hit = true, HitPos = hoverNPC:GetPos() + Vector(0, 0, 48), Entity = hoverNPC }
 end
+WO.HUD.DrawCrosshair()
+MOCK.lastHalo = nil
+local npcHaloHook = hook.GetTable().PreDrawHalos.wo_npc_aim_highlight
+if isfunction(npcHaloHook) then npcHaloHook() end
 MOCK.drawnTextValues = {}
 WO.HUD.DrawHoverNPC()
 local hoverText = table.concat(MOCK.drawnTextValues, " ")
 MOCK.Assert(string.find(hoverText, "Волк", 1, true) and
-    string.find(hoverText, "Урове", 1, true) and
-    string.find(hoverText, "72 / 120", 1, true),
-    "под прицелом отображаются имя/уровень NPC и актуальные HP")
-LocalPlayer().__methods.GetEyeTrace = localTrace
+    string.find(hoverText, "Ур.", 1, true) and
+    string.find(hoverText, "72 / 120", 1, true) and
+    MOCK.lastHalo and MOCK.lastHalo.entities[1] == hoverNPC,
+    "NPC под прицелом подсвечивается и получает компактную WoW-плашку с именем, уровнем и HP")
+util.TraceLine = oldNPCTraceLine
+
+local savedTraceLine, savedTraceHull = util.TraceLine, util.TraceHull
+local targetTraceCalls = 0
+util.TraceLine = function(traceData)
+    targetTraceCalls = targetTraceCalls + 1
+
+    if targetTraceCalls == 1 then
+        return { Hit = false, HitPos = traceData.endpos, Entity = nil }
+    end
+
+    return { Hit = true, HitPos = hoverNPC:GetPos(), Entity = hoverNPC }
+end
+util.TraceHull = function(traceData)
+    return { Hit = false, HitPos = traceData.endpos, Entity = nil }
+end
+WO.HUD.DrawCrosshair()
+MOCK.Assert(WO.HUD.GetHoveredNPC() == hoverNPC and targetTraceCalls == 2,
+    "NPC HUD target keeps the attack direction but remains visible beyond melee range")
+util.TraceLine, util.TraceHull = savedTraceLine, savedTraceHull
 
 MOCK.NetDeliver({ name = "Combat.DamageNumber", args = { {
     position = Vector(20, 40, 80), amount = 42, critical = true,
 } } }, 8, nil)
-MOCK.drawnTextValues = {}
+MOCK.drawTextDetails = {}
 WO.HUD.DrawDamageNumbers()
-MOCK.Assert(table.concat(MOCK.drawnTextValues, " "):find("CRIT  -42", 1, true) ~= nil and
+local firstDamageText
+for _, detail in ipairs(MOCK.drawTextDetails) do
+    if detail.text:find("CRIT  -42", 1, true) then firstDamageText = detail break end
+end
+MOCK.Assert(firstDamageText and firstDamageText.color.a == 255 and
     isfunction(WO.HUD.DrawCrosshair) and isfunction(WO.HUD.DrawPlayerNameplates),
-    "клиентский HUD рисует числа урона и пользовательский прицел/nameplate")
+    "HUD рисует яркое WoW-style critical damage number поверх NPC/игроков")
+MOCK.AdvanceTime(0.8)
+MOCK.drawTextDetails = {}
+WO.HUD.DrawDamageNumbers()
+local fadedDamageText
+for _, detail in ipairs(MOCK.drawTextDetails) do
+    if detail.text:find("CRIT  -42", 1, true) then fadedDamageText = detail break end
+end
+MOCK.Assert(fadedDamageText and fadedDamageText.color.a < firstDamageText.color.a and
+    fadedDamageText.outlineColor.a < firstDamageText.outlineColor.a and
+    fadedDamageText.y < firstDamageText.y,
+    "floating damage number поднимается вверх и плавно затухает вместе с обводкой")
+MOCK.AdvanceTime(0.9)
+MOCK.drawTextDetails = {}
+WO.HUD.DrawDamageNumbers()
+local expiredDamageNumber = false
+for _, detail in ipairs(MOCK.drawTextDetails) do
+    if detail.text:find("CRIT  -42", 1, true) then expiredDamageNumber = true end
+end
+MOCK.Assert(not expiredDamageNumber,
+    "floating damage number удаляется после завершения fade-анимации")
 WO.HUD.DrawCrosshair()
 
 MOCK.Assert(scripted_ents.Get("wo_npc").RenderGroup == RENDERGROUP_BOTH,

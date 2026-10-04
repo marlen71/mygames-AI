@@ -150,6 +150,51 @@ local function FindSpaceWithoutRepair(self, instance)
     return nil
 end
 
+--- Возвращает число предметов, сохранённых вне сетки из-за переполнения.
+function CONTAINER:CountUnplacedItems()
+    local count = 0
+
+    for _, instance in pairs(self.items or {}) do
+        local x, y = tonumber(instance.x), tonumber(instance.y)
+
+        if not x or not y or x < 1 or y < 1 or x > self.width or y > self.height then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+--- Возвращает предмет в контейнер, сохраняя его даже при полном заполнении.
+-- Только для миграции, восстановления транзакции и переполнения старого сейва;
+-- обычные операции выдачи обязаны использовать AddItem и отклонять no_space.
+function CONTAINER:RestoreItem(instance)
+    if not istable(instance) or not isstring(instance.uid) or instance.uid == "" then
+        return false, "invalid_instance"
+    end
+
+    if not WO.Items.IsInventoryAllowed(instance.class) then
+        return false, "not_inventory_item"
+    end
+
+    if self.items[instance.uid] then return false, "already_exists" end
+
+    self:RebuildGrid()
+    local x, y = FindSpaceWithoutRepair(self, instance)
+
+    self.items[instance.uid] = instance
+    self.count = self.count + 1
+
+    if x and y then
+        instance.x, instance.y = x, y
+        MarkGrid(self, instance)
+        return true
+    end
+
+    instance.x, instance.y = nil, nil
+    return true, "overflow"
+end
+
 --- Восстанавливает bitmap-сетку из авторитетного списка предметов.
 -- Сетка — кэш; загруженное/устаревшее поле не должно делать пустые слоты занятыми.
 function CONTAINER:RebuildGrid()
@@ -509,7 +554,12 @@ function CONTAINER:MergeStacks()
         local ok = self:AddItem(instance)
 
         if not ok then
-            WO.Warn("Container:MergeStacks — item lost (no space): " .. tostring(instance.class))
+            local restored, reason = self:RestoreItem(instance)
+
+            if not restored then
+                WO.Warn("Container:MergeStacks — item restore failed (" ..
+                    tostring(instance.class) .. "): " .. tostring(reason))
+            end
         end
     end
 end
@@ -564,14 +614,28 @@ function WO.Container.Deserialize(data)
             local ok, reason = container:AddItem(instance, itemData.x, itemData.y)
 
             if not ok then
-                -- Позиция занята/невалидна — ищем свободное место
-                ok = container:AddItem(instance)
+                -- Позиция занята/невалидна — ищем свободное место.
+                ok, reason = container:AddItem(instance)
+            end
 
-                if not ok then
-                    WO.Warn("Container deserialize: item skipped (" .. tostring(itemData.class) .. "): " .. tostring(reason))
-                end
+            if not ok and reason == "no_space" then
+                -- Старый/повреждённый сейв может содержать больше 60 вещей.
+                -- Держим избыток с nil-координатами: Serialize сохраняет его,
+                -- а после освобождения ячейки RebuildGrid вернёт вещь в сетку.
+                ok, reason = container:RestoreItem(instance)
+            end
+
+            if not ok then
+                WO.Warn("Container deserialize: item skipped (" .. tostring(itemData.class) .. "): " .. tostring(reason))
             end
         end
+    end
+
+    local unplaced = container:CountUnplacedItems()
+
+    if unplaced > 0 then
+        WO.Warn("Container deserialize: preserved " .. unplaced ..
+            " item(s) outside the grid; free slots to recover them")
     end
 
     return container

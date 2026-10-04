@@ -68,6 +68,8 @@ function WO.Inventory.Sync(ply)
 
     if not container then return end
 
+    -- Re-pack preserved overflow into any slots freed since the previous sync.
+    container:RebuildGrid()
     local items = {}
 
     for _, instance in pairs(container:GetItems()) do
@@ -261,6 +263,7 @@ function WO.Inventory.RemoveItem(ply, uid, amount)
     end
 
     -- Полное удаление
+    local hadOverflow = container:CountUnplacedItems() > 0
     container:RemoveItem(uid)
 
     instance.locked = nil
@@ -269,6 +272,8 @@ function WO.Inventory.RemoveItem(ply, uid, amount)
 
     WO.Inventory.SendDelta(ply, "remove", instance)
     MarkDirty(char)
+
+    if hadOverflow then WO.Inventory.Sync(ply) end
 
     WO.Hook.Run("ItemRemoved", char, instance)
 
@@ -588,6 +593,7 @@ function WO.Inventory.DropItem(ply, uid, amount)
     amount = math.Clamp(amount, 1, total)
 
     local dropInstance = instance
+    local hadOverflow = false
 
     -- Частичный выброс: отделяем стак
     if amount < total then
@@ -607,6 +613,7 @@ function WO.Inventory.DropItem(ply, uid, amount)
         WO.Inventory.SendDelta(ply, "update", instance)
     else
         -- Полный выброс: убираем из контейнера
+        hadOverflow = container:CountUnplacedItems() > 0
         container:RemoveItem(uid)
 
         WO.Inventory.SendDelta(ply, "remove", instance)
@@ -630,6 +637,12 @@ function WO.Inventory.DropItem(ply, uid, amount)
 
             local reAdd = container:AddItem(dropInstance)
 
+            if not reAdd and hadOverflow then
+                -- Full containers may have older items waiting outside the grid;
+                -- rollback must preserve the dropped instance rather than lose it.
+                reAdd = container:RestoreItem(dropInstance)
+            end
+
             if not reAdd then
                 -- Катастрофа: инвентарь изменился — логируем и сохраняем предмет в БД мира
                 WO.Error("CRITICAL: rollback failed for item " .. tostring(dropInstance.uid))
@@ -641,6 +654,7 @@ function WO.Inventory.DropItem(ply, uid, amount)
         end
 
         MarkDirty(char)
+        if hadOverflow then WO.Inventory.Sync(ply) end
 
         return false, err or "drop_failed"
     end
@@ -655,6 +669,8 @@ function WO.Inventory.DropItem(ply, uid, amount)
     end
 
     MarkDirty(char)
+
+    if hadOverflow then WO.Inventory.Sync(ply) end
 
     WO.Hook.Run("ItemDropped", char, dropInstance)
 
@@ -750,6 +766,8 @@ function WO.Inventory.GiveToPlayer(ply, target, uid, amount)
     end
 
     -- Убираем у отправителя
+    local hadOverflow = not partial and container:CountUnplacedItems() > 0
+
     if partial then
         instance.amount = total - amount
         instance.locked = nil
@@ -766,6 +784,8 @@ function WO.Inventory.GiveToPlayer(ply, target, uid, amount)
 
     MarkDirty(char)
     MarkDirty(targetChar)
+
+    if hadOverflow then WO.Inventory.Sync(ply) end
 
     WO.Notify(target, "item", string.format(WO.Lang:Get("inventory.item_received"), (def and def.name) or transferInstance.class))
 
