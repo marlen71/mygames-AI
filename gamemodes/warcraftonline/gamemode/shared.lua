@@ -14,11 +14,11 @@
 
 GM.Name = "Warcraft Online"
 GM.Author = "Warcraft Online Team"
-GM.Version = "2.4.5"
+GM.Version = "2.4.6"
 
 WO = WO or {}
 WO.Name = "Warcraft Online"
-WO.Version = "2.4.5"
+WO.Version = "2.4.6"
 
 ---------------------------------------------------------------------------
 -- Определение корневой папки гейммода (для file.Find)

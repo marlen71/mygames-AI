@@ -8,7 +8,7 @@
 Проект спроектирован как **самостоятельный MMORPG-гейммод**, вдохновлённый общей
 концепцией жанра: создание персонажа → мир → прокачка → предметы → задания.
 
-**Последний релиз: 2.4.5.** [Релиз на GitHub](https://github.com/marlen71/mygames-AI/releases/tag/warcraft-online-v2.4.5).
+**Последний релиз: 2.4.6.** [Релиз на GitHub](https://github.com/marlen71/mygames-AI/releases/tag/warcraft-online-v2.4.6).
 
 ---
 
