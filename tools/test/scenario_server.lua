@@ -609,7 +609,75 @@ MOCK.Assert(not injectDuplicateID and regularSlotResults[1].ok and
     adminSlotResults[6].ok == false and adminSlotResults[6].result == "character_limit",
     "Character.Create повторяет создание при конфликте ID и соблюдает пределы 2/5")
 
-print("[scenario] create OK: " .. char:GetFullName() .. " lvl " .. char:GetLevel())
+do
+local characterListDefinition = WO.Net.Messages["Character.List"]
+local function DecodeCharacterListPacket(args)
+    local previousRead = MOCK.currentRead
+    MOCK.currentRead = { args = args, pos = 0 }
+    local decoded = characterListDefinition.read()
+    MOCK.currentRead = previousRead
+    return decoded
+end
+
+local function RoundTripCharacterList(list)
+    net.Start("Character.List")
+    characterListDefinition.write(list)
+    local packet = MOCK.currentWrite
+    MOCK.currentWrite = nil
+    return DecodeCharacterListPacket(packet.args), packet.args
+end
+
+local savedSlotCharacters = WO.Character.LoadList(ordinarySlotPlayer)
+local decodedSlotCharacters = RoundTripCharacterList(savedSlotCharacters)
+MOCK.Assert(#savedSlotCharacters == 2 and #decodedSlotCharacters == 2 and
+    decodedSlotCharacters[1].id == savedSlotCharacters[1].id and
+    decodedSlotCharacters[2].id == savedSlotCharacters[2].id and
+    WO.Util.IsUUID(decodedSlotCharacters[2].id) and
+    decodedSlotCharacters[2].experience == savedSlotCharacters[2].experience and
+    decodedSlotCharacters[2].needed == savedSlotCharacters[2].needed,
+    "Character.List передаёт все поля: второй ID не сдвигается и XP карточки сохраняется")
+
+local firstSlotID = savedSlotCharacters[1].id
+local secondSlotID = savedSlotCharacters[2].id
+MOCK.NetDeliver({ name = "Character.Select", args = { firstSlotID } }, 8, ordinarySlotPlayer)
+MOCK.Assert(ordinarySlotPlayer:HasCharacter() and
+    ordinarySlotPlayer:GetCharacter().id == firstSlotID,
+    "первый сохранённый персонаж выбирается через net")
+
+local firstSwitchCharacter = ordinarySlotPlayer:GetCharacter()
+firstSwitchCharacter.experience = 321
+firstSwitchCharacter.money = 4321
+WO.SaveQueue.MarkDirty(firstSwitchCharacter)
+MOCK.TakeOutbox()
+MOCK.NetDeliver({ name = "Character.Logout", args = {} }, 8, ordinarySlotPlayer)
+local logoutOutbox = MOCK.TakeOutbox()
+local logoutListMessages = MOCK.FindInbox(logoutOutbox, "Character.List")
+local logoutList = logoutListMessages[1] and DecodeCharacterListPacket(logoutListMessages[1].args)
+local savedFirstSlotRow = WO.Database:Fetch(
+    "SELECT experience, money FROM wo_characters WHERE id = ?", firstSlotID)[1]
+MOCK.Assert(not ordinarySlotPlayer:HasCharacter() and #logoutListMessages == 1 and
+    logoutList and #logoutList == 2 and logoutList[2].id == secondSlotID and
+    #MOCK.FindInbox(logoutOutbox, "Character.OpenMenu") == 1 and
+    tonumber(savedFirstSlotRow.experience) == 321 and tonumber(savedFirstSlotRow.money) == 4321,
+    "выход в главное меню сохраняет персонажа и возвращает оба корректных ID")
+
+MOCK.NetDeliver({ name = "Character.Select", args = { secondSlotID } }, 8, ordinarySlotPlayer)
+MOCK.Assert(ordinarySlotPlayer:HasCharacter() and
+    ordinarySlotPlayer:GetCharacter().id == secondSlotID,
+    "после выхода можно выбрать второго персонажа")
+MOCK.TakeOutbox()
+MOCK.NetDeliver({ name = "Character.Logout", args = {} }, 8, ordinarySlotPlayer)
+MOCK.TakeOutbox()
+MOCK.NetDeliver({ name = "Character.Select", args = { firstSlotID } }, 8, ordinarySlotPlayer)
+MOCK.Assert(ordinarySlotPlayer:HasCharacter() and
+    ordinarySlotPlayer:GetCharacter().id == firstSlotID and
+    ordinarySlotPlayer:GetCharacter().experience == 321 and
+    ordinarySlotPlayer:GetCharacter().money == 4321,
+    "при возврате к первому персонажу сохранённые опыт и деньги восстановлены")
+end
+
+print("[scenario] create, character list wire format and switching OK: " ..
+    char:GetFullName() .. " lvl " .. char:GetLevel())
 
 -- Повторный вход: сервер должен открыть список сохранённых персонажей, а не создать дубликат.
 local savedCharID = char.id

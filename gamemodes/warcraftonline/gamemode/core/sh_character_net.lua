@@ -12,6 +12,11 @@
 ---------------------------------------------------------------------------
 
 -- Краткий список персонажей (для экрана выбора)
+local function WriteUInt32(value)
+    value = math.floor(tonumber(value) or 0)
+    net.WriteUInt(math.max(0, math.min(value, 4294967295)), 32)
+end
+
 WO.Net.Register("Character.List", {
     direction = "toclient",
     write = function(list)
@@ -26,7 +31,12 @@ WO.Net.Register("Character.List", {
             net.WriteString(entry.class or "")
             net.WriteString(entry.gender or "")
             net.WriteString(entry.model or "")
-            net.WriteUInt(entry.lastPlayed or 0, 32)
+            WriteUInt32(entry.lastPlayed)
+
+            -- Keep these fields in the same order as read() below. Omitting
+            -- them shifts every later entry, corrupting its character ID.
+            WriteUInt32(entry.experience)
+            WriteUInt32(entry.needed)
         end
     end,
     read = function()

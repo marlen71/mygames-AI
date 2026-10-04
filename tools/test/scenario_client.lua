@@ -438,14 +438,24 @@ print("[scenario] Main menu and OpenCreate OK")
 -- 3. Загрузка существующего персонажа
 ---------------------------------------------------------------------------
 
+local firstSavedCharacterID = "11111111-1111-4111-8111-111111111111"
+local secondSavedCharacterID = "22222222-2222-4222-8222-222222222222"
 MOCK.NetDeliver({ name = "Character.List", args = {
-    1,
-    "abc", "Тест", "Герой", 3, "human", "warrior", "male",
-    "models/mailer/character/human/male/humanmale00_00.mdl", 0, 150, 600,
+    2,
+    firstSavedCharacterID, "Тест", "Герой", 3, "human", "warrior", "male",
+    "models/mailer/character/human/male/humanmale00_00.mdl", 1700000000, 150, 600,
+    secondSavedCharacterID, "Ария", "Буря", 5, "human", "mage", "female",
+    "models/mailer/character/human/female/humanfemale00_00.mdl", 1700000123, 240, 700,
 } }, 8, nil)
-MOCK.Assert(WO.Character.GetList()[1].experience == 150 and
-    WO.Character.GetList()[1].needed == 600,
-    "список персонажей синхронизирует XP до следующего уровня для карточки")
+MOCK.Assert(#WO.Character.GetList() == 2 and
+    WO.Character.GetList()[1].id == firstSavedCharacterID and
+    WO.Character.GetList()[2].id == secondSavedCharacterID and
+    WO.Util.IsUUID(WO.Character.GetList()[2].id) and
+    WO.Character.GetList()[1].experience == 150 and
+    WO.Character.GetList()[1].needed == 600 and
+    WO.Character.GetList()[2].experience == 240 and
+    WO.Character.GetList()[2].needed == 700,
+    "список персонажей сохраняет ID и XP всех записей в net-пакете")
 
 MOCK.NetDeliver({ name = "Character.OpenMenu", args = {} }, 8, nil)
 local loadSavedButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.load"))
@@ -469,8 +479,36 @@ preview:LayoutEntity(previewEntity)
 MOCK.Assert(previewEntity:GetAngles().y == 210,
     "превью развёрнуто лицом к камере и вращается кнопками")
 
+local selectionPanelStart = #MOCK.createdPanels + 1
 MOCK.NetDeliver({ name = "Character.OpenSelect", args = {} }, 8, nil)
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "select", "экран выбора персонажа")
+
+local selectionCards = {}
+for i = selectionPanelStart, #MOCK.createdPanels do
+    local panel = MOCK.createdPanels[i]
+
+    if rawget(panel, "__class") == "DPanel" and
+        rawget(panel, "selected") ~= nil and
+        isfunction(rawget(panel, "OnMousePressed")) then
+        selectionCards[#selectionCards + 1] = panel
+    end
+end
+
+MOCK.Assert(#selectionCards == 2, "экран выбора строит карточки всех сохранённых персонажей")
+selectionCards[2].OnMousePressed()
+MOCK.Assert(selectionCards[1].selected == false and selectionCards[2].selected == true,
+    "клик по второй карточке выбирает именно второго персонажа")
+
+local playCharacterButton = MOCK.FindPanelByText(WO.Lang:Get("ui.confirm"))
+MOCK.Assert(playCharacterButton and playCharacterButton:IsEnabled(),
+    "после выбора карточки активна кнопка входа")
+MOCK.TakeOutbox()
+playCharacterButton:DoClick()
+local requestedCharacterMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Character.Select")
+MOCK.Assert(#requestedCharacterMessages == 1 and
+    requestedCharacterMessages[1].args[1] == secondSavedCharacterID,
+    "кнопка входа отправляет ID именно выбранного второго персонажа")
+
 local selectionCardHasModel = false
 for _, panel in ipairs(MOCK.createdPanels) do
     if rawget(panel, "__class") == "WO_CharacterModel" and
