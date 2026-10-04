@@ -11,7 +11,7 @@ WO.Items.Register({
     model = "models/props_junk/wood_pallet001a.mdl",
     weight = 6,
 
-    size = { w = 2, h = 2 },
+    size = { w = 1, h = 1 },
     stackable = false,
 
     rarity = "common",

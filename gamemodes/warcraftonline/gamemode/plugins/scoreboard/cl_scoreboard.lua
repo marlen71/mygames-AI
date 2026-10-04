@@ -391,6 +391,65 @@ local function BuildOverviewPage(parent)
     end
 end
 
+local function BuildSettingsPage(parent)
+    AddPageHeader(parent, WO.Lang:Get("settings.title"),
+        WO.Lang:Get("settings.auto_collect_hint"))
+
+    local settings = WO.Settings
+
+    if not (settings and settings.RequestAutoCollect) then
+        local unavailable = WO.UI.Label(parent, WO.Lang:Get("settings.auto_collect_status"),
+            "WO.Body", WO.UI.Colors.textDim)
+        unavailable:Dock(TOP)
+        unavailable:SetTall(32)
+        return
+    end
+
+    settings.RequestAutoCollect(false)
+
+    local card = vgui.Create("DPanel", parent)
+    card:Dock(TOP)
+    card:SetTall(190)
+    card:DockMargin(0, 4, 0, 12)
+    card.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
+            WO.UI.Colors.border)
+    end
+
+    local label = WO.UI.Label(card, WO.Lang:Get("settings.auto_collect"),
+        "WO.Subtitle", WO.UI.Colors.accent)
+    label:Dock(TOP)
+    label:DockMargin(18, 14, 18, 8)
+    label:SetTall(28)
+
+    local hint = WO.UI.Label(card, WO.Lang:Get("settings.auto_collect_hint"),
+        "WO.Small", WO.UI.Colors.textDim)
+    hint:Dock(TOP)
+    hint:DockMargin(18, 0, 18, 8)
+    hint:SetTall(46)
+
+    local enabled = settings.ClientAutoCollectEnabled == true
+    local toggle = WO.UI.Button(card,
+        WO.Lang:Get(enabled and "settings.auto_collect_on" or "settings.auto_collect_off"),
+        function()
+            local nextValue = not (settings.ClientAutoCollectEnabled == true)
+            settings.SetClientAutoCollectEnabled(nextValue)
+        end)
+    toggle:Dock(BOTTOM)
+    toggle:DockMargin(18, 0, 18, 14)
+    toggle:SetTall(42)
+    toggle:SetAccent(enabled)
+    toggle:SetEnabled(settings.ClientAutoCollectLoaded == true)
+
+    if settings.ClientAutoCollectLoaded ~= true then
+        local status = WO.UI.Label(card, WO.Lang:Get("settings.auto_collect_status"),
+            "WO.Tiny", WO.UI.Colors.textDim)
+        status:Dock(BOTTOM)
+        status:DockMargin(18, 0, 18, 8)
+        status:SetTall(16)
+    end
+end
+
 local function BuildAdminPage(parent)
     AddPageHeader(parent, "Администрирование", "Доступные команды режима, их назначение и безопасный запуск.")
 
@@ -450,13 +509,21 @@ local function BuildAdminPage(parent)
         end
 
         local runButton = WO.UI.Button(card, "Выполнить", function()
-            local values = {}
-            for _, field in ipairs(fields) do
-                local value = string.Trim(field:GetValue() or "")
-                if value ~= "" then values[#values + 1] = value end
+            if not admin.ClientMenuAccess or
+                admin.ClientMenuPermissions[entry.permission] ~= true then
+                if admin.RequestMenuData then admin.RequestMenuData(true) end
+                return
             end
 
-            RunConsoleCommand(entry.id, unpack(values))
+            local values = {}
+            for index, field in ipairs(fields) do
+                values[index] = string.Trim(field:GetValue() or "")
+            end
+            while #values > 0 and values[#values] == "" do
+                values[#values] = nil
+            end
+
+            WO.Net.SendToServer("Admin.CommandRun", entry.id, values)
         end)
         runButton:SetPos(PanelWidth(card, 760) - buttonWidth - 14, fieldTop)
         runButton:SetSize(buttonWidth, 32)
@@ -486,6 +553,8 @@ local function BuildPage(page)
 
     if currentPage == "characters" then
         BuildCharactersPage(menuFrame.content)
+    elseif currentPage == "settings" then
+        BuildSettingsPage(menuFrame.content)
     elseif currentPage == "admin" then
         BuildAdminPage(menuFrame.content)
     else
@@ -559,6 +628,7 @@ local function CreateMenuFrame()
         { id = "inventory", text = WO.Lang:Get("menu.inventory"), characterOnly = true },
         { id = "sheet", text = WO.Lang:Get("menu.sheet"), characterOnly = true },
         { id = "quests", text = WO.Lang:Get("menu.quests"), characterOnly = true },
+        { id = "settings", text = WO.Lang:Get("menu.settings") },
     }
 
     if WO.Admin and WO.Admin.ClientMenuAccess then
@@ -575,7 +645,8 @@ local function CreateMenuFrame()
                 return
             end
 
-            if entry.id == "overview" or entry.id == "characters" or entry.id == "admin" then
+            if entry.id == "overview" or entry.id == "characters" or
+                entry.id == "settings" or entry.id == "admin" then
                 BuildPage(entry.id)
                 return
             end
@@ -686,8 +757,14 @@ WO.Hook.Add("AdminMenuDataUpdated", "scoreboard_admin_nav", function()
     WO.MenuUI.Show(page, openedFromTab)
 end)
 
+WO.Hook.Add("AutoCollectSettingsUpdated", "scoreboard_settings_refresh", function()
+    if IsValid(menuFrame) and currentPage == "settings" then
+        BuildPage("settings")
+    end
+end)
+
 local function ActivatePage(page)
-    if page == "overview" or page == "characters" or page == "admin" then
+    if page == "overview" or page == "characters" or page == "settings" or page == "admin" then
         BuildPage(page)
     elseif page == "inventory" then
         if not HasLocalCharacter() then return end

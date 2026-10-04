@@ -447,8 +447,58 @@ MOCK.Assert(hudShouldDraw.wo_hud_hide("CHudHealth") == false and
     hudShouldDraw.wo_hud_hide("CHudScoreboard") == false and
     hudDrawTargetID.wo_hud_hide_targetid() == false and
     hudShouldDraw.wo_hud_hide("CHudCrosshair") == false and
-    hudShouldDraw.wo_hud_hide("CHudWeaponSelection") == nil,
-    "WoW HUD hides stock crosshair but leaves the weapon selector accessible")
+    hudShouldDraw.wo_hud_hide("CHudWeaponSelection") == false,
+    "WoW HUD replaces both the stock crosshair and weapon selector")
+WO.MenuUI.Close()
+
+local localWeaponPlayer = LocalPlayer()
+localWeaponPlayer:Give("drc_unarmed")
+localWeaponPlayer:Give("tfa_cso_coldsteelblade")
+localWeaponPlayer:SelectWeapon("drc_unarmed")
+local selectorWeapons = WO.WeaponSelector.GetVisibleWeapons(localWeaponPlayer)
+local selectorClasses = {}
+for _, entry in ipairs(selectorWeapons) do selectorClasses[entry.class] = true end
+MOCK.Assert(#selectorWeapons == 2 and selectorClasses.drc_unarmed and
+    selectorClasses.tfa_cso_coldsteelblade and
+    isfunction(WO.HUD.DrawWeaponSelector),
+    "собственный селектор перечисляет только выданные игроку SWEP")
+local weaponBind = hook.GetTable().PlayerBindPress.wo_weapon_selector_bind
+MOCK.TakeOutbox()
+MOCK.Assert(isfunction(weaponBind) and weaponBind(localWeaponPlayer, "invnext", true) == true,
+    "колёсико мыши перехватывается пользовательским селектором оружия")
+local selectedWeaponOutbox = MOCK.TakeOutbox()
+local selectedWeaponMessages = MOCK.FindInbox(selectedWeaponOutbox, "Weapons.Select")
+MOCK.Assert(#selectedWeaponMessages == 1 and
+    selectedWeaponMessages[1].args[1] == "tfa_cso_coldsteelblade",
+    "селектор запрашивает у сервера выбор только оружия из локального списка")
+
+local aimWeapon = MOCK.NewEntity("weapon")
+aimWeapon.__weaponClass = "wo_test_melee"
+aimWeapon.__methods.GetClass = function(self) return self.__weaponClass end
+aimWeapon.WORange = 80
+aimWeapon.WOAttackSpeed = 1
+aimWeapon.WOStaminaCost = 2
+localWeaponPlayer:SetActiveWeapon(aimWeapon)
+local oldTraceLine = util.TraceLine
+local aimTraceCalls = {}
+local aimedTarget = MOCK.NewEntity("npc")
+util.TraceLine = function(data)
+    aimTraceCalls[#aimTraceCalls + 1] = data
+    return { Hit = true, HitPos = Vector(0, 120, 64), Entity = aimedTarget }
+end
+local attackTrace, attackEnd = WO.HUD.GetAimTrace(localWeaponPlayer)
+local expectedShootPos = localWeaponPlayer:GetShootPos()
+local expectedAimEnd = expectedShootPos + localWeaponPlayer:GetAimVector() * 80
+MOCK.Assert(attackTrace and attackTrace.Entity == aimedTarget and #aimTraceCalls == 1 and
+    aimTraceCalls[1].start.x == expectedShootPos.x and
+    aimTraceCalls[1].start.y == expectedShootPos.y and
+    aimTraceCalls[1].start.z == expectedShootPos.z and
+    aimTraceCalls[1].endpos.x == expectedAimEnd.x and
+    aimTraceCalls[1].endpos.y == expectedAimEnd.y and
+    aimTraceCalls[1].endpos.z == expectedAimEnd.z and
+    attackEnd.y == expectedAimEnd.y and aimTraceCalls[1].mask == MASK_SHOT_HULL,
+    "прицел трассируется из shoot position по тому же направлению и дистанции, что атака SWEP")
+util.TraceLine = oldTraceLine
 
 local stranger = MOCK.CreatePlayer("Private Nick", "STEAM_0:0:991")
 stranger:SetNW2Bool("wo_char_active", true)
@@ -605,6 +655,32 @@ MOCK.Assert(WO.Interaction.CanInteract(merchantNPC, LocalPlayer()) and
 merchantNPC:SetPos(LocalPlayer():GetPos() + Vector(WO.Config.InteractDistance + 1, 0, 0))
 MOCK.Assert(not WO.Interaction.CanInteract(merchantNPC, LocalPlayer()),
     "клиентская подсказка скрывается за пределами общей дальности")
+
+local hoverItem = ents.Create("wo_item_world")
+hoverItem:SetPos(LocalPlayer():GetPos() + Vector(25, 0, 0))
+local hoverInstance = WO.Items.CreateInstance("wolf_pelt", 2)
+MOCK.Assert(hoverItem:SetItem(hoverInstance), "world resource exposes safe hover NW2 data")
+MOCK.AdvanceTime(1.1)
+local savedEyeTrace = LocalPlayer().__methods.GetEyeTrace
+LocalPlayer().__methods.GetEyeTrace = function()
+    return { Entity = hoverItem, Hit = true, HitPos = hoverItem:GetPos() }
+end
+WO.Interaction.UpdateClientTarget()
+local resourceHoverInfo = WO.Interaction.GetHoveredResourceInfo()
+MOCK.Assert(resourceHoverInfo and resourceHoverInfo.entity == hoverItem and
+    resourceHoverInfo.name == WO.Items.Get("wolf_pelt").name and
+    resourceHoverInfo.description == WO.Items.Get("wolf_pelt").description and
+    resourceHoverInfo.amount == 2,
+    "подсказка ресурса собирает название, описание и количество из безопасной схемы/NW2")
+MOCK.frameTime = 0.25
+MOCK.drawnTextValues = {}
+hook.GetTable().HUDPaint.wo_interaction_paint()
+hook.GetTable().PreDrawHalos.wo_resource_hover_halo()
+MOCK.Assert(MOCK.lastHalo and MOCK.lastHalo.entities[1] == hoverItem and
+    table.concat(MOCK.drawnTextValues, " "):find("Волчья шкура", 1, true) ~= nil,
+    "ресурс получает лёгкий halo и плавную карточку при наведении")
+LocalPlayer().__methods.GetEyeTrace = savedEyeTrace
+MOCK.frameTime = nil
 MOCK.Assert(WO.Net.Messages["Stats.Sync"] ~= nil, "Stats.Sync зарегистрирован в клиентском realm")
 MOCK.NetDeliver({ name = "Stats.Sync", args = { {
     strength = 12, agility = 10, intelligence = 8, stamina = 14, spirit = 9,
@@ -814,13 +890,15 @@ MOCK.Assert(#adminFields == 2, "админ-команда получает по�
 adminFields[1]:SetValue("health_potion")
 adminFields[2]:SetValue("2")
 local executeAdminCommand = MOCK.FindPanelByText("Выполнить")
-local consoleCallsBeforeAdmin = #MOCK.consoleCommands
 MOCK.Assert(executeAdminCommand ~= nil, "у админ-команды есть кнопка выполнения")
+MOCK.TakeOutbox()
 executeAdminCommand.DoClick(executeAdminCommand)
-local adminCall = MOCK.consoleCommands[#MOCK.consoleCommands]
-MOCK.Assert(#MOCK.consoleCommands == consoleCallsBeforeAdmin + 1 and
-    adminCall[1] == "wo_giveitem" and adminCall[2] == "health_potion" and adminCall[3] == "2",
-    "кнопка запускает только выбранную команду с введёнными аргументами")
+local adminRunOutbox = MOCK.TakeOutbox()
+local adminRunMessages = MOCK.FindInbox(adminRunOutbox, "Admin.CommandRun")
+MOCK.Assert(#adminRunMessages == 1 and adminRunMessages[1].args[1] == "wo_giveitem" and
+    adminRunMessages[1].args[2] == 2 and adminRunMessages[1].args[3] == "health_potion" and
+    adminRunMessages[1].args[4] == "2",
+    "кнопка отправляет только catalog ID и аргументы на серверную авторизацию")
 
 MOCK.NetDeliver({ name = "Admin.MenuData", args = { {
     isAdmin = false, permissions = {}, commands = {},
@@ -830,7 +908,38 @@ MOCK.Assert(not WO.Admin.ClientMenuAccess and MOCK.FindPanelByText("Админ-�
 WO.MenuUI.Close()
 
 ---------------------------------------------------------------------------
--- 4d. Выход из персонажа: очистка клиентского состояния и окон
+-- 4d. Игровая настройка автосбора получает серверное состояние
+---------------------------------------------------------------------------
+
+WO.Settings.ClientAutoCollectEnabled = false
+WO.Settings.ClientAutoCollectLoaded = false
+WO.Settings.AutoCollectRequestPending = false
+MOCK.TakeOutbox()
+WO.MenuUI.Show("settings")
+local settingsRequestOutbox = MOCK.TakeOutbox()
+MOCK.Assert(WO.MenuUI.GetPage() == "settings" and
+    #MOCK.FindInbox(settingsRequestOutbox, "Settings.AutoCollectRequest") == 1 and
+    MOCK.FindPanelByText(WO.Lang:Get("menu.settings")) ~= nil,
+    "в игровом меню есть раздел настроек, запрашивающий состояние автосбора")
+MOCK.NetDeliver({ name = "Settings.AutoCollectSync", args = { false } }, 8, nil)
+MOCK.Assert(WO.Settings.ClientAutoCollectLoaded and
+    not WO.Settings.ClientAutoCollectEnabled,
+    "серверный opt-in автосбора синхронизирован в выключенном состоянии")
+local autoCollectToggle = MOCK.FindPanelByText(WO.Lang:Get("settings.auto_collect_off"))
+MOCK.Assert(autoCollectToggle ~= nil, "настройки показывают переключатель автосбора")
+MOCK.TakeOutbox()
+autoCollectToggle.DoClick(autoCollectToggle)
+local autoCollectSetOutbox = MOCK.TakeOutbox()
+local autoCollectSetMessages = MOCK.FindInbox(autoCollectSetOutbox, "Settings.AutoCollectSet")
+MOCK.Assert(#autoCollectSetMessages == 1 and autoCollectSetMessages[1].args[1] == true,
+    "переключатель отправляет только предпочтение opt-in серверу")
+MOCK.NetDeliver({ name = "Settings.AutoCollectSync", args = { true } }, 8, nil)
+MOCK.Assert(WO.Settings.ClientAutoCollectEnabled == true,
+    "включённое состояние подтверждается сервером")
+WO.MenuUI.Close()
+
+---------------------------------------------------------------------------
+-- 4e. Выход из персонажа: очистка клиентского состояния и окон
 ---------------------------------------------------------------------------
 
 WO.InventoryUI.Open()

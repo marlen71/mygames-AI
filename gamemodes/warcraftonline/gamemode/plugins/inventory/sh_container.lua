@@ -11,7 +11,8 @@
         container:HasSpace(instance)
         container:FindSpace(instance) → x, y
 
-    Каждый предмет может занимать 1x1, 1x2, 2x2 и т.д. (def.size).
+    Каждый экземпляр предмета занимает ровно одну ячейку 1x1; вес и legacy-size
+    из схем не влияют на количество доступных ячеек.
 ]]
 
 WO.Container = WO.Container or {}
@@ -49,13 +50,9 @@ end
 -- Внутренняя работа с сеткой
 ---------------------------------------------------------------------------
 
-local function ItemSize(instance)
-    local def = WO.Items.Get(instance.class)
-
-    if def and def.size then
-        return def.size.w or 1, def.size.h or 1
-    end
-
+local function ItemSize(_)
+    -- Keep the grid invariant independent of schema/cache state: each item
+    -- instance occupies one cell, even if an old definition still has a legacy size.
     return 1, 1
 end
 

@@ -25,12 +25,9 @@ local function GetItemDefinition(item)
     return item and WO.Items.Get(item.class) or nil
 end
 
-local function GetItemSize(item)
-    local def = GetItemDefinition(item)
-    local size = def and def.size or nil
-
-    return math.max(1, math.floor((size and size.w) or 1)),
-        math.max(1, math.floor((size and size.h) or 1))
+local function GetItemSize(_)
+    -- Visual placement mirrors the server's fixed one-instance/one-cell rule.
+    return 1, 1
 end
 
 ---------------------------------------------------------------------------

@@ -425,9 +425,8 @@ end
 
 function SLOT:OnMousePressed(code)
     if code == MOUSE_LEFT and self.item then
-        local def = WO.Items.Get(self.item.class)
-        local itemWidth = self.itemWidth or (def and def.size and def.size.w) or 1
-        local itemHeight = self.itemHeight or (def and def.size and def.size.h) or 1
+        local itemWidth = self.itemWidth or 1
+        local itemHeight = self.itemHeight or 1
         local offsetX, offsetY = 0, 0
         local mouseX, mouseY = gui.MouseX(), gui.MouseY()
 

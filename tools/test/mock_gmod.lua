@@ -114,6 +114,10 @@ SCHED_CHASE_ENEMY = 1
 SCHED_IDLE_STAND = 2
 CONTENTS_SOLID = 1
 MASK_SOLID = 1
+MASK_SHOT = 2
+MASK_SHOT_HULL = 4
+KEY_LALT = 17
+KEY_RALT = 18
 KEY_F2 = 93
 TEXT_ALIGN_LEFT = 0
 TEXT_ALIGN_CENTER = 1
@@ -465,6 +469,15 @@ function MOCK.NewEntity(class)
     e.__methods.Ping = function(tt) return tt.__ping or 0 end
     e.__methods.SteamID = function(tt) return tt.__steamid or "STEAM_0:0:1" end
     e.__methods.SteamID64 = function(tt) return tt.__steamid64 or "76561190000000001" end
+    e.__methods.GetPData = function(tt, key, default)
+        tt.__pdata = tt.__pdata or {}
+        local value = tt.__pdata[key]
+        return value == nil and default or value
+    end
+    e.__methods.SetPData = function(tt, key, value)
+        tt.__pdata = tt.__pdata or {}
+        tt.__pdata[key] = tostring(value)
+    end
     e.__methods.UserID = function(tt) return tt.__userid or 1 end
     e.__methods.Alive = function(tt) return tt.__alive ~= false end
     e.__methods.SetNW2Bool = function(tt, k, v) tt.__nw2[k] = v end
@@ -1640,6 +1653,12 @@ function input.GetKeyCode() return 0 end
 function input.LookupBinding() return "" end
 function input.GetCursorPos() return 0, 0 end
 
+halo = halo or {}
+function halo.Add(entities, color, blurX, blurY, passes, additive, ignoreZ)
+    MOCK.lastHalo = { entities = entities, color = color, blurX = blurX,
+        blurY = blurY, passes = passes, additive = additive, ignoreZ = ignoreZ }
+end
+
 ScrW = function() return MOCK.screenW or 1920 end
 ScrH = function() return MOCK.screenH or 1080 end
 FrameTime = function() return MOCK.frameTime or 0 end
@@ -1725,7 +1744,15 @@ function ents.GetAll()
 end
 
 function ents.FindInSphere(pos, radius)
-    return {}
+    local out = {}
+
+    for _, ent in ipairs(MOCK.worldEntities) do
+        if IsValid(ent) and ent.GetPos and ent:GetPos():Distance(pos) <= radius then
+            out[#out + 1] = ent
+        end
+    end
+
+    return out
 end
 
 function ents.GetByIndex(i) return nil end

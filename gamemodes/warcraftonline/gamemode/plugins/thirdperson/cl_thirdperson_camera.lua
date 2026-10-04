@@ -47,6 +47,14 @@ hook.Add("PlayerBindPress", "wo_thirdperson_zoom", function(ply, bind, pressed)
 
     if not WO.ThirdPerson.IsEnabled() then return end
 
+    -- Plain wheel is reserved for the custom weapon selector. Hold Alt to zoom.
+    local leftAlt = rawget(_G, "KEY_LALT")
+    local rightAlt = rawget(_G, "KEY_RALT")
+    local altDown = input and input.IsKeyDown and
+        ((leftAlt and input.IsKeyDown(leftAlt)) or
+            (rightAlt and input.IsKeyDown(rightAlt)))
+    if not altDown then return end
+
     if bind == "invprev" then
         state.distance = math.Clamp(state.distance + 16,
             WO.Config.CameraMinDistance or 60,

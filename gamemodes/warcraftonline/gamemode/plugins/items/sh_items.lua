@@ -32,9 +32,12 @@ local transitions = {
 --[[
     Регистрирует определение предмета (item definition).
 
-    @param def table { id, name, type, category, model, icon, weight, size,
+    @param def table { id, name, type, category, model, icon, weight,
                        stackable, maxStack, rarity, description, durability,
                        weapon, equipment, stats, requirements, consumable, price }
+
+    Inventory cells are uniform: every item definition is normalized to 1x1.
+    Legacy `size` values in schemas are ignored; weight remains independent data.
     @return boolean success
 ]]
 function WO.Items.Register(def)
@@ -47,9 +50,9 @@ function WO.Items.Register(def)
     def.type = def.type or "misc"
     def.rarity = def.rarity or "common"
     def.weight = tonumber(def.weight) or 0
-    def.size = def.size or { w = 1, h = 1 }
-    def.size.w = math.max(1, math.floor(def.size.w or 1))
-    def.size.h = math.max(1, math.floor(def.size.h or 1))
+    -- One inventory instance always occupies exactly one cell; weight is only
+    -- descriptive/gameplay data and must never reduce the 60-slot capacity.
+    def.size = { w = 1, h = 1 }
 
     if def.stackable then
         def.maxStack = math.max(1, math.floor(def.maxStack or 99))

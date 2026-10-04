@@ -12,7 +12,7 @@ WO.Items.Register({
     model = "models/props_junk/cardboard_box002a.mdl",
     weight = 4,
 
-    size = { w = 2, h = 2 },
+    size = { w = 1, h = 1 },
     stackable = false,
 
     rarity = "common",

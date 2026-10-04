@@ -50,6 +50,9 @@ WO.Config.Sounds = {
 
 WO.Config.InventoryWidth = 10
 WO.Config.InventoryHeight = 6
+-- Items with this schema price (buy or sell) and above are considered valuable
+-- for the optional server-authoritative auto-collect setting.
+WO.Config.AutoCollectValueThreshold = 15
 
 -- Draconic Base templates use SWEP.UseHands = true and GMod c_arms models.
 -- Registered player-model hand mappings are preferred; this is the safe fallback.

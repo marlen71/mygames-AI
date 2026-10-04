@@ -48,11 +48,12 @@ MOCK.RunTimers(0.1)
 MOCK.Assert(WO.Core.IsLoaded, "WO.Core.IsLoaded после загрузки")
 MOCK.Assert(WO.GamemodeIncludeFolder == "warcraftonline/gamemode",
     "абсолютный include-root GMod: " .. tostring(WO.GamemodeIncludeFolder))
-MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 30,
-    "загружены все 30 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
+MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 31,
+    "загружены все 31 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
 MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud") and
-    WO.Plugins.IsLoaded("spells") and WO.Plugins.IsLoaded("mounts"),
-    "плагины персонажа, HUD, книги заклинаний и маунтов загрузились")
+    WO.Plugins.IsLoaded("spells") and WO.Plugins.IsLoaded("mounts") and
+    WO.Plugins.IsLoaded("settings"),
+    "плагины персонажа, HUD, книги заклинаний, маунтов и настроек загрузились")
 MOCK.Assert(MOCK.clientFilesAdded["warcraftonline/gamemode/plugins/character/sh_plugin.lua"],
     "сервер отправил клиенту метаданные character через AddCSLuaFile")
 local savedLocalPlayer = LocalPlayer
@@ -71,6 +72,66 @@ MOCK.Assert(table.HasValue(WO.Races.GetModels("human", "male"), concatenatedHuma
 MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() >= 4, "классы зарегистрированы")
 MOCK.Assert(WO.Items.GetAll and table.Count(WO.Items.GetAll()) >= 12,
     "предметы зарегистрированы: " .. (WO.Items.GetAll and table.Count(WO.Items.GetAll()) or 0))
+local allItemsAreOneCell = true
+for _, itemDef in pairs(WO.Items.GetAll()) do
+    if itemDef.size.w ~= 1 or itemDef.size.h ~= 1 then
+        allItemsAreOneCell = false
+        break
+    end
+end
+local fixedCapacityInventory = WO.Container.New("inventory", 10, 6)
+local insertedHeavyItems = true
+for index = 1, 60 do
+    local instance = WO.Items.CreateInstance("wooden_shield", 1)
+    local ok = instance and fixedCapacityInventory:AddItem(instance)
+    if not ok then
+        insertedHeavyItems = false
+        break
+    end
+end
+local occupiedCells = {}
+local uniqueCells = true
+for _, instance in pairs(fixedCapacityInventory:GetItems()) do
+    local cell = tostring(instance.x) .. ":" .. tostring(instance.y)
+    if occupiedCells[cell] then uniqueCells = false end
+    occupiedCells[cell] = true
+end
+local overflowItem = WO.Items.CreateInstance("wooden_shield", 1)
+local overflowPlaced, overflowReason = fixedCapacityInventory:AddItem(overflowItem)
+MOCK.Assert(allItemsAreOneCell and insertedHeavyItems and uniqueCells and
+    fixedCapacityInventory:ItemCount() == 60 and table.Count(occupiedCells) == 60 and
+    overflowPlaced == false and overflowReason == "no_space",
+    "все предметы занимают одну клетку; 10x6 вмещает ровно 60 даже при большом весе")
+
+local legacyInventory = WO.Container.New("inventory", 2, 1)
+for _ = 1, 2 do
+    MOCK.Assert(legacyInventory:AddItem(WO.Items.CreateInstance("wooden_shield", 1)),
+        "legacy inventory fixture accepts existing items")
+end
+local legacySerialized = legacyInventory:Serialize()
+local originalInventoryFetch = WO.Database.Fetch
+WO.Database.Fetch = function(self, query, ...)
+    if string.find(query, "FROM wo_inventories", 1, true) then
+        return { {
+            width = 2,
+            height = 1,
+            items = util.TableToJSON(legacySerialized.items),
+        } }
+    end
+
+    return originalInventoryFetch(self, query, ...)
+end
+local migratedCharacter = WO.Character.New({
+    id = "legacy-inventory-dimensions", name = "Старая", surname = "Сетка",
+    race = "human", gender = "male", class = "warrior", level = 1,
+})
+WO.Hook.Run("CharacterLoad", migratedCharacter)
+WO.Database.Fetch = originalInventoryFetch
+local migratedInventory = WO.Inventory.GetContainer(migratedCharacter)
+MOCK.Assert(migratedInventory.width == 10 and migratedInventory.height == 6 and
+    migratedInventory:ItemCount() == 2 and
+    migratedInventory:CountItem("wooden_shield") == 2,
+    "загрузка игнорирует старые размеры контейнера и сохраняет содержимое в сетке 10x6")
 MOCK.Assert(WO.Models ~= nil and WO.Models.Catalog ~= nil, "каталог моделей Mailer на месте")
 MOCK.Assert(WO.Plugins.IsLoaded("workshop") and WO.Workshop.ModelOr ~= nil,
     "Workshop adapter загружен отдельным плагином")
@@ -217,6 +278,27 @@ MOCK.Assert(adminMenuData and adminMenuData.isAdmin == true and
     adminMenuData.commands[2].permission == "item.give",
     "админ-меню отправляет только каталог команд, разрешённых SAM-правом игрока")
 
+local deniedAdminPly = MOCK.NewEntity("player")
+deniedAdminPly.__samPermissions = {}
+local debugBeforeDeniedAction = WO.Config.Debug
+MOCK.NetDeliver({ name = "Admin.CommandRun", args = { "wo_debug", 0 } }, 8, deniedAdminPly)
+MOCK.RunCommand("wo_debug", deniedAdminPly, {})
+MOCK.Assert(WO.Config.Debug == debugBeforeDeniedAction,
+    "неавторизованный игрок не запускает admin net action или исходный concommand")
+MOCK.TakeOutbox()
+WO.Admin.SendMenuData(deniedAdminPly)
+local deniedMenuMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Admin.MenuData")
+local deniedMenuData = deniedMenuMessages[1] and deniedMenuMessages[1].args[1]
+MOCK.Assert(deniedMenuData and deniedMenuData.isAdmin == false and
+    #deniedMenuData.commands == 0,
+    "сервер не отдаёт неавторизованному игроку админ-каталог")
+permissionPly.__samPermissions.wo_debug = true
+MOCK.NetDeliver({ name = "Admin.CommandRun", args = { "wo_debug", 0 } }, 8, permissionPly)
+MOCK.Assert(WO.Config.Debug ~= debugBeforeDeniedAction,
+    "разрешённый admin net action проходит серверную проверку и выполняется")
+WO.Config.Debug = debugBeforeDeniedAction
+permissionPly.__samPermissions.wo_debug = nil
+
 sam = previousSAM
 WO.Admin.RegisteredSAMPermissions = nil
 WO.Admin.SAMReady = nil
@@ -327,6 +409,44 @@ print("[scenario] existing character selection OK")
 local inv = WO.Inventory.GetContainer(char)
 
 MOCK.Assert(inv ~= nil, "контейнер инвентаря существует")
+
+-- Auto-collect is opt-in, and the server decides whether the authoritative item
+-- instance is a coin pile, high-rarity/value item, or needed by an active quest.
+local autoCollectPlayer = MOCK.NewEntity("player")
+local autoCollectCharacter = WO.Character.New({
+    id = "autocollect-test-character", name = "Сборщик", surname = "Тест",
+    race = "human", gender = "male", class = "warrior", level = 1,
+    quests = { supplies_for_the_road = { status = "active", progress = {} } },
+})
+autoCollectPlayer:SetCharacter(autoCollectCharacter)
+MOCK.Assert(not WO.Settings.IsAutoCollectEnabled(autoCollectPlayer) and
+    WO.World.IsAutoCollectEligible(autoCollectPlayer, "bread") and
+    WO.World.IsAutoCollectEligible(autoCollectPlayer, "gold_ring") and
+    not WO.World.IsAutoCollectEligible(autoCollectPlayer, "boar_meat"),
+    "автосбор выключен по умолчанию и выбирает квестовые/редкие/ценные предметы")
+local autoCollectItem = ents.Create("wo_item_world")
+autoCollectItem:SetPos(autoCollectPlayer:GetPos())
+local autoCollectInstance = WO.Items.CreateInstance("bread", 1)
+MOCK.Assert(autoCollectItem:SetItem(autoCollectInstance) and
+    WO.Items.SetState(autoCollectInstance, WO.Items.State.WORLD),
+    "тестовый world item хранит серверный экземпляр")
+MOCK.AdvanceTime(1.1)
+MOCK.NetDeliver({ name = "Settings.AutoCollectSet", args = { true } }, 8, autoCollectPlayer)
+MOCK.Assert(WO.Settings.IsAutoCollectEnabled(autoCollectPlayer) and
+    autoCollectPlayer.__pdata.wo_auto_collect_important == "1",
+    "включённый opt-in хранится сервером и может быть восстановлен из PData")
+autoCollectPlayer.WOAutoCollectImportant = nil
+MOCK.Assert(WO.Settings.IsAutoCollectEnabled(autoCollectPlayer),
+    "сервер повторно загружает сохранённое состояние автосбора из PData")
+local autoCollected, autoCollectReason = WO.World.TryAutoCollect(autoCollectPlayer, autoCollectItem)
+MOCK.Assert(autoCollected == true and not IsValid(autoCollectItem) and
+    WO.Inventory.GetContainer(autoCollectCharacter):CountItem("bread") == 1,
+    "включённый автосбор подбирает только серверный предмет, нужный активному квесту: " ..
+        tostring(autoCollectReason))
+MOCK.NetDeliver({ name = "Settings.AutoCollectSet", args = { false } }, 8, autoCollectPlayer)
+MOCK.Assert(not WO.Settings.IsAutoCollectEnabled(autoCollectPlayer) and
+    autoCollectPlayer.__pdata.wo_auto_collect_important == "0",
+    "выключение автосбора серверно сохраняется как opt-in preference")
 
 -- A stale serialized/cached bitmap must not make a mostly empty 10x6 bag look full.
 inv.grid = {}
@@ -865,6 +985,13 @@ MOCK.Assert(IsValid(acceptedKnife) and acceptedKnife.WOItemUID == knifeUID and
     ply:GetActiveWeapon() == acceptedKnife and
     WO.Inventory.GetContainer(char):CountItem("starter_knife") == 0,
     "weapon selector получает экипированный нож; предмет хранится только в слоте")
+local activeWeaponBeforeDeniedSelect = ply:GetActiveWeapon()
+MOCK.NetDeliver({ name = "Weapons.Select", args = { "weapon_hpwr_stick" } }, 8, ply)
+MOCK.Assert(ply:GetActiveWeapon() == activeWeaponBeforeDeniedSelect,
+    "сервер отклоняет выбор SWEP, которым персонаж не владеет")
+MOCK.NetDeliver({ name = "Weapons.Select", args = { "tfa_cso_coldsteelblade" } }, 8, ply)
+MOCK.Assert(ply:GetActiveWeapon() == acceptedKnife,
+    "сервер выбирает принадлежащий персонажу SWEP только после проверки владения")
 
 local outsider = MOCK.CreatePlayer("Посторонний", "STEAM_0:0:777")
 local outsiderChar = WO.Character.New({

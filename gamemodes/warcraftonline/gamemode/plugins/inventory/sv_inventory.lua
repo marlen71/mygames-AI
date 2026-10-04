@@ -21,12 +21,18 @@
 function WO.Inventory.GetContainer(char)
     if not WO.Character.IsCharacter(char) then return nil end
 
+    local width = math.max(1, math.floor(tonumber(WO.Config.InventoryWidth) or 10))
+    local height = math.max(1, math.floor(tonumber(WO.Config.InventoryHeight) or 6))
+
     if not WO.Container.IsContainer(char.inventory) then
-        char.inventory = WO.Container.New(
-            "inventory",
-            WO.Config.InventoryWidth or 10,
-            WO.Config.InventoryHeight or 6
-        )
+        char.inventory = WO.Container.New("inventory", width, height)
+    elseif char.inventory.width ~= width or char.inventory.height ~= height then
+        -- Migrate legacy saved dimensions without dropping items. RebuildGrid
+        -- packs in-bounds entries into the fixed 10x6 inventory; overflow stays
+        -- in the item table for recovery rather than being silently destroyed.
+        char.inventory.width = width
+        char.inventory.height = height
+        char.inventory:RebuildGrid()
     end
 
     return char.inventory
@@ -786,10 +792,12 @@ WO.Hook.Add("CharacterLoad", "inventory", function(char)
         local data = util.JSONToTable(rows[1].items or "")
 
         if istable(data) then
+            -- Character inventories always load at the configured 10x6 size;
+            -- persisted legacy width/height values are intentionally ignored.
             char.inventory = WO.Container.Deserialize({
                 id = "inventory",
-                width = tonumber(rows[1].width) or WO.Config.InventoryWidth or 10,
-                height = tonumber(rows[1].height) or WO.Config.InventoryHeight or 6,
+                width = WO.Config.InventoryWidth or 10,
+                height = WO.Config.InventoryHeight or 6,
                 items = data,
             }) or WO.Container.New("inventory", WO.Config.InventoryWidth or 10, WO.Config.InventoryHeight or 6)
         else

@@ -11,7 +11,7 @@ WO.Items.Register({
     model = "models/props_junk/garbage_bag001a.mdl",
     weight = 2,
 
-    size = { w = 2, h = 2 },
+    size = { w = 1, h = 1 },
     stackable = true,
     maxStack = 10,
 

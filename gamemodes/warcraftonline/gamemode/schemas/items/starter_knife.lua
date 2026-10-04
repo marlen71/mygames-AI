@@ -11,7 +11,7 @@ WO.Items.Register({
     category = "dagger",
     iconText = "Н",
     weight = 1,
-    size = { w = 1, h = 2 },
+    size = { w = 1, h = 1 },
     stackable = false,
     uniquePerCharacter = true,
     rarity = "common",

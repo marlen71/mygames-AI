@@ -11,7 +11,7 @@ WO.Items.Register({
     model = "models/weapons/w_stunbaton.mdl",
     weight = 5,
 
-    size = { w = 1, h = 3 },
+    size = { w = 1, h = 1 },
     stackable = false,
 
     rarity = "uncommon",

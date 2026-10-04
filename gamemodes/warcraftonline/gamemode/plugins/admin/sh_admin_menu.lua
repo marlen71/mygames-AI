@@ -1,7 +1,8 @@
 --[[
     Warcraft Online — data-driven каталог админ-команд для игрового меню.
-    Команды выполняются стандартным серверным concommand с его проверками прав;
-    клиент никогда не отправляет произвольное сетевое действие администратора.
+    Клиент передаёт только ID/аргументы из каталога. Сервер проверяет отдельное
+    разрешение и повторно вызывает проверяемый concommand; произвольные действия
+    и команды вне каталога через этот протокол недоступны.
 ]]
 
 WO.Admin.CommandCatalog = {
@@ -38,10 +39,22 @@ WO.Admin.CommandCatalog = {
     { id = "wo_workshop_assets", title = "Проверить Workshop", description = "Проверить смонтированные модели, SWEP и точные NPC-классы.", permission = "debug" },
 }
 
-WO.Admin.ClientMenuPermissions = WO.Admin.ClientMenuPermissions or {}
-WO.Admin.ClientMenuCommands = WO.Admin.ClientMenuCommands or {}
-WO.Admin.ClientMenuAccess = WO.Admin.ClientMenuAccess == true
-WO.Admin.ClientMenuLoaded = WO.Admin.ClientMenuLoaded == true
+-- Access is always fail-closed after client load/reload; only a fresh server
+-- response may reveal the admin tab or its allowlisted commands.
+function WO.Admin.GetMenuCommandDefinition(id)
+    if not isstring(id) then return nil end
+
+    for _, definition in ipairs(WO.Admin.CommandCatalog or {}) do
+        if definition.id == id then return definition end
+    end
+
+    return nil
+end
+
+WO.Admin.ClientMenuPermissions = {}
+WO.Admin.ClientMenuCommands = {}
+WO.Admin.ClientMenuAccess = false
+WO.Admin.ClientMenuLoaded = false
 WO.Admin.MenuRequestPending = false
 
 function WO.Admin.RequestMenuData(force)
@@ -61,6 +74,62 @@ WO.Net.Register("Admin.MenuRequest", {
     end,
     handler = function(ply)
         if SERVER then WO.Admin.SendMenuData(ply) end
+    end,
+})
+
+-- The menu may request only catalog IDs. The server still repeats permission
+-- checks immediately before invoking the registered server concommand.
+WO.Net.Register("Admin.CommandRun", {
+    direction = "toserver",
+    rate = { max = 5, window = 1 },
+    write = function(id, args)
+        args = istable(args) and args or {}
+        local count = math.min(#args, 15)
+        net.WriteString(id or "")
+        net.WriteUInt(count, 4)
+
+        for index = 1, count do
+            net.WriteString(string.sub(tostring(args[index] or ""), 1, 128))
+        end
+    end,
+    read = function()
+        local id = net.ReadString()
+        local count = net.ReadUInt(4)
+        local args = {}
+
+        for index = 1, count do
+            args[index] = net.ReadString()
+        end
+
+        return id, args
+    end,
+    validate = function(ply, id, args)
+        if not IsValid(ply) or not isfunction(ply.IsPlayer) or not ply:IsPlayer() or
+            not isstring(id) or #id > 64 or not istable(args) then
+            return false, "invalid_request"
+        end
+
+        local definition = WO.Admin.GetMenuCommandDefinition(id)
+
+        if not definition or not WO.Admin.Can(ply, definition.permission) then
+            return false, "permission_denied"
+        end
+
+        local maximum = #(definition.args or {})
+        if #args > maximum then return false, "too_many_arguments" end
+
+        for _, value in ipairs(args) do
+            if not isstring(value) or #value > 128 then
+                return false, "invalid_argument"
+            end
+        end
+
+        return true
+    end,
+    handler = function(ply, id, args)
+        if SERVER and WO.Admin.ExecuteMenuCommand then
+            WO.Admin.ExecuteMenuCommand(ply, id, args)
+        end
     end,
 })
 

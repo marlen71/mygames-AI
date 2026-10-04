@@ -12,7 +12,7 @@ WO.Items.Register({
     model = "models/weapons/w_crowbar.mdl",
     weight = 3,
 
-    size = { w = 1, h = 3 },
+    size = { w = 1, h = 1 },
     stackable = false,
     maxStack = 1,
 

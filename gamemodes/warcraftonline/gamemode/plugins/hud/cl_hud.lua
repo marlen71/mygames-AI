@@ -30,6 +30,7 @@ local HIDE = {
     CHudVehicle = true,
     CHudTrain = true,
     CHudGMod = true,
+    CHudWeaponSelection = true,
 }
 
 local function HasCustomHUD()
@@ -422,27 +423,107 @@ function WO.HUD.AddDamageNumber(data)
     if #damageNumbers > 32 then table.remove(damageNumbers, 1) end
 end
 
-function WO.HUD.DrawCrosshair()
-    local cx, cy = ScrW() / 2, ScrH() / 2
-    local color = Color(240, 202, 115, 235)
-    local ply = LocalPlayer()
+local function ActiveWeaponValue(ply, key)
+    local weapon = IsValid(ply) and isfunction(ply.GetActiveWeapon) and
+        ply:GetActiveWeapon() or nil
 
-    if IsValid(ply) and isfunction(ply.GetEyeTrace) then
-        local trace = ply:GetEyeTrace()
-        local target = trace and trace.Entity
+    if IsValid(weapon) and weapon[key] ~= nil then
+        return weapon[key], weapon
+    end
 
-        if IsValid(target) and target:GetNW2String("wo_npc_id", "") ~= "" then
-            color = Color(241, 112, 91, 245)
-        elseif IsValid(target) and target:IsPlayer() then
-            local identity = WO.Social and WO.Social.GetVisibleIdentity and
-                WO.Social.GetVisibleIdentity(target)
-            color = identity and identity.known and Color(128, 222, 164, 245) or
-                Color(205, 211, 224, 235)
+    if IsValid(weapon) and isfunction(weapon.GetClass) and weapons and
+        isfunction(weapons.GetStored) then
+        local stored = weapons.GetStored(weapon:GetClass())
+
+        if stored then return stored[key], weapon end
+    end
+
+    return nil, weapon
+end
+
+--- Trace from the same shoot position/direction/range used by the active SWEP.
+function WO.HUD.GetAimTrace(ply)
+    if not IsValid(ply) or not isfunction(ply.GetShootPos) or
+        not isfunction(ply.GetAimVector) then return nil end
+
+    local startPos = ply:GetShootPos()
+    local aim = ply:GetAimVector()
+
+    if not isvector(startPos) or not isvector(aim) then return nil end
+
+    local weapon
+    local configuredRange
+    configuredRange, weapon = ActiveWeaponValue(ply, "WORange")
+    local staminaCost = ActiveWeaponValue(ply, "WOStaminaCost")
+    local attackSpeed = ActiveWeaponValue(ply, "WOAttackSpeed")
+    local isMelee = staminaCost ~= nil or attackSpeed ~= nil
+
+    if IsValid(weapon) and isfunction(weapon.GetClass) and WO.Spells and
+        weapon:GetClass() == WO.Spells.WeaponClass then
+        local selectedSpell = WO.Spells.LocalBook and WO.Spells.LocalBook.selected
+        local spell = selectedSpell and WO.Spells.Get and WO.Spells.Get(selectedSpell)
+        configuredRange = spell and spell.range or 700
+    end
+
+    local range = math.Clamp(tonumber(configuredRange) or 8192, 32, 8192)
+    local endPos = startPos + aim * range
+    local filter = ply
+    local mask = isMelee and (MASK_SHOT_HULL or MASK_SHOT or MASK_SOLID) or
+        (MASK_SHOT or MASK_SOLID)
+
+    local trace = util.TraceLine({
+        start = startPos,
+        endpos = endPos,
+        filter = filter,
+        mask = mask,
+    })
+
+    if isMelee and (not trace or not IsValid(trace.Entity)) then
+        trace = util.TraceHull({
+            start = startPos,
+            endpos = endPos,
+            filter = filter,
+            mins = Vector(-8, -8, -8),
+            maxs = Vector(8, 8, 8),
+            mask = mask,
+        })
+    end
+
+    return trace, endPos, weapon
+end
+
+function WO.HUD.GetCrosshairPosition(ply)
+    local trace, endPos = WO.HUD.GetAimTrace(ply)
+    local point = trace and trace.HitPos or endPos
+
+    if isvector(point) then
+        local screen = point:ToScreen()
+
+        if screen and isnumber(screen.x) and isnumber(screen.y) then
+            -- If third-person parallax moves the actual attack point just beyond
+            -- the viewport, keep the reticle visible at the nearest screen edge.
+            return math.Clamp(screen.x, 12, ScrW() - 12),
+                math.Clamp(screen.y, 12, ScrH() - 12), trace
         end
     end
 
-    surface.SetDrawColor(7, 9, 14, 230)
-    local gold = color
+    return ScrW() / 2, ScrH() / 2, trace
+end
+
+function WO.HUD.DrawCrosshair()
+    local ply = LocalPlayer()
+    local cx, cy, trace = WO.HUD.GetCrosshairPosition(ply)
+    local target = trace and trace.Entity
+    local color = Color(240, 202, 115, 235)
+
+    if IsValid(target) and target:GetNW2String("wo_npc_id", "") ~= "" then
+        color = Color(241, 112, 91, 245)
+    elseif IsValid(target) and target:IsPlayer() then
+        local identity = WO.Social and WO.Social.GetVisibleIdentity and
+            WO.Social.GetVisibleIdentity(target)
+        color = identity and identity.known and Color(128, 222, 164, 245) or
+            Color(205, 211, 224, 235)
+    end
 
     -- Four bracketed arms leave the center open, with an inner diamond and dot.
     local segments = {
@@ -458,12 +539,52 @@ function WO.HUD.DrawCrosshair()
     for _, line in ipairs(segments) do
         surface.DrawLine(cx + line[1], cy + line[2], cx + line[3], cy + line[4])
     end
-    surface.SetDrawColor(gold)
+    surface.SetDrawColor(color)
     for _, line in ipairs(segments) do
         surface.DrawLine(cx + line[1], cy + line[2], cx + line[3], cy + line[4])
     end
-    surface.SetDrawColor(gold)
+    surface.SetDrawColor(color)
     surface.DrawRect(cx - 1, cy - 1, 2, 2)
+end
+
+--- Собственный компактный список оружия у правого края экрана.
+function WO.HUD.DrawWeaponSelector()
+    if not (WO.WeaponSelector and WO.WeaponSelector.GetVisibleWeapons) then return end
+
+    local ply = LocalPlayer()
+    if not IsValid(ply) or not ply:HasCharacter() then return end
+
+    local weapons = WO.WeaponSelector.GetVisibleWeapons(ply)
+    if #weapons == 0 then return end
+
+    local width, rowHeight, headerHeight = 224, 40, 30
+    local height = headerHeight + #weapons * rowHeight + 10
+    local x = ScrW() - width - 18
+    local maxY = math.max(12, ScrH() - height - 12)
+    local minY = math.min(260, maxY)
+    local y = math.Clamp(ScrH() / 2 - height / 2, minY, maxY)
+
+    WO.UI.DrawPanelOutlined(x, y, width, height, WO.UI.Colors.panelDark,
+        WO.UI.Colors.border)
+    WO.UI.DrawTextFit(WO.Lang:Get("weapon.selector_title"), "WO.Tiny",
+        x + 12, y + 6, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP,
+        width - 24, 18)
+
+    for index, entry in ipairs(weapons) do
+        local rowY = y + headerHeight + (index - 1) * rowHeight + 2
+        local rowColor = entry.active and WO.UI.Colors.accentDark or WO.UI.Colors.panel
+        local borderColor = entry.active and WO.UI.Colors.accent or WO.UI.Colors.border
+        local textColor = entry.active and WO.UI.Colors.accent or WO.UI.Colors.text
+
+        WO.UI.DrawPanelOutlined(x + 6, rowY, width - 12, rowHeight - 3,
+            rowColor, borderColor, WO.UI.Metrics.radiusSmall)
+        WO.UI.DrawTextFit(tostring(entry.slot or index), "WO.Number",
+            x + 24, rowY + (rowHeight - 3) / 2, WO.UI.Colors.accent,
+            TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 26, rowHeight - 8)
+        WO.UI.DrawTextFit(entry.name or entry.class or "?", "WO.Small",
+            x + 46, rowY + (rowHeight - 3) / 2, textColor,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, width - 62, rowHeight - 8)
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -616,6 +737,7 @@ local function EnsureHUDCanvas()
         DrawHUDSection("player frame", WO.HUD.DrawPlayerFrame)
         DrawHUDSection("target frame", WO.HUD.DrawTargetFrame)
         DrawHUDSection("quest tracker", WO.HUD.DrawQuestTracker)
+        DrawHUDSection("weapon selector", WO.HUD.DrawWeaponSelector)
     end
 
     return hudCanvas

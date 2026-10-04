@@ -175,6 +175,164 @@ function WO.World.PickupCoins(ply, ent)
 end
 
 ---------------------------------------------------------------------------
+-- Серверный автосбор важных ресурсов
+---------------------------------------------------------------------------
+
+local AUTO_COLLECT_RARITIES = {
+    rare = true,
+    epic = true,
+    legendary = true,
+    artifact = true,
+    quest = true,
+}
+
+--- Проверяет, требуется ли предмет активному collect-шагу персонажа.
+function WO.World.IsRequiredForActiveQuest(ply, itemClass)
+    if not IsValid(ply) or not ply:HasCharacter() or not isstring(itemClass) then
+        return false
+    end
+
+    local char = ply:GetCharacter()
+    local container = char and WO.Inventory.GetContainer(char)
+    local owned = container and container:CountItem(itemClass) or 0
+
+    for questId, state in pairs(char and char.quests or {}) do
+        if state.status == "active" then
+            local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(questId)
+
+            for _, step in ipairs(questDef and questDef.steps or {}) do
+                if step.type == "collect" and step.class == itemClass and
+                    owned < math.max(1, math.floor(tonumber(step.amount) or 1)) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+--- Data-driven predicate for valuable/quest resources; no client claim is used.
+function WO.World.IsAutoCollectEligible(ply, itemClass)
+    if not isstring(itemClass) then return false end
+
+    local def = WO.Items.Get(itemClass)
+
+    if not def or not WO.Items.IsInventoryAllowed(def) or def.autoCollect == false then
+        return false
+    end
+
+    if def.autoCollect == true or def.questItem == true or def.type == "quest" or
+        AUTO_COLLECT_RARITIES[def.rarity] then
+        return true
+    end
+
+    if WO.World.IsRequiredForActiveQuest(ply, itemClass) then
+        return true
+    end
+
+    local price = istable(def.price) and def.price or {}
+    local value = math.max(tonumber(price.buy) or 0, tonumber(price.sell) or 0)
+    local threshold = math.max(0, tonumber(WO.Config.AutoCollectValueThreshold) or 15)
+
+    return threshold > 0 and value >= threshold
+end
+
+local function HasAutoCollectSpace(ply, ent, instance, def)
+    local char = ply:GetCharacter()
+    local container = char and WO.Inventory.GetContainer(char)
+
+    if not container then return false end
+
+    if def.uniquePerCharacter == true then
+        if container:CountItem(instance.class) > 0 then return false end
+
+        local equipment = WO.Equipment and WO.Equipment.Get and WO.Equipment.Get(char)
+
+        for _, equipped in pairs(equipment and equipment.slots or {}) do
+            if equipped and equipped.class == instance.class then
+                return false
+            end
+        end
+    end
+
+    if def.stackable then
+        local stack = container:FindStack(def.id, def.maxStack)
+
+        if stack and (stack.amount or 1) + (instance.amount or 1) <= def.maxStack then
+            return true
+        end
+    end
+
+    return container:HasSpace(instance)
+end
+
+--- Attempts one pickup using only the server entity/instance and normal pickup checks.
+function WO.World.TryAutoCollect(ply, ent)
+    if not IsValid(ply) or not ply:IsPlayer() or not ply:HasCharacter() or
+        not ply:Alive() or not IsValid(ent) or ent.PickupLock or
+        not WO.Settings or not WO.Settings.IsAutoCollectEnabled or
+        not WO.Settings.IsAutoCollectEnabled(ply) then
+        return false, "disabled_or_invalid"
+    end
+
+    local class = ent:GetClass()
+
+    if class == "wo_coin_pile" then
+        if not isfunction(ent.CanInteract) or not ent:CanInteract(ply) then
+            return false, "cannot_interact"
+        end
+
+        return WO.World.PickupCoins(ply, ent)
+    end
+
+    if class ~= "wo_item_world" or not isfunction(ent.CanInteract) or
+        not ent:CanInteract(ply) then
+        return false, "cannot_interact"
+    end
+
+    local instance = ent.ItemInstance
+
+    if not istable(instance) or instance.state ~= WO.Items.State.WORLD or
+        not WO.World.IsAutoCollectEligible(ply, instance.class) then
+        return false, "not_eligible"
+    end
+
+    local def = WO.Items.Get(instance.class)
+
+    if not def or not HasAutoCollectSpace(ply, ent, instance, def) then
+        return false, "no_space"
+    end
+
+    -- PickupItem repeats distance, entity class, state, lock and inventory checks.
+    return WO.World.PickupItem(ply, ent)
+end
+
+--- One item per nearby opted-in player per tick avoids bursts and notification spam.
+function WO.World.AutoCollectTick()
+    if not player or not isfunction(player.GetAll) or not ents or
+        not isfunction(ents.FindInSphere) then return end
+
+    local radius = math.max(1, tonumber(WO.Config.InteractDistance) or 100)
+
+    for _, ply in ipairs(player.GetAll()) do
+        if IsValid(ply) and ply:IsPlayer() and ply:HasCharacter() and ply:Alive() and
+            WO.Settings and WO.Settings.IsAutoCollectEnabled and
+            WO.Settings.IsAutoCollectEnabled(ply) then
+            for _, ent in ipairs(ents.FindInSphere(ply:GetPos(), radius)) do
+                local picked = WO.World.TryAutoCollect(ply, ent)
+
+                if picked then break end
+            end
+        end
+    end
+end
+
+timer.Create("wo_world_auto_collect", 0.25, 0, function()
+    WO.World.AutoCollectTick()
+end)
+
+---------------------------------------------------------------------------
 -- Подбор предмета (World → Inventory)
 ---------------------------------------------------------------------------
 

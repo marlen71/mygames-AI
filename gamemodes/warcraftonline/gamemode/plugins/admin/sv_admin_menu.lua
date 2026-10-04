@@ -44,3 +44,38 @@ function WO.Admin.SendMenuData(ply)
 
     return allowed
 end
+
+--- Выполняет только команду из каталога после повторной серверной авторизации.
+function WO.Admin.ExecuteMenuCommand(ply, id, args)
+    if not IsValid(ply) or not isfunction(ply.IsPlayer) or not ply:IsPlayer() then
+        return false, "invalid_player"
+    end
+
+    local definition = WO.Admin.GetMenuCommandDefinition(id)
+
+    if not definition then return false, "unknown_command" end
+    if not WO.Admin.Can(ply, definition.permission) then return false, "permission_denied" end
+    if not istable(args) or #args > #(definition.args or {}) then
+        return false, "invalid_arguments"
+    end
+
+    local cleanArgs = {}
+
+    for index, value in ipairs(args) do
+        if not isstring(value) or #value > 128 then
+            return false, "invalid_argument"
+        end
+
+        cleanArgs[index] = string.Trim(value)
+    end
+
+    local commandTable = concommand and isfunction(concommand.GetTable) and
+        concommand.GetTable() or nil
+    local callback = commandTable and commandTable[id]
+
+    if not isfunction(callback) then return false, "command_unavailable" end
+
+    -- Each underlying server command also calls its own CheckAdmin/WO.Admin.Can.
+    callback(ply, id, cleanArgs)
+    return true
+end
