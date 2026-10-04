@@ -1279,9 +1279,12 @@ MOCK.Assert(#dialogueChoose == 1 and dialogueOption:IsEnabled() == false and
 MOCK.NetDeliver({ name = "Dialogue.Finish", args = {} }, 8, nil)
 
 -- Торговля
+do
 local panelsBeforeVendor = #MOCK.createdPanels
 
 MOCK.NetDeliver({ name = "Vendor.Open", args = { { npcId = "trader_marla", npcName = "Марла" } } }, 8, nil)
+MOCK.Assert(MOCK.FindPanelByText(WO.Lang:Get("vendor.loading")) ~= nil,
+    "витрина немедленно показывает состояние загрузки, пока сервер присылает stock")
 MOCK.NetDeliver({ name = "Vendor.Sync", args = { {
     npcId = "trader_marla", npcName = "Марла", money = 100, sellRate = 0.35,
     stock = { { class = "bread", name = "Хлеб", price = 4, amount = 20, rarity = "common" } },
@@ -1291,33 +1294,108 @@ MOCK.Assert(#MOCK.createdPanels > panelsBeforeVendor, "окно торговли
 local vendorBuyButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.buy_one"))
 MOCK.Assert(vendorBuyButton ~= nil and vendorBuyButton:IsEnabled(),
     "витрина создаёт активную кнопку покупки")
+local vendorSellTab = MOCK.FindPanelByText(WO.Lang:Get("vendor.sell"))
+MOCK.Assert(vendorSellTab ~= nil and vendorSellTab:IsEnabled(),
+    "переключатель продажи доступен до начала транзакции")
+do
+    local vendorCard
+
+    for _, panel in ipairs(MOCK.createdPanels) do
+        if rawget(panel, "woVendorCard") and panel.woNameLabel and
+            panel.woNameLabel.woText == "Хлеб" and rawget(panel, "__removed") ~= true then
+            vendorCard = panel
+            break
+        end
+    end
+
+    MOCK.Assert(vendorCard and isfunction(vendorCard.PerformLayout),
+        "строка товара строит собственную геометрию кнопки вместо конфликтующего Dock(FILL)")
+    vendorCard:PerformLayout(400, 68)
+    local actionX = vendorCard.woActionButton:GetPos()
+    local actionWidth = vendorCard.woActionButton:GetWide()
+    local nameX = vendorCard.woNameLabel:GetPos()
+    local nameWidth = vendorCard.woNameLabel:GetWide()
+    MOCK.Assert(actionX > nameX and actionX + actionWidth <= 400 and
+        nameX + nameWidth < actionX and
+        vendorCard.woActionButton:IsMouseInputEnabled() and
+        not vendorCard.woNameLabel:IsMouseInputEnabled() and
+        not vendorCard.woDetailLabel:IsMouseInputEnabled(),
+        "hitbox покупки отделена от текста, не перекрыта метками и целиком помещается в карточке")
+end
 MOCK.TakeOutbox()
 vendorBuyButton:DoClick()
 local buyRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.Buy")
-MOCK.Assert(#buyRequest == 1 and vendorBuyButton:IsEnabled() == false,
-    "кнопка магазина немедленно отправляет покупку и блокирует повторный клик до ответа")
+local buyRequestId = buyRequest[1] and buyRequest[1].args[4]
+MOCK.Assert(#buyRequest == 1 and isnumber(buyRequestId) and buyRequestId > 0 and
+    vendorBuyButton:IsEnabled() == false and not vendorSellTab:IsEnabled() and
+    vendorBuyButton.woText == WO.Lang:Get("vendor.buy_pending"),
+    "кнопка сразу показывает Покупаю…, отправляет запрос и блокирует дубликаты")
 MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
-    action = "buy", npcId = "trader_marla", success = false, reason = "not_enough_money",
+    action = "buy", npcId = "trader_marla", requestId = buyRequestId + 1,
+    success = true,
+} } }, 8, nil)
+MOCK.Assert(vendorBuyButton:IsEnabled() == false and
+    vendorBuyButton.woText == WO.Lang:Get("vendor.buy_pending") and
+    not vendorSellTab:IsEnabled(),
+    "запоздалый ответ другой покупки не снимает блокировку текущего действия")
+MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
+    action = "buy", npcId = "trader_marla", requestId = buyRequestId,
+    money = 96, success = true,
+} } }, 8, nil)
+local updatedWalletText = WO.Lang:Get("currency.name") .. ": " ..
+    (isfunction(WO.Util.FormatMoney) and WO.Util.FormatMoney(96) or tostring(96))
+local updatedWalletImmediately = false
+for _, panel in ipairs(MOCK.createdPanels) do
+    if rawget(panel, "woText") == updatedWalletText and rawget(panel, "__removed") ~= true then
+        updatedWalletImmediately = true
+        break
+    end
+end
+MOCK.Assert(updatedWalletImmediately,
+    "серверный ответ сразу обновляет баланс, не ожидая полной синхронизации витрины")
+MOCK.NetDeliver({ name = "Vendor.Sync", args = { {
+    npcId = "trader_marla", npcName = "Марла", money = 96, sellRate = 0.35,
+    stock = { { class = "bread", name = "Хлеб", price = 4, amount = 19, rarity = "common" } },
 } } }, 8, nil)
 local retryBuyButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.buy_one"))
-MOCK.Assert(retryBuyButton ~= nil and retryBuyButton:IsEnabled(),
-    "ответ магазина разблокирует покупку и позволяет повторить её без закрытия окна")
+MOCK.Assert(retryBuyButton ~= nil and retryBuyButton:IsEnabled() and
+    vendorSellTab:IsEnabled(),
+    "подтверждённая покупка сразу возвращает кнопки и обновлённый список")
+MOCK.TakeOutbox()
+retryBuyButton:DoClick()
+local secondBuyRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.Buy")
+local secondBuyRequestId = secondBuyRequest[1] and secondBuyRequest[1].args[4]
+MOCK.Assert(#secondBuyRequest == 1 and isnumber(secondBuyRequestId) and
+    secondBuyRequestId ~= buyRequestId,
+    "повторная покупка получает отдельный ID, исключающий путаницу ответов")
+MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
+    action = "buy", npcId = "trader_marla", requestId = secondBuyRequestId,
+    money = 96, success = false, reason = "not_enough_money",
+} } }, 8, nil)
+local sellTabButton = vendorSellTab
+MOCK.Assert(sellTabButton ~= nil and sellTabButton:IsEnabled(),
+    "витрина торговли предлагает отдельную вкладку продажи")
+sellTabButton:DoClick()
 local vendorSellButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.sell_one"))
 MOCK.Assert(vendorSellButton ~= nil and vendorSellButton:IsEnabled(),
-    "витрина продаж строится из Inventory.ClientData, а не отсутствующего Character.inventory")
+    "список продажи строится из серверно синхронизированного Inventory.ClientData")
 MOCK.TakeOutbox()
 vendorSellButton:DoClick()
 local sellRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.Sell")
+local sellRequestId = sellRequest[1] and sellRequest[1].args[4]
 MOCK.Assert(#sellRequest == 1 and sellRequest[1].args[1] == "trader_marla" and
     sellRequest[1].args[2] == "test-item-uid" and sellRequest[1].args[3] == 1 and
-    vendorSellButton:IsEnabled() == false,
-    "кнопка продажи сразу отправляет UID серверу и блокирует повторную транзакцию")
+    isnumber(sellRequestId) and vendorSellButton:IsEnabled() == false and
+    vendorSellButton.woText == WO.Lang:Get("vendor.sell_pending"),
+    "кнопка продажи сразу показывает Продаю… и передаёт серверу UID и ID операции")
 MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
-    action = "sell", npcId = "trader_marla", success = false, reason = "cannot_sell",
+    action = "sell", npcId = "trader_marla", requestId = sellRequestId,
+    money = 96, success = false, reason = "cannot_sell",
 } } }, 8, nil)
 local retrySellButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.sell_one"))
 MOCK.Assert(retrySellButton ~= nil and retrySellButton:IsEnabled(),
     "ответ сервера разблокирует продажу без закрытия окна")
+end
 
 print("[scenario] quest/dialogue/vendor UI OK")
 

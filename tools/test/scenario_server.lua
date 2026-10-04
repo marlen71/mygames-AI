@@ -1404,18 +1404,38 @@ MOCK.Assert(ply:GetCharacter().quests["meet_the_trader"].status == "completed",
     "старый активный talk-квест завершается при разговоре после обновления диалога")
 MOCK.Assert(ChooseDialogueAction(ply, "vendor"), "кнопка торговца открывает витрину")
 local vendorMoneyBefore = WO.Currency.Get(ply)
-MOCK.NetDeliver({ name = "Vendor.Buy", args = { "trader_marla", "health_potion", 2 } }, 8, ply)
+MOCK.NetDeliver({ name = "Vendor.Buy", args = { "trader_marla", "health_potion", 2, 321 } }, 8, ply)
 MOCK.Assert(WO.Currency.Get(ply) == vendorMoneyBefore - 50,
     "покупка у торговца валидирует stock и списывает серверную цену")
 local vendorActionOutbox = MOCK.TakeOutbox()
 local vendorActionResults = MOCK.FindInbox(vendorActionOutbox, "Vendor.ActionResult")
-MOCK.Assert(#vendorActionResults == 1 and vendorActionResults[1].args[1].success == true,
-    "сервер подтверждает завершение покупки торговцу, чтобы UI не ждал повторных нажатий")
-MOCK.NetDeliver({ name = "Vendor.Buy", args = { "trader_marla", "not_in_stock_item", 1 } }, 8, ply)
+MOCK.Assert(#vendorActionResults == 1 and vendorActionResults[1].args[1].success == true and
+    vendorActionResults[1].args[1].requestId == 321 and
+    vendorActionResults[1].args[1].money == WO.Currency.Get(ply),
+    "сервер быстро подтверждает покупку, возвращает ID и актуальный баланс")
+do
+    local resultPosition, syncPosition
+
+    for index, message in ipairs(vendorActionOutbox) do
+        if message.name == "Vendor.ActionResult" then resultPosition = index end
+        if message.name == "Vendor.Sync" then syncPosition = index end
+    end
+
+    MOCK.Assert(resultPosition and syncPosition and resultPosition < syncPosition,
+        "сервер отправляет компактный результат до полной пересинхронизации витрины")
+end
+MOCK.NetDeliver({ name = "Vendor.Buy", args = { "trader_marla", "not_in_stock_item", 1, 322 } }, 8, ply)
 local failedVendorResult = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.ActionResult")
 MOCK.Assert(#failedVendorResult == 1 and failedVendorResult[1].args[1].success == false and
-    failedVendorResult[1].args[1].reason == "not_in_stock",
-    "сервер немедленно возвращает причину отклонённой покупки вместо молчаливого отказа")
+    failedVendorResult[1].args[1].reason == "not_in_stock" and
+    failedVendorResult[1].args[1].requestId == 322,
+    "сервер немедленно возвращает причину отказа с исходным ID без повторного клика")
+MOCK.NetDeliver({ name = "Vendor.Sell", args = { "trader_marla", "missing-item-uid", 1, 323 } }, 8, ply)
+local failedSellResult = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.ActionResult")
+MOCK.Assert(#failedSellResult == 1 and failedSellResult[1].args[1].action == "sell" and
+    failedSellResult[1].args[1].requestId == 323 and
+    failedSellResult[1].args[1].success == false,
+    "ответ о продаже также коррелирует с конкретной серверной транзакцией")
 local boughtPotionUID
 for uid, instance in pairs(WO.Inventory.GetContainer(ply:GetCharacter()):GetItems()) do
     if instance.class == "health_potion" then boughtPotionUID = uid break end
@@ -1797,7 +1817,7 @@ ply:SetPos(mountVendor:GetPos())
 mountVendor:Use(ply, ply)
 MOCK.NetDeliver({ name = "Dialogue.Choose", args = { "mount_vendor", "start", 1 } }, 8, ply)
 local moneyBeforeMountBuy = WO.Currency.Get(ply)
-MOCK.NetDeliver({ name = "Vendor.Buy", args = { "mount_merchant", "mount_stone", 1 } }, 8, ply)
+MOCK.NetDeliver({ name = "Vendor.Buy", args = { "mount_merchant", "mount_stone", 1, 324 } }, 8, ply)
 local mountStone = WO.Inventory.GetContainer(char):GetItems()
 local mountUID, mountInstance
 for uid, instance in pairs(mountStone) do

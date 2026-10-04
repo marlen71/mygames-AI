@@ -111,62 +111,82 @@ WO.Net.Register("Vendor.Open", {
 WO.Net.Register("Vendor.Buy", {
     direction = "toserver",
     rate = { max = 12, window = 1 },
-    write = function(npcId, class, amount)
+    write = function(npcId, class, amount, requestId)
         net.WriteString(npcId or "")
         net.WriteString(class or "")
         net.WriteUInt(amount or 1, 16)
+        net.WriteUInt(requestId or 0, 32)
     end,
     read = function()
-        return net.ReadString(), net.ReadString(), net.ReadUInt(16)
+        return net.ReadString(), net.ReadString(), net.ReadUInt(16), net.ReadUInt(32)
     end,
-    validate = function(ply, npcId, class, amount)
+    validate = function(ply, npcId, class, amount, requestId)
         if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
         if not isstring(npcId) or npcId == "" then return false, "invalid_npc" end
         if not isstring(class) or class == "" then return false, "invalid_class" end
         if not isnumber(amount) or amount < 1 or amount > 100 then return false, "invalid_amount" end
+        if not isnumber(requestId) or requestId < 1 or requestId > 2147483647 then
+            return false, "invalid_request"
+        end
 
         return true
     end,
-    handler = function(ply, npcId, class, amount)
-        local success, reason = WO.Vendors.Buy(ply, npcId, class, math.floor(amount))
+    handler = function(ply, npcId, class, amount, requestId)
+        local success, reason = WO.Vendors.Buy(ply, npcId, class, math.floor(amount), true)
 
         WO.Net.Send("Vendor.ActionResult", ply, {
             action = "buy",
             npcId = npcId,
+            requestId = requestId,
+            money = WO.Currency.Get(ply),
             success = success == true,
             reason = reason,
         })
+
+        if success == true and WO.Vendors.Sync then
+            WO.Vendors.Sync(ply)
+        end
     end,
 })
 
 WO.Net.Register("Vendor.Sell", {
     direction = "toserver",
     rate = { max = 12, window = 1 },
-    write = function(npcId, uid, amount)
+    write = function(npcId, uid, amount, requestId)
         net.WriteString(npcId or "")
         net.WriteString(uid or "")
         net.WriteUInt(amount or 1, 16)
+        net.WriteUInt(requestId or 0, 32)
     end,
     read = function()
-        return net.ReadString(), net.ReadString(), net.ReadUInt(16)
+        return net.ReadString(), net.ReadString(), net.ReadUInt(16), net.ReadUInt(32)
     end,
-    validate = function(ply, npcId, uid, amount)
+    validate = function(ply, npcId, uid, amount, requestId)
         if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
         if not isstring(npcId) or npcId == "" then return false, "invalid_npc" end
         if not isstring(uid) or uid == "" then return false, "invalid_uid" end
         if not isnumber(amount) or amount < 1 or amount > 100 then return false, "invalid_amount" end
+        if not isnumber(requestId) or requestId < 1 or requestId > 2147483647 then
+            return false, "invalid_request"
+        end
 
         return true
     end,
-    handler = function(ply, npcId, uid, amount)
-        local success, reason = WO.Vendors.Sell(ply, npcId, uid, math.floor(amount))
+    handler = function(ply, npcId, uid, amount, requestId)
+        local success, reason = WO.Vendors.Sell(ply, npcId, uid, math.floor(amount), true)
 
         WO.Net.Send("Vendor.ActionResult", ply, {
             action = "sell",
             npcId = npcId,
+            requestId = requestId,
+            money = WO.Currency.Get(ply),
             success = success == true,
             reason = reason,
         })
+
+        if success == true and WO.Vendors.Sync then
+            WO.Vendors.Sync(ply)
+        end
     end,
 })
 

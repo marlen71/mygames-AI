@@ -1420,6 +1420,9 @@ local function NewPanel(class)
     p.SetPlaceholderText = function(tt, value) tt.__placeholder = value end
     p.SetEnabled = function(tt, enabled) tt.__enabled = enabled == true end
     p.IsEnabled = function(tt) return tt.__enabled end
+    p.SetMouseInputEnabled = function(tt, enabled) tt.__mouseInputEnabled = enabled == true end
+    p.IsMouseInputEnabled = function(tt) return tt.__mouseInputEnabled == true end
+    p.SetKeyboardInputEnabled = function(tt, enabled) tt.__keyboardInputEnabled = enabled == true end
     p.SetVisible = function(tt, visible) tt.__visible = visible == true end
     p.IsVisible = function(tt) return tt.__visible end
     p.Remove = function(tt)

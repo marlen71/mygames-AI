@@ -64,6 +64,11 @@ local function SendSync(ply)
     })
 end
 
+--- Публичная отправка актуального состояния открытой торговой сессии.
+function WO.Vendors.Sync(ply)
+    SendSync(ply)
+end
+
 ---------------------------------------------------------------------------
 -- API
 ---------------------------------------------------------------------------
@@ -105,7 +110,7 @@ function WO.Vendors.Open(ply, npcDef, ent)
 end
 
 --- Покупка товара (сервер валидирует всё).
-function WO.Vendors.Buy(ply, npcId, class, amount)
+function WO.Vendors.Buy(ply, npcId, class, amount, deferSync)
     if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
 
     local session = ply.wo_vendor
@@ -150,7 +155,7 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
             return false, reason or "mount_purchase_failed"
         end
 
-        SendSync(ply)
+        if not deferSync then SendSync(ply) end
         WO.Log("Vendor mount purchase: " .. ply:Nick() .. " " .. class .. " for " .. total)
         return true
     end
@@ -164,7 +169,7 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
 
     WO.Currency.Take(ply, total, "vendor_buy:" .. class)
 
-    SendSync(ply)
+    if not deferSync then SendSync(ply) end
 
     WO.Log("Vendor buy: " .. ply:Nick() .. " " .. class .. " x" .. amount .. " for " .. total)
 
@@ -172,7 +177,7 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
 end
 
 --- Продажа предмета (сервер валидирует всё).
-function WO.Vendors.Sell(ply, npcId, uid, amount)
+function WO.Vendors.Sell(ply, npcId, uid, amount, deferSync)
     if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
 
     local session = ply.wo_vendor
@@ -224,7 +229,7 @@ function WO.Vendors.Sell(ply, npcId, uid, amount)
 
     WO.Currency.Add(ply, total, "vendor_sell:" .. instance.class)
 
-    SendSync(ply)
+    if not deferSync then SendSync(ply) end
 
     WO.Log("Vendor sell: " .. ply:Nick() .. " " .. instance.class .. " x" .. amount .. " for " .. total)
 
