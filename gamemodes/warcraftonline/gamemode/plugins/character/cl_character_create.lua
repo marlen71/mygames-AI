@@ -340,8 +340,29 @@ local function BuildTextStep(parent, field, labelKey)
         draft[field] = self:GetValue()
     end
 
+    local generateButton = WO.UI.Button(parent,
+        WO.Lang:Get(field == "name" and "character.generate_name" or "character.generate_surname"),
+        function()
+            local generated = WO.CharacterNames and WO.CharacterNames.Generate and
+                WO.CharacterNames.Generate(draft.race, field, draft.gender)
+
+            if not isstring(generated) then
+                if WO.Notify and WO.Notify.Show then
+                    WO.Notify.Show("error", WO.Lang:Get("character.name_generator_unavailable"))
+                end
+                return
+            end
+
+            entry:SetValue(generated)
+            draft[field] = generated
+        end)
+
+    generateButton:Dock(TOP)
+    generateButton:DockMargin(0, 8, 0, 0)
+    generateButton:SetTall(32)
+
     local hint = WO.UI.Label(parent,
-        WO.Config.NameMinLength .. "–" .. WO.Config.NameMaxLength .. " символов (буквы, пробел, дефис)",
+        WO.Lang:Get("character.name_hint", WO.Config.NameMinLength, WO.Config.NameMaxLength),
         "WO.Tiny", WO.UI.Colors.textDim)
 
     hint:Dock(TOP)

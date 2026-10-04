@@ -7,6 +7,8 @@
 WO.Loadout = WO.Loadout or {}
 
 local warnedMissing = {}
+-- Remove the previous free mage starter from already-active characters after upgrade.
+local LEGACY_MAGE_WEAPON_CLASS = "weapon_hpwr_stick"
 
 local function GetDesired(char)
     local configured = WO.Config.StartingWeaponClasses or {}
@@ -25,11 +27,8 @@ local function GetDesired(char)
 
     if isMage then
         add(configured.mage)
-        add(configured.mageLegacy)
     end
 
-    -- New grimoire is selected first. The previous HPWR wand remains registered
-    -- and on the mage loadout during validation, so rollback is one config change.
     local primary = isMage and configured.mage or configured.hands
 
     return desired, primary
@@ -59,9 +58,16 @@ function WO.Loadout.Apply(ply, char)
     end
 
     for _, weapon in ipairs(ply:GetWeapons()) do
-        if IsValid(weapon) and weapon.WOStarterLoadout == true and
-            not weapon.WOItemUID and not wanted[weapon:GetClass()] then
-            ply:StripWeapon(weapon:GetClass())
+        if IsValid(weapon) then
+            local class = weapon:GetClass()
+            local staleStarter = weapon.WOStarterLoadout == true and
+                not weapon.WOItemUID and not wanted[class]
+            local staleMageWand = char.class == "mage" and
+                class == LEGACY_MAGE_WEAPON_CLASS and not weapon.WOItemUID
+
+            if staleStarter or staleMageWand then
+                ply:StripWeapon(class)
+            end
         end
     end
 
@@ -88,15 +94,6 @@ function WO.Loadout.Apply(ply, char)
 
     if primary and IsRegistered(primary) and ply:HasWeapon(primary) then
         return primary
-    end
-
-    if char.class == "mage" then
-        local legacy = WO.Config.StartingWeaponClasses and
-            WO.Config.StartingWeaponClasses.mageLegacy
-
-        if legacy and IsRegistered(legacy) and ply:HasWeapon(legacy) then
-            return legacy
-        end
     end
 
     local hands = WO.Config.StartingWeaponClasses and WO.Config.StartingWeaponClasses.hands

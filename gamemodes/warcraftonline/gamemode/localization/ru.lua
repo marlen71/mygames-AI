@@ -55,6 +55,10 @@ WO.Lang.Register("ru", {
 
     ["character.name"] = "Имя",
     ["character.surname"] = "Фамилия",
+    ["character.generate_name"] = "Сгенерировать имя",
+    ["character.generate_surname"] = "Сгенерировать фамилию",
+    ["character.name_hint"] = "%d–%d символов (буквы, пробелы, дефис, апостроф)",
+    ["character.name_generator_unavailable"] = "Для этой расы сейчас нет набора имён.",
     ["character.age"] = "Возраст",
     ["character.gender"] = "Пол",
     ["character.race"] = "Раса",

@@ -499,6 +499,8 @@ function MOCK.NewEntity(class)
     e.__methods.Remove = function(tt) tt.__valid = false end
     e.__methods.GetModel = function(tt) return tt.__model or "models/player.mdl" end
     e.__methods.SetModel = function(tt, m) tt.__model = m end
+    e.__methods.GetModelBounds = function() return Vector(-16, -16, 0), Vector(16, 16, 72) end
+    e.__methods.FrameAdvance = function(tt, amount) tt.__frameAdvance = amount end
     e.__methods.SetNoDraw = function(tt, v) tt.__nodraw = v end
     e.__methods.SetMoveType = function(tt, v) tt.__movetype = v end
     e.__methods.StripWeapons = function(tt)
@@ -1391,6 +1393,8 @@ function vgui.GetControlTable(name)
 end
 
 local function NewPanel(class)
+    local reg = MOCK.vguiRegistry[class]
+    local isModelPanel = class == "DModelPanel" or (reg and reg.base == "DModelPanel")
     local p = { __panel = true, __class = class, __children = {}, __enabled = true, __visible = true }
 
     p.SetText = function(tt, text) tt.__text = text end
@@ -1449,6 +1453,26 @@ local function NewPanel(class)
         tt.__children = {}
     end
 
+    if isModelPanel then
+        p.SetFOV = function(tt, value) tt.__fov = value end
+        p.GetFOV = function(tt) return tt.__fov end
+        p.SetAnimated = function(tt, value) tt.__animated = value == true end
+        p.GetAnimated = function(tt) return tt.__animated == true end
+        p.SetLookAt = function(tt, value) tt.__lookAt = value end
+        p.GetLookAt = function(tt) return tt.__lookAt end
+        p.SetCamPos = function(tt, value) tt.__camPos = value end
+        p.GetCamPos = function(tt) return tt.__camPos end
+        p.SetModel = function(tt, modelPath)
+            if IsValid(tt.Entity) then tt.Entity:Remove() end
+            tt.Entity = nil
+            if not util.IsValidModel(modelPath) then return end
+
+            local entity = MOCK.NewEntity("client_model")
+            entity:SetModel(modelPath)
+            tt.Entity = entity
+        end
+    end
+
     local meta = {}
     meta.__index = function(t, k)
         local raw = rawget(t, k)
@@ -1470,7 +1494,6 @@ local function NewPanel(class)
     setmetatable(p, meta)
 
     -- Инициализация зарегистрированного панели
-    local reg = MOCK.vguiRegistry[class]
     if reg and reg.panel then
         for k, v in pairs(reg.panel) do
             if k ~= "BaseClass" then

@@ -54,7 +54,6 @@ WO.Workshop.RequestedSWEPs = {
     hands = WO.Config.StartingWeaponClasses.hands,
     starterKnife = WO.Config.StartingWeaponClasses.knife,
     mageGrimoire = WO.Config.StartingWeaponClasses.mage,
-    legacyMageStick = WO.Config.StartingWeaponClasses.mageLegacy,
 }
 
 WO.Workshop.Catalog = {

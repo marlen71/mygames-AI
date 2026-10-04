@@ -30,24 +30,22 @@ function MODEL:Init()
     self.dragging = false
 end
 
-local function IsPlayableModel(modelPath)
+local PREVIEW_RETRY_INTERVAL = 0.75
+
+local function IsModelMounted(modelPath)
     if not isstring(modelPath) or modelPath == "" then return false end
     if WO.Models and WO.Models.Exists and not WO.Models.Exists(modelPath) then return false end
     if util.IsValidModel and not util.IsValidModel(modelPath) then return false end
 
-    if WO.Races and WO.Races.IsPlayableModel then
-        if WO.Races.IsPlayableModel(modelPath) then return true end
-
-        -- Workshop/GMA mounts can finish after the initial realm bootstrap.
-        -- Refresh the verified race lists once before declaring a visible model missing.
-        if WO.Models and WO.Models.RefreshRaceLists then
-            WO.Models.RefreshRaceLists()
-        end
-
-        return WO.Races.IsPlayableModel(modelPath)
-    end
-
+    -- Preview is a visual-only client feature. Character/race eligibility is
+    -- enforced by the picker and revalidated by the server; do not hide a model
+    -- that is already mounted just because player_manager registration differs.
     return true
+end
+
+local function SchedulePreviewRetry(self)
+    self.woModelAvailable = false
+    self.nextModelRetry = CurTime() + PREVIEW_RETRY_INTERVAL
 end
 
 function MODEL:ClearPreviewModel()
@@ -57,18 +55,15 @@ function MODEL:ClearPreviewModel()
 
     self.Entity = nil
     self.currentModel = nil
+    self.requestedModel = nil
+    self.nextModelRetry = nil
     self.woModelAvailable = false
 end
 
-function MODEL:SetPreviewModel(modelPath)
-    if not IsPlayableModel(modelPath) then
-        self:ClearPreviewModel()
+function MODEL:TrySetPreviewModel(modelPath)
+    if not IsModelMounted(modelPath) then
+        SchedulePreviewRetry(self)
         return false
-    end
-
-    if self.currentModel == modelPath and IsValid(self.Entity) then
-        self.woModelAvailable = true
-        return true
     end
 
     if IsValid(self.Entity) then
@@ -76,11 +71,51 @@ function MODEL:SetPreviewModel(modelPath)
     end
 
     self.Entity = nil
-    self:SetModel(modelPath)
-    self.currentModel = modelPath
-    self.woModelAvailable = IsValid(self.Entity)
+    local ok = pcall(self.SetModel, self, modelPath)
 
-    return self.woModelAvailable
+    if ok and IsValid(self.Entity) then
+        self.currentModel = modelPath
+        self.woModelAvailable = true
+        self.nextModelRetry = nil
+
+        if istable(self.pendingCustomization) then
+            self:ApplyCustomization(self.pendingCustomization)
+        end
+
+        return true
+    end
+
+    self.currentModel = nil
+    if IsValid(self.Entity) then
+        self.Entity:Remove()
+    end
+    self.Entity = nil
+    SchedulePreviewRetry(self)
+    return false
+end
+
+function MODEL:SetPreviewModel(modelPath)
+    if not isstring(modelPath) or modelPath == "" then
+        self:ClearPreviewModel()
+        return false
+    end
+
+    if self.currentModel == modelPath and IsValid(self.Entity) then
+        self.requestedModel = modelPath
+        self.woModelAvailable = true
+        return true
+    end
+
+    self.requestedModel = modelPath
+
+    if IsValid(self.Entity) then
+        self.Entity:Remove()
+    end
+
+    self.Entity = nil
+    self.currentModel = nil
+    self.woModelAvailable = false
+    return self:TrySetPreviewModel(modelPath)
 end
 
 function MODEL:PaintOver(w, h)
@@ -104,7 +139,7 @@ function MODEL:LayoutEntity(ent)
 
     -- Камера находится со стороны -Forward(), поэтому лицо должно смотреть
     -- туда же: разворачиваем исходную ориентацию модели на 180 градусов.
-    ent:SetAngles(Angle(0, self.yaw + 180, 0))
+    ent:SetAngles(Angle(0, (self.yaw + 180) % 360, 0))
 
     -- Не проигрывать анимации — статичная поза
     if self:GetAnimated() then
@@ -134,7 +169,7 @@ function MODEL:OnCursorMoved(x, y)
     if self.dragging then
         local dx = x - (self._lastX or x)
 
-        self.yaw = self.yaw + dx * 0.6
+        self.yaw = (self.yaw + dx * 0.6) % 360
         self._lastX = x
     else
         self._lastX = x
@@ -150,6 +185,12 @@ end
 
 function MODEL:Think()
     local ent = self.Entity
+
+    if not IsValid(ent) and isstring(self.requestedModel) and self.requestedModel ~= "" and
+        CurTime() >= (self.nextModelRetry or 0) then
+        self:TrySetPreviewModel(self.requestedModel)
+        ent = self.Entity
+    end
 
     if not IsValid(ent) then return end
 
@@ -167,7 +208,9 @@ function MODEL:Think()
 
     self:SetLookAt(center)
 
-    local cameraDirection = Angle(6, self.yaw, 0):Forward()
+    -- Keep the camera in a fixed position. Only the model rotates, so every
+    -- button press and drag changes the viewed side instead of chasing it.
+    local cameraDirection = Angle(6, 0, 0):Forward()
     local cameraPos = center - cameraDirection * distance + Vector(0, 0, height * 0.025)
 
     self:SetCamPos(cameraPos)
@@ -177,11 +220,11 @@ end
     Применяет кастомизацию к превью: skin, bodygroups, color.
 ]]
 function MODEL:ApplyCustomization(customization)
+    customization = istable(customization) and customization or {}
+    self.pendingCustomization = table.Copy(customization)
+
     local ent = self.Entity
-
-    if not IsValid(ent) then return end
-
-    customization = customization or {}
+    if not IsValid(ent) then return false end
 
     ent:SetSkin(math.max(0, math.floor(tonumber(customization.skin) or 0)))
 
@@ -205,6 +248,8 @@ function MODEL:ApplyCustomization(customization)
 
         ent:SetColor(Color(tonumber(c.r) or 255, tonumber(c.g) or 255, tonumber(c.b) or 255, tonumber(c.a) or 255))
     end
+
+    return true
 end
 
 vgui.Register("WO_CharacterModel", MODEL, "DModelPanel")
@@ -225,7 +270,7 @@ function WO.UI.CreateCharacterModel(parent, modelPath)
 
     if isfunction(panel.SetPreviewModel) then
         panel:SetPreviewModel(modelPath)
-    elseif isstring(modelPath) and modelPath ~= "" and IsPlayableModel(modelPath) then
+    elseif isstring(modelPath) and modelPath ~= "" and IsModelMounted(modelPath) then
         panel:SetModel(modelPath)
     end
 

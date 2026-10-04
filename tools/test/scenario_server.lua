@@ -133,24 +133,25 @@ MOCK.Assert(starterKnifeDef and starterKnifeDef.allowStarterKnifeItem == true an
     WO.Items.IsInventoryAllowed("starter_knife") and
     not WO.Items.IsInventoryAllowed({ weapon = { class = "tfa_cso_coldsteelblade" } }) and
     not WO.Items.IsInventoryAllowed("arcane_hands"),
-    "только явный starter_knife является предметом; нож, руки и wand сохраняют точные классы")
+    "только явный starter_knife является предметом; магическая книга остаётся loadout-only")
 MOCK.Assert(desiredWeapons.hands == "drc_unarmed" and
     desiredWeapons.knife == "tfa_cso_coldsteelblade" and
     desiredWeapons.mage == "wo_magic_grimoire" and
-    desiredWeapons.mageLegacy == "weapon_hpwr_stick" and
+    desiredWeapons.mageLegacy == nil and
+    WO.Workshop.RequestedSWEPs.legacyMageStick == nil and
     weapons.GetStored("drc_unarmed") and
     weapons.GetStored("tfa_cso_coldsteelblade") and
     weapons.GetStored("wo_magic_grimoire") and
     weapons.GetStored("weapon_hpwr_stick"),
-    "новый grimoire активен, а точные hands/knife и прежний wand сохранены")
+    "магический loadout запрашивает только wo_magic_grimoire; старый класс нужен лишь для миграционной проверки")
 local anyClassStartsWithKnife = false
 for _, classId in ipairs(WO.Classes.GetIDs()) do
     for _, entry in ipairs(WO.Classes.GetStartingItems(classId)) do
         if entry.class == "starter_knife" then anyClassStartsWithKnife = true end
     end
 end
-MOCK.Assert(#mageDesired == 3 and mageDesired[1] == "drc_unarmed" and
-    mageDesired[2] == "wo_magic_grimoire" and mageDesired[3] == "weapon_hpwr_stick" and
+MOCK.Assert(#mageDesired == 2 and mageDesired[1] == "drc_unarmed" and
+    mageDesired[2] == "wo_magic_grimoire" and
     #warriorDesired == 1 and warriorDesired[1] == "drc_unarmed" and
     not mageHasKnifeItem and not anyClassStartsWithKnife and
     WO.Classes.IsWeaponAllowed("mage", "dagger") and
@@ -362,16 +363,17 @@ MOCK.Assert(mainHand == nil and inv:CountItem("starter_knife") == 0 and
 local magePlayer = MOCK.NewEntity("player")
 local mageCharacter = WO.Character.New({ id = "mage-loadout-test", class = "mage" })
 magePlayer:SetCharacter(mageCharacter)
+-- Simulate a previous version's free wand without relying on its starter marker.
+magePlayer:Give("weapon_hpwr_stick")
 local magePrimary = WO.Loadout.Apply(magePlayer, mageCharacter)
 
 MOCK.Assert(magePrimary == "wo_magic_grimoire" and
     magePlayer:HasWeapon("drc_unarmed") and
     not magePlayer:HasWeapon("tfa_cso_coldsteelblade") and
     magePlayer:HasWeapon("wo_magic_grimoire") and
-    magePlayer:HasWeapon("weapon_hpwr_stick") and
-    magePlayer:GetWeapon("wo_magic_grimoire").WOItemUID == nil and
-    magePlayer:GetWeapon("weapon_hpwr_stick").WOItemUID == nil,
-    "маг получает новый grimoire и сохраняет старый wand для безопасного отката, но не нож")
+    not magePlayer:HasWeapon("weapon_hpwr_stick") and
+    magePlayer:GetWeapon("wo_magic_grimoire").WOItemUID == nil,
+    "маг получает только grimoire, старый Warp Magic wand удаляется при обновлении")
 
 MOCK.Assert(WO.Spells.PointsAvailable(mageCharacter) == 1 and
     WO.Spells.LearnOrUpgrade(magePlayer, "healing_wave") == true and

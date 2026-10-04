@@ -1,6 +1,6 @@
 --[[
     Legacy tombstone for old saves that used arcane_hands as an item.
-    Mages now receive wo_magic_grimoire; weapon_hpwr_stick remains an alternate rollback SWEP.
+    Mages use wo_magic_grimoire and Warcraft Online's own spell system.
 ]]
 WO.Items.Register({
     id = "arcane_hands",

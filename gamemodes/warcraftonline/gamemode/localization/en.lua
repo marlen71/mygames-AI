@@ -39,7 +39,7 @@ WO.Lang.Register("en", {
     ["character.rotate_left"] = "Rotate Left",
     ["character.rotate_right"] = "Rotate Right",
     ["character.rotate_hint"] = "Drag the model or use the rotation buttons",
-    ["character.model_preview_unavailable"] = "3D preview unavailable: the model was not detected in mounted content.",
+    ["character.model_preview_unavailable"] = "3D preview temporarily unavailable; waiting for the model to mount.",
     ["character.no_models_available"] = "No race models were detected in this session. Refresh the menu; if this repeats, check Workshop mounting on the client and server.",
     ["character.model_unavailable"] = "The model was not detected in this session's mounted content. Refresh the menu and try again.",
 

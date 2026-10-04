@@ -14,7 +14,7 @@ MOCK.mountedFiles = {
 
 player_manager.AddValidModel("humanmale00_99", "models/mailer/character/human/male/humanmale00_99.mdl")
 
-for _, class in ipairs({ "drc_unarmed", "tfa_cso_coldsteelblade", "weapon_hpwr_stick" }) do
+for _, class in ipairs({ "drc_unarmed", "tfa_cso_coldsteelblade" }) do
     weapons.Register({
         PrintName = class,
         Category = "Workshop test fixture",
@@ -58,21 +58,69 @@ MOCK.Assert(hudShouldDraw and isfunction(hudShouldDraw.wo_hud_hide) and
     "стандартный HUD и target ID не скрываются в лимбо до синхронизации персонажа")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы видны на клиенте")
 MOCK.Assert(WO.Models ~= nil and WO.Models.GetRace ~= nil, "каталог моделей виден на клиенте")
+local themedNameRaces = { "dwarf", "elf", "gnome", "goblin", "human", "orc", "tauren", "troll", "undead" }
+local allNamePoolsValid = WO.CharacterNames and WO.CharacterNames.Generate ~= nil
+for _, raceID in ipairs(themedNameRaces) do
+    local pools = WO.CharacterNames and WO.CharacterNames.Get(raceID)
+    allNamePoolsValid = allNamePoolsValid and pools ~= nil and
+        #pools.givenNames.male >= 8 and #pools.givenNames.female >= 8 and #pools.surnames >= 8
+
+    if pools then
+        for _, pool in ipairs({ pools.givenNames.male, pools.givenNames.female, pools.surnames }) do
+            for _, name in ipairs(pool) do
+                allNamePoolsValid = allNamePoolsValid and WO.Util.IsValidName(name)
+            end
+        end
+    end
+end
+MOCK.Assert(allNamePoolsValid, "все девять рас имеют проверенные тематические имена и фамилии")
 WO.Models.RefreshRaceLists()
 local refreshedHumanModels = WO.Races.GetModels("human", "male")
 MOCK.Assert(table.HasValue(refreshedHumanModels,
     "models/mailer/character/human/male/humanmale00_99.mdl"),
     "refresh обнаруживает слитый player_manager идентификатор humanmale00_99")
+
+local unlistedModelPath = "models/mailer/character/test/unlisted_preview.mdl"
+MOCK.mountedFiles[unlistedModelPath] = true
+local mountedPreview = WO.UI.CreateCharacterModel(nil, unlistedModelPath)
+mountedPreview.spin = false
+mountedPreview:SetYaw(0)
+mountedPreview:Think()
+local cameraAtZero = mountedPreview:GetCamPos()
+mountedPreview:LayoutEntity(mountedPreview.Entity)
+local modelAngleAtZero = mountedPreview.Entity:GetAngles().y
+mountedPreview:RotateBy(90)
+mountedPreview:Think()
+local cameraAfterRotation = mountedPreview:GetCamPos()
+mountedPreview:LayoutEntity(mountedPreview.Entity)
+MOCK.Assert(not WO.Races.IsPlayableModel(unlistedModelPath) and
+    mountedPreview.woModelAvailable == true and IsValid(mountedPreview.Entity) and
+    cameraAtZero.x == cameraAfterRotation.x and cameraAtZero.y == cameraAfterRotation.y and
+    cameraAtZero.z == cameraAfterRotation.z and modelAngleAtZero == 180 and
+    mountedPreview.Entity:GetAngles().y == 270,
+    "любая смонтированная модель видна в preview; камера фиксирована, модель вращается относительно неё")
+
+local delayedModelPath = "models/mailer/character/test/delayed_mount.mdl"
+local delayedPreview = WO.UI.CreateCharacterModel(nil, delayedModelPath)
+MOCK.Assert(not IsValid(delayedPreview.Entity) and delayedPreview.requestedModel == delayedModelPath,
+    "отсутствующая при первом запросе модель остаётся ожидающей повторной проверки")
+MOCK.mountedFiles[delayedModelPath] = true
+delayedPreview.nextModelRetry = CurTime() - 1
+delayedPreview:Think()
+MOCK.Assert(IsValid(delayedPreview.Entity) and delayedPreview.currentModel == delayedModelPath,
+    "общее preview повторно загружает модель после монтирования контента")
+
 MOCK.Assert(WO.Config.StartingWeaponClasses.hands == "drc_unarmed" and
     WO.Config.StartingWeaponClasses.knife == "tfa_cso_coldsteelblade" and
     WO.Config.StartingWeaponClasses.mage == "wo_magic_grimoire" and
-    WO.Config.StartingWeaponClasses.mageLegacy == "weapon_hpwr_stick" and
+    WO.Config.StartingWeaponClasses.mageLegacy == nil and
+    WO.Workshop.RequestedSWEPs.legacyMageStick == nil and
     WO.Spells.WeaponClass == "wo_magic_grimoire" and
     weapons.GetStored("drc_unarmed") and
     weapons.GetStored("tfa_cso_coldsteelblade") and
     weapons.GetStored("wo_magic_grimoire") and
-    weapons.GetStored("weapon_hpwr_stick"),
-    "клиент видит новый grimoire и точный legacy wand для отката")
+    not weapons.GetStored("weapon_hpwr_stick"),
+    "клиент видит только grimoire для мага и собственную систему заклинаний")
 MOCK.Assert(WO.Items.IsInventoryAllowed("starter_knife") and
     WO.Items.Get("starter_knife").weapon.class == "tfa_cso_coldsteelblade" and
     not WO.Items.IsInventoryAllowed("arcane_hands"),
@@ -224,6 +272,10 @@ MOCK.Assert(selectedRace and #WO.Races.GetAvailableGenders("human") > 0,
 local raceButton = MOCK.FindPanelByText(selectedRace.name)
 MOCK.Assert(raceButton ~= nil, "первый шаг содержит варианты рас")
 raceButton:DoClick()
+MOCK.Assert(WO.CharacterUI.PreviewModel.woModelAvailable == true and
+    IsValid(WO.CharacterUI.PreviewModel.Entity) and
+    WO.CharacterUI.PreviewModel.currentModel == selectedRace.models.male[1],
+    "выбор расы показывает её реальную доступную 3D-модель")
 ClickWizardNext()
 
 local genderButton = MOCK.FindPanelByText(WO.Lang:Get("gender.male"))
@@ -241,6 +293,16 @@ for i = #MOCK.createdPanels, 1, -1 do
     end
 end
 MOCK.Assert(nameEntry and nameEntry.OnChange, "шаг имени содержит поле ввода")
+local generateNameButton = MOCK.FindPanelByText(WO.Lang:Get("character.generate_name"))
+MOCK.Assert(generateNameButton ~= nil, "шаг имени предлагает тематическую генерацию")
+generateNameButton:DoClick()
+local generatedHumanName = nameEntry:GetValue()
+local generatedNameIsHuman = false
+for _, candidate in ipairs(WO.CharacterNames.Get("human").givenNames.male) do
+    if candidate == generatedHumanName then generatedNameIsHuman = true end
+end
+MOCK.Assert(generatedNameIsHuman and WO.Util.IsValidName(generatedHumanName),
+    "генератор имени использует пул выбранной расы и принимает значение серверной валидацией")
 nameEntry:SetValue("Aria")
 nameEntry:OnChange(nameEntry)
 ClickWizardNext() -- фамилия
@@ -254,6 +316,16 @@ for i = #MOCK.createdPanels, 1, -1 do
     end
 end
 MOCK.Assert(surnameEntry and surnameEntry.OnChange, "шаг фамилии содержит поле ввода")
+local generateSurnameButton = MOCK.FindPanelByText(WO.Lang:Get("character.generate_surname"))
+MOCK.Assert(generateSurnameButton ~= nil, "шаг фамилии предлагает тематическую генерацию")
+generateSurnameButton:DoClick()
+local generatedHumanSurname = surnameEntry:GetValue()
+local generatedSurnameIsHuman = false
+for _, candidate in ipairs(WO.CharacterNames.Get("human").surnames) do
+    if candidate == generatedHumanSurname then generatedSurnameIsHuman = true end
+end
+MOCK.Assert(generatedSurnameIsHuman and WO.Util.IsValidName(generatedHumanSurname),
+    "генератор фамилии использует отдельный расовый пул и принимает значение серверной валидацией")
 surnameEntry:SetValue("Storm")
 surnameEntry:OnChange(surnameEntry)
 ClickWizardNext() -- кастомизация
@@ -330,6 +402,18 @@ MOCK.Assert(previewEntity:GetAngles().y == 210,
 
 MOCK.NetDeliver({ name = "Character.OpenSelect", args = {} }, 8, nil)
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "select", "экран выбора персонажа")
+local selectionCardHasModel = false
+for _, panel in ipairs(MOCK.createdPanels) do
+    if rawget(panel, "__class") == "WO_CharacterModel" and
+        rawget(panel, "__removed") ~= true and
+        rawget(panel, "currentModel") == "models/mailer/character/human/male/humanmale00_00.mdl" and
+        IsValid(rawget(panel, "Entity")) then
+        selectionCardHasModel = true
+        break
+    end
+end
+MOCK.Assert(selectionCardHasModel,
+    "карточка выбора использует ту же фабрику и показывает смонтированную модель персонажа")
 
 print("[scenario] OpenSelect OK")
 

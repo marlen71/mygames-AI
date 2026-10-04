@@ -57,14 +57,12 @@ WO.Config.DefaultHandsModel = "models/weapons/c_arms.mdl"
 
 ---------------------------------------------------------------------------
 -- Точные внешние SWEP-классы стартового оружия.
--- Руки и mage wand выдаются сервером напрямую; knife хранится как starter_knife
--- и выдаётся только после экипировки этого предмета.
+-- Маг получает только нашу книгу; заклинания обрабатывает собственная система.
+-- Руки выдаются сервером напрямую, а knife — только при экипировке starter_knife.
 WO.Config.StartingWeaponClasses = {
     hands = "drc_unarmed",
     knife = "tfa_cso_coldsteelblade",
     mage = "wo_magic_grimoire",
-    -- Kept registered and granted during the validation period for rollback.
-    mageLegacy = "weapon_hpwr_stick",
 }
 
 ---------------------------------------------------------------------------
