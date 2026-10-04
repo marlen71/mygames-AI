@@ -8,6 +8,8 @@ WO.Races.Register({
     modelScale = 1,
     stats = { strength = 9, agility = 10, intelligence = 12, stamina = 9, spirit = 13 },
     modifiers = {},
-    classes = { "warrior", "mage", "rogue", "ranger", "priest", "warlock", "deathknight", "monk" },
+    magicBonuses = { frost = 0.05, water = 0.04 },
+    professionBonuses = { cleaner = 0.12, tailor = 0.08, alchemist = 0.08 },
+    classes = {"warrior", "mage", "rogue", "ranger", "priest", "warlock", "deathknight", "monk", "assassin", "runeknight", "alchemist"},
     customization = { bodygroups = {} },
 })

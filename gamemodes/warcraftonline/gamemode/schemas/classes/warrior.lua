@@ -28,5 +28,7 @@ WO.Classes.Register({
         { class = "bread", amount = 3 },
     },
 
+    magicBonuses = {},
+    professionBonuses = { builder = 0.10, blacksmith = 0.08, weaponsmith = 0.10 },
     modifiers = {},
 })

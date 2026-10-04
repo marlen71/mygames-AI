@@ -636,6 +636,65 @@ LocalPlayer():SetNW2String("wo_class", "warrior")
 LocalPlayer():SetNW2Int("wo_level", 3)
 
 do
+    MOCK.Assert(WO.Plugins.IsLoaded("professions") and #WO.Professions.GetIDs() == 21 and
+        WO.ProfessionsUI and WO.ProfessionsUI.BuildPanel,
+        "клиент зарегистрировал все ремёсла и их UI")
+
+    WO.MenuUI.Show("work")
+    MOCK.Assert(WO.MenuUI.GetPage() == "work" and
+        MOCK.FindPanelByText("Устроиться") ~= nil and
+        MOCK.FindPanelByText("Ремёсла") ~= nil,
+        "страница ремёсел открывается из меню и показывает 21 работу")
+    MOCK.TakeOutbox()
+
+    local joinButton = MOCK.FindPanelByText("Устроиться")
+    joinButton:DoClick()
+    local joinMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.StartShift")
+    MOCK.Assert(#joinMessages == 1 and WO.Professions.Get(joinMessages[1].args[1]) ~= nil,
+        "кнопка найма отправляет только идентификатор выбранного ремесла")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        revision = 1,
+        skills = { fisher = { xp = 0, level = 1, completedShifts = 0 } },
+        shift = {
+            id = "client-work-shift", professionId = "fisher", rank = 1,
+            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 33, bonus = 0,
+            task = {
+                orderIndex = 1, mode = "timing", title = "Подсечь рыбу",
+                instruction = "Удерживайте маркер в зелёной зоне.", phase = "working",
+                progress = 0.25, elapsed = 0, zoneCenter = 0.5, zoneWidth = 0.2,
+                speed = 1, phaseOffset = 0,
+            },
+        },
+    } } }, 8, nil)
+
+    local miniGamePanel
+    for index = #MOCK.createdPanels, 1, -1 do
+        local candidate = MOCK.createdPanels[index]
+        if rawget(candidate, "woShiftId") == "client-work-shift" and
+            rawget(candidate, "__removed") ~= true then
+            miniGamePanel = candidate
+            break
+        end
+    end
+    MOCK.Assert(miniGamePanel ~= nil and isfunction(miniGamePanel.Paint),
+        "серверная смена строит вертикальную мини-игру с маркером и зелёной зоной")
+    local fishPolygonsBefore = MOCK.surfacePolyCalls or 0
+    miniGamePanel:Paint(420, 246)
+    MOCK.Assert((MOCK.surfacePolyCalls or 0) >= fishPolygonsBefore + 2,
+        "рыба рисуется иконкой у маркера в вертикальной мини-игре рыбака")
+    MOCK.TakeOutbox()
+    miniGamePanel.OnMousePressed(miniGamePanel, MOUSE_LEFT)
+    miniGamePanel.OnMouseReleased(miniGamePanel, MOUSE_LEFT)
+    local workInputMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
+    MOCK.Assert(#workInputMessages == 2 and workInputMessages[1].args[1] == "client-work-shift" and
+        workInputMessages[1].args[2] == "hold" and workInputMessages[1].args[3] == true and
+        workInputMessages[2].args[3] == false,
+        "мини-игра отправляет серверу только начало/окончание удержания")
+    WO.MenuUI.Close()
+end
+
+do
     -- Simulate the post-creation transition into the world, where stale character
     -- selection UI must no longer own TAB or ESC.
     if WO.CharacterUI.CloseMenus then WO.CharacterUI.CloseMenus() end

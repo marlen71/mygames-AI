@@ -48,6 +48,8 @@ function WO.Classes.Register(def)
     def.startingItems = def.startingItems or {}
     def.startingEquipment = def.startingEquipment or {}
     def.abilities = def.abilities or {}
+    def.professionBonuses = istable(def.professionBonuses) and def.professionBonuses or {}
+    def.magicBonuses = istable(def.magicBonuses) and def.magicBonuses or {}
 
     return WO.Classes.Registry:Register(def.id, def)
 end

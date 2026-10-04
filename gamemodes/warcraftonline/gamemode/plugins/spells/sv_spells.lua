@@ -132,7 +132,7 @@ function WO.Spells.LearnOrUpgrade(ply, spellId, scrollInstance)
     local spell = WO.Spells.Get(spellId)
 
     if not spell then return false, "unknown_spell" end
-    if char.class ~= "mage" then return false, "class" end
+    if not WO.Spells.CanUseClass(char.class) then return false, "class" end
     if not istable(scrollInstance) or not isstring(scrollInstance.uid) or
         not isstring(scrollInstance.class) then
         return false, "required_scroll"
@@ -177,6 +177,8 @@ function WO.Spells.Select(ply, spellId)
     local char = ply:GetCharacter()
     local spell = WO.Spells.Get(spellId)
 
+    if not WO.Spells.CanUseClass(char.class) then return false, "class" end
+
     if not spell or WO.Spells.GetRank(char, spellId) <= 0 then
         return false, "not_learned"
     end
@@ -197,7 +199,7 @@ function WO.Spells.CanCast(ply, spellId)
     local spell = WO.Spells.Get(spellId)
 
     if not spell then return false, "unknown_spell" end
-    if char.class ~= "mage" then return false, "class" end
+    if not WO.Spells.CanUseClass(char.class) then return false, "class" end
 
     local rank = WO.Spells.GetRank(char, spellId)
 
@@ -213,8 +215,10 @@ function WO.Spells.Apply(ply, spellId, target)
 
     local char = ply:GetCharacter()
     local spellPower = ply:GetStat("spellPower") or 0
-    local power = spell.basePower + math.max(0, rank - 1) * spell.powerPerRank +
+    local rawPower = spell.basePower + math.max(0, rank - 1) * spell.powerPerRank +
         spellPower * spell.spellPowerScale
+    local affinity = WO.Spells.GetMagicBonus(char, spell.elementType)
+    local power = rawPower * (1 + affinity)
 
     if spell.type == "heal" then
         if not IsValid(target) or not target:IsPlayer() or

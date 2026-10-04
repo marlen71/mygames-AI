@@ -27,5 +27,7 @@ WO.Classes.Register({
         { class = "health_potion", amount = 2 },
     },
 
+    magicBonuses = { air = 0.03, earth = 0.02 },
+    professionBonuses = { merchant = 0.08, cleaner = 0.10, herbalist = 0.06 },
     modifiers = {},
 })

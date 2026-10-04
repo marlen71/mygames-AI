@@ -23,8 +23,10 @@ WO.Races.Register({
     },
 
     modifiers = {},
+    magicBonuses = { air = 0.06, water = 0.05 },
+    professionBonuses = { herbalist = 0.12, fisher = 0.08 },
 
-    classes = { "warrior", "ranger", "rogue", "priest", "druid", "mage", "monk", "deathknight", "demonhunter" },
+    classes = {"warrior", "ranger", "rogue", "priest", "druid", "mage", "monk", "deathknight", "demonhunter", "assassin", "alchemist"},
 
     customization = {
         bodygroups = {},

@@ -9,6 +9,34 @@ WO.Spells.Registry = WO.Spells.Registry or {}
 WO.Spells.LocalBook = WO.Spells.LocalBook or nil
 WO.Spells.WeaponClass = "wo_magic_grimoire"
 
+--- True when a character's class is configured to receive and use the grimoire.
+-- Keep this in step with the exact starter-weapon allowlist; do not assume all
+-- spell users are the mage class.
+function WO.Spells.CanUseClass(classId)
+    if not isstring(classId) or classId == "" then return false end
+
+    local config = WO.Config.StartingWeaponClasses or {}
+
+    for _, allowedClass in ipairs(config.grimoireClasses or { "mage" }) do
+        if allowedClass == classId then return true end
+    end
+
+    local class = WO.Classes and WO.Classes.Get and WO.Classes.Get(classId)
+    return class ~= nil and class.canUseGrimoire == true
+end
+
+--- Combined race/class affinity for a spell element, clamped to a safe maximum.
+function WO.Spells.GetMagicBonus(char, elementType)
+    if not char or not isstring(elementType) then return 0 end
+
+    local race = WO.Races and WO.Races.Get and WO.Races.Get(char.race)
+    local class = WO.Classes and WO.Classes.Get and WO.Classes.Get(char.class)
+    local raceBonus = race and race.magicBonuses and race.magicBonuses[elementType] or 0
+    local classBonus = class and class.magicBonuses and class.magicBonuses[elementType] or 0
+
+    return math.Clamp((tonumber(raceBonus) or 0) + (tonumber(classBonus) or 0), 0, 0.35)
+end
+
 function WO.Spells.Register(def)
     if not istable(def) or not isstring(def.id) or def.id == "" then
         WO.Error("WO.Spells.Register: invalid spell definition")
@@ -66,6 +94,7 @@ function WO.Spells.BuildScrollCatalog()
     if not (WO.Items and WO.Items.Register and WO.Items.Get) then return false end
 
     local config = WO.Config.MagicScrolls or {}
+    local grimoireClasses = (WO.Config.StartingWeaponClasses or {}).grimoireClasses or { "mage" }
     local spellIDs, stock, buyback = {}, {}, {}
 
     for spellId in pairs(WO.Spells.Registry) do
@@ -103,7 +132,7 @@ function WO.Spells.BuildScrollCatalog()
                     maxStack = math.max(1, math.floor(tonumber(config.stackSize) or 20)),
                     rarity = targetRank >= 4 and "rare" or "uncommon",
                     description = description,
-                    requirements = { class = "mage" },
+                    requirements = { class = grimoireClasses },
                     spellScroll = {
                         spellId = spellId,
                         targetRank = targetRank,

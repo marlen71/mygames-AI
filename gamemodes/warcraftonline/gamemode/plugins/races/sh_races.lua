@@ -45,6 +45,8 @@ function WO.Races.Register(def)
     def.models = def.models or {}
     def.genders = def.genders or { "male", "female" }
     def.stats = def.stats or {}
+    def.professionBonuses = istable(def.professionBonuses) and def.professionBonuses or {}
+    def.magicBonuses = istable(def.magicBonuses) and def.magicBonuses or {}
     def.modelScale = def.modelScale or 1
 
     return WO.Races.Registry:Register(def.id, def)

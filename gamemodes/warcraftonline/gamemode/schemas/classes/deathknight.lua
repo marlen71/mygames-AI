@@ -9,5 +9,7 @@ WO.Classes.Register({
     allowedArmor = { "plate", "mail", "shield", "misc" },
     abilities = {},
     startingItems = { { class = "health_potion", amount = 3 }, { class = "bread", amount = 2 } },
+    magicBonuses = { frost = 0.14, life = 0.04, earth = 0.04 },
+    professionBonuses = { blacksmith = 0.12, miner = 0.08, builder = 0.08 },
     modifiers = {},
 })

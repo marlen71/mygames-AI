@@ -49,12 +49,12 @@ MOCK.RunTimers(0.1)
 MOCK.Assert(WO.Core.IsLoaded, "WO.Core.IsLoaded после загрузки")
 MOCK.Assert(WO.GamemodeIncludeFolder == "warcraftonline/gamemode",
     "абсолютный include-root GMod: " .. tostring(WO.GamemodeIncludeFolder))
-MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 31,
-    "загружены все 31 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
+MOCK.Assert(table.Count(WO.Plugins.GetAll()) == 32,
+    "загружены все 32 plugin metadata: " .. table.Count(WO.Plugins.GetAll()))
 MOCK.Assert(WO.Plugins.IsLoaded("character") and WO.Plugins.IsLoaded("hud") and
     WO.Plugins.IsLoaded("spells") and WO.Plugins.IsLoaded("mounts") and
-    WO.Plugins.IsLoaded("settings"),
-    "плагины персонажа, HUD, книги заклинаний, маунтов и настроек загрузились")
+    WO.Plugins.IsLoaded("settings") and WO.Plugins.IsLoaded("professions"),
+    "плагины персонажа, HUD, книги заклинаний, маунтов, настроек и ремёсел загрузились")
 MOCK.Assert(MOCK.clientFilesAdded["warcraftonline/gamemode/plugins/character/sh_plugin.lua"],
     "сервер отправил клиенту метаданные character через AddCSLuaFile")
 
@@ -94,8 +94,8 @@ MOCK.Assert(table.HasValue(configuredHumanModels, explicitHumanModel) and
     not table.HasValue(configuredHumanModels, discoveredHumanModel),
     "race allowlist берёт явный путь без file.Exists и игнорирует player_manager discovery")
 MOCK.mountedFiles[explicitHumanModel] = true
-MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() == 13,
-    "зарегистрированы базовые и девять новых классов: " ..
+MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() == 16,
+    "зарегистрированы 13 исходных и три новых класса: " ..
         (WO.Classes.GetIDs and #WO.Classes.GetIDs() or 0))
 
 local expectedRaces = {
@@ -105,6 +105,7 @@ local expectedRaces = {
 local expectedClasses = {
     "warrior", "mage", "rogue", "ranger", "paladin", "priest", "druid", "shaman",
     "warlock", "monk", "deathknight", "demonhunter", "evoker",
+    "assassin", "runeknight", "alchemist",
 }
 local specialRaces = { bloodelf = true, dracthyr = true, vulpera = true }
 local function HasCyrillic(values)
@@ -151,6 +152,97 @@ for _, classID in ipairs(expectedClasses) do
 end
 MOCK.Assert(allRaceSchemasValid and allClassesRegistered,
     "у всех рас есть русское имя, модели обоих полов, классы и расширенные русские имена/фамилии")
+
+do
+local expectedProfessionRanks = {
+    lumberjack = { "Дровосек", "Кольщик дров", "Лесопильщик" },
+    miner = { "Горняк", "Вагонетчик", "Дробильщик" },
+    farmer = { "Пахарь", "Сеятель", "Жнец" },
+    herder = { "Пастух", "Кормильщик", "Загонщик" },
+    fisher = { "Рыбак", "Сеточник", "Разделочник" },
+    porter = { "Складчик", "Развозчик", "Погрузчик" },
+    blacksmith = { "Горновой", "Молотобоец", "Точильщик" },
+    tailor = { "Закройщик", "Швея", "Бронник" },
+    baker = { "Месильщик", "Печник", "Кондитер" },
+    brewer = { "Солодовник", "Варщик", "Разливщик" },
+    alchemist = { "Сборщик трав", "Толкач", "Зельевар" },
+    merchant = { "Лавочник", "Закупщик", "Оценщик" },
+    cleaner = { "Дворник", "Подметальщик", "Мусорщик" },
+    water_carrier = { "Черпальщик", "Водонос", "Колодезник" },
+    carpenter = { "Досочник", "Столяр", "Строитель" },
+    weaponsmith = { "Лучник", "Стрелочник", "Арбалетчик" },
+    jeweler = { "Каменщик", "Огранщик", "Ювелир" },
+    dockworker = { "Грузчик", "Канатчик", "Причальщик" },
+    beekeeper = { "Пчеловод", "Медосборщик", "Воскодел" },
+    herbalist = { "Собиратель", "Сушильщик", "Сортировщик" },
+    builder = { "Землекоп", "Каменщик", "Кровельщик" },
+}
+local professionIDs = WO.Professions.GetIDs()
+local allProfessionsValid = #professionIDs == 21
+for _, professionID in ipairs(professionIDs) do
+    allProfessionsValid = allProfessionsValid and expectedProfessionRanks[professionID] ~= nil
+end
+for professionID, expectedRanks in pairs(expectedProfessionRanks) do
+    local profession = WO.Professions.Get(professionID)
+    allProfessionsValid = allProfessionsValid and profession ~= nil and
+        isstring(profession.name) and #profession.ranks == 3
+
+    if profession then
+        for rankIndex, rank in ipairs(profession.ranks) do
+            allProfessionsValid = allProfessionsValid and rank.name == expectedRanks[rankIndex] and
+                #rank.activities >= 3 and rank.basePay > 0 and
+                (rankIndex == 1 or rank.basePay > profession.ranks[rankIndex - 1].basePay)
+            for _, activity in ipairs(rank.activities or {}) do
+                allProfessionsValid = allProfessionsValid and
+                    (activity.mode == "timing" or activity.mode == "delivery")
+            end
+        end
+    end
+end
+local allWorkBonusesValid = true
+for _, raceID in ipairs(expectedRaces) do
+    for professionID, bonus in pairs(WO.Races.Get(raceID).professionBonuses or {}) do
+        if not WO.Professions.Get(professionID) or bonus < 0 or bonus > 0.35 then
+            allWorkBonusesValid = false
+        end
+    end
+end
+for _, classID in ipairs(expectedClasses) do
+    for professionID, bonus in pairs(WO.Classes.Get(classID).professionBonuses or {}) do
+        if not WO.Professions.Get(professionID) or bonus < 0 or bonus > 0.35 then
+            allWorkBonusesValid = false
+        end
+    end
+end
+local magicElements = { air = true, earth = true, fire = true, frost = true,
+    lightning = true, water = true, life = true }
+local allMagicBonusesValid = true
+for _, raceID in ipairs(expectedRaces) do
+    for element, bonus in pairs(WO.Races.Get(raceID).magicBonuses or {}) do
+        if not magicElements[element] or bonus < 0 or bonus > 0.35 then
+            allMagicBonusesValid = false
+        end
+    end
+end
+for _, classID in ipairs(expectedClasses) do
+    for element, bonus in pairs(WO.Classes.Get(classID).magicBonuses or {}) do
+        if not magicElements[element] or bonus < 0 or bonus > 0.35 then
+            allMagicBonusesValid = false
+        end
+    end
+end
+MOCK.Assert(allProfessionsValid and allWorkBonusesValid and allMagicBonusesValid,
+    "21 ремесел и все три ступени имеют валидные заказы/ставки; расовые и классовые бонусы привязаны к работам и стихиям")
+local humanMageFire = WO.Spells.GetMagicBonus({ race = "human", class = "mage" }, "fire")
+local humanPriestFire = WO.Spells.GetMagicBonus({ race = "human", class = "priest" }, "fire")
+local draeneiPriestLife = WO.Spells.GetMagicBonus({ race = "draenei", class = "priest" }, "life")
+MOCK.Assert(humanMageFire > humanPriestFire and draeneiPriestLife > humanMageFire,
+    "стихийная сила зависит от расы и класса, а не только от наличия гримуара")
+MOCK.Assert(WO.Spells.CanUseClass("mage") and WO.Spells.CanUseClass("priest") and
+    WO.Spells.CanUseClass("alchemist") and WO.Spells.CanUseClass("runeknight") and
+    not WO.Spells.CanUseClass("warrior"),
+    "доступ к гримуару следует явному списку магических классов, а не жёсткой проверке mage")
+end
 MOCK.Assert(#WO.Models.GetConfiguredModels("pandaren", "male") == 18 and
     #WO.Models.GetConfiguredModels("pandaren", "female") == 20 and
     table.HasValue(WO.Races.GetModels("pandaren", "male"),
@@ -808,6 +900,21 @@ MOCK.Assert(magePrimary == "wo_magic_grimoire" and
     "маг получает только grimoire, старый Warp Magic wand удаляется при обновлении")
 
 do
+local expandedGrimoireLoadouts = true
+for _, classID in ipairs({ "priest", "druid", "shaman", "warlock", "evoker", "alchemist", "runeknight" }) do
+    local testCharacter = WO.Character.New({ id = "grimoire-class-" .. classID, class = classID })
+    local classes = WO.Loadout.GetDesiredClasses(testCharacter)
+    expandedGrimoireLoadouts = expandedGrimoireLoadouts and
+        table.HasValue(classes, "wo_magic_grimoire") and
+        table.HasValue(classes, "drc_unarmed")
+end
+local assassinLoadout = WO.Loadout.GetDesiredClasses(
+    WO.Character.New({ id = "assassin-loadout-test", class = "assassin" }))
+MOCK.Assert(expandedGrimoireLoadouts and not table.HasValue(assassinLoadout, "wo_magic_grimoire"),
+    "книга выдаётся всем настроенным магическим классам и не появляется у ассасина")
+end
+
+do
 local function AddSpellScroll(ply, spellId, targetRank)
     local class = WO.Spells.GetScrollClass(spellId, targetRank)
     if WO.Inventory.GiveItem(ply, class, 1) == false then return nil, class end
@@ -874,6 +981,26 @@ local healed, healedTarget, healAmount = WO.Spells.Apply(magePlayer, "healing_wa
 MOCK.Assert(healed == true and healedTarget == spellAlly and healAmount > 0 and
     spellAlly:Health() > 30,
     "healing spell восстанавливает здоровье союзника в радиусе")
+
+local nonMageSpellUsersCast = true
+for _, classID in ipairs({ "priest", "alchemist", "runeknight" }) do
+    local caster = MOCK.NewEntity("player")
+    local casterCharacter = WO.Character.New({ id = "cast-access-" .. classID, class = classID })
+    caster:SetCharacter(casterCharacter)
+    caster:SetNW2Int("wo_mana", 100)
+    local casterScrollUID = AddSpellScroll(caster, "firebolt", 1)
+    local casterEnemy = MOCK.NewEntity("npc")
+    casterEnemy:SetHealth(150)
+    casterEnemy:SetMaxHealth(150)
+    local canCast = WO.Spells.CanCast(caster, "firebolt")
+    local selected = WO.Spells.Select(caster, "firebolt")
+    local applied = WO.Spells.Apply(caster, "firebolt", casterEnemy)
+    nonMageSpellUsersCast = nonMageSpellUsersCast and casterScrollUID ~= nil and
+        canCast == true and selected == true and applied == true and casterEnemy:Health() < 150
+end
+MOCK.Assert(nonMageSpellUsersCast,
+    "жрец, алхимик и рунный рыцарь изучают свиток, выбирают и применяют заклинание на сервере")
+
 magePlayer:SetHealth(30)
 spellAlly:SetPos(Vector(5000, 0, 0))
 local selfHealed, selfTarget = WO.Spells.Apply(magePlayer, "healing_wave", spellAlly)
@@ -937,6 +1064,148 @@ grimoireSWEP.PrimaryAttack(spellWeaponInstance)
 util.TraceLine = originalSpellTrace
 MOCK.Assert(spellEnemy:Health() < 200 and magePlayer:GetMana() < 100,
     "ЛКМ нового magic SWEP применяет выбранное заклинание и расходует ману сервером")
+
+do
+local everySpellUsesTheWeaponPath = true
+local orderedSpellIDs = {}
+for spellID in pairs(WO.Spells.GetAll()) do orderedSpellIDs[#orderedSpellIDs + 1] = spellID end
+table.sort(orderedSpellIDs)
+for _, spellID in ipairs(orderedSpellIDs) do
+    local spell = WO.Spells.Get(spellID)
+    local scrollClass = WO.Spells.GetScrollClass(spellID, 1)
+    if WO.Spells.GetRank(mageCharacter, spellID) <= 0 then
+        everySpellUsesTheWeaponPath = everySpellUsesTheWeaponPath and
+            WO.Inventory.GiveItem(magePlayer, scrollClass, 1) ~= false
+    end
+
+    local selected = WO.Spells.Select(magePlayer, spellID)
+    magePlayer:SetNW2Int("wo_mana", 100)
+    spellEnemy:SetHealth(200)
+    magePlayer:SetHealth(spell.type == "heal" and 25 or 100)
+    util.TraceLine = function(trace)
+        return { Entity = spellEnemy, HitPos = spellEnemy:GetPos(), Hit = true }
+    end
+    local weaponInstance = setmetatable({
+        GetOwner = function() return magePlayer end,
+        SetNextPrimaryFire = function() end,
+        _woNextSpellCast = nil,
+    }, { __index = grimoireSWEP })
+    grimoireSWEP.PrimaryAttack(weaponInstance)
+
+    local applied = spell.type == "heal" and magePlayer:Health() > 25 or
+        spell.type == "damage" and spellEnemy:Health() < 200
+    everySpellUsesTheWeaponPath = everySpellUsesTheWeaponPath and selected == true and
+        applied and magePlayer:GetMana() < 100
+end
+util.TraceLine = originalSpellTrace
+MOCK.Assert(#orderedSpellIDs == 7 and everySpellUsesTheWeaponPath,
+    "все семь заклинаний выбраны из книги, кастуются через ЛКМ и дают серверный эффект/расход маны")
+end
+
+do
+local workPlayer = MOCK.NewEntity("player")
+local workCharacter = WO.Character.New({
+    id = "profession-cycle-test", race = "worgen", class = "assassin", money = 40,
+})
+workPlayer:SetCharacter(workCharacter)
+local initialMoney = WO.Currency.Get(workPlayer)
+local lumberjackBonus = WO.Professions.GetBonus(workCharacter, "lumberjack")
+local specializedBonus = WO.Professions.GetBonus(
+    WO.Character.New({ race = "dwarf", class = "runeknight" }), "blacksmith")
+MOCK.Assert(lumberjackBonus == 0.08 and specializedBonus == 0.24,
+    "расовые и классовые бонусы складываются для соответствующих ремёсел")
+
+MOCK.NetDeliver({ name = "Profession.StartShift", args = { "lumberjack" } }, 8, workPlayer)
+local shift = workCharacter.activeProfessionShift
+MOCK.Assert(shift and shift.status == "working" and shift.task.mode == "timing" and
+    shift.rank == 1 and shift.bonus == lumberjackBonus,
+    "сервер нанимает на выбранную ступень и начинает первый мини-игровой заказ")
+local firstShiftID = shift.id
+MOCK.NetDeliver({ name = "Profession.StartShift", args = { "lumberjack" } }, 8, workPlayer)
+MOCK.Assert(workCharacter.activeProfessionShift.id == firstShiftID,
+    "сервер не создаёт вторую параллельную смену")
+local earlyFinish = WO.Professions.FinishShift(workPlayer, firstShiftID)
+MOCK.Assert(earlyFinish == false and WO.Currency.Get(workPlayer) == initialMoney,
+    "смену нельзя оплатить до выполнения трёх заказов")
+
+MOCK.NetDeliver({ name = "Profession.WorkInput", args = { "forged-shift", "hold", true } }, 8, workPlayer)
+MOCK.Assert(shift.task.progress == 0,
+    "поддельный идентификатор смены не меняет серверный прогресс")
+
+local function CompleteTimingOrder()
+    local task = shift.task
+    MOCK.Assert(task and task.mode == "timing", "ожидается timing-заказ")
+    task.zoneCenter = 0.5
+    task.zoneWidth = 0.34
+    task.speed = 0.05
+    task.phaseOffset = 0
+    task.progressRate = 1
+    task.startedAt = CurTime()
+    task.lastTick = CurTime()
+    MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "hold", true } }, 8, workPlayer)
+    for _ = 1, 12 do
+        MOCK.AdvanceTime(0.1)
+        WO.Professions.TickPlayer(workPlayer, CurTime())
+    end
+end
+
+CompleteTimingOrder()
+MOCK.Assert(shift.completedOrders == 1 and shift.task.mode == "delivery" and
+    WO.Currency.Get(workPlayer) == initialMoney,
+    "первый заказ сдан; смена продолжилась доставкой, денег до сдачи нет")
+local deliveryTask = shift.task
+local pickupPos = deliveryTask.pickupPos
+workPlayer:SetPos(pickupPos + Vector(500, 0, 0))
+MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", false } }, 8, workPlayer)
+MOCK.Assert(deliveryTask.phase == "pickup",
+    "сервер отвергает попытку забрать груз вне точки выдачи")
+workPlayer:SetPos(pickupPos)
+MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", false } }, 8, workPlayer)
+MOCK.Assert(deliveryTask.phase == "carry", "сервер разрешает поднять груз только у точки выдачи")
+workPlayer:SetPos(pickupPos + Vector(deliveryTask.requiredDistance + 10, 0, 0))
+MOCK.AdvanceTime(0.1)
+WO.Professions.TickPlayer(workPlayer, CurTime())
+MOCK.Assert(shift.completedOrders == 2 and shift.task.mode == "timing" and
+    WO.Currency.Get(workPlayer) == initialMoney,
+    "перенос проверяется по серверной позиции и сам сдаёт заказ без выплаты смены")
+CompleteTimingOrder()
+MOCK.Assert(shift.status == "ready" and shift.completedOrders == 3 and
+    WO.Currency.Get(workPlayer) == initialMoney,
+    "последний заказ открывает сдачу смены, но зарплата ещё не начислена")
+
+MOCK.NetDeliver({ name = "Profession.FinishShift", args = { shift.id } }, 8, workPlayer)
+local firstShiftPay = WO.Currency.Get(workPlayer) - initialMoney
+local lumberjackSkill = WO.Professions.GetSkillData(workCharacter, "lumberjack")
+MOCK.Assert(firstShiftPay > 0 and workCharacter.activeProfessionShift == nil and
+    lumberjackSkill.xp == 300 and lumberjackSkill.level == 2 and
+    lumberjackSkill.completedShifts == 1,
+    "только сдача выдаёт зарплату и опыт, после полной смены повышается ступень")
+MOCK.Assert(WO.Professions.GetBasePay("lumberjack", 2, 3) >
+    WO.Professions.GetBasePay("lumberjack", 1, 3),
+    "базовая зарплата второй ступени выше первой")
+
+WO.Hook.Run("CharacterSave", workCharacter)
+local savedProfessionRows = WO.Database:Fetch(
+    "SELECT level, data FROM wo_skills WHERE owner_id = ? AND skill_id = ?",
+    workCharacter.id, "professions")
+local savedProfessionData = savedProfessionRows[1] and
+    util.JSONToTable(savedProfessionRows[1].data or "")
+local reloadedProfessionCharacter = WO.Character.New({
+    id = workCharacter.id, race = "worgen", class = "assassin",
+})
+WO.Hook.Run("CharacterLoad", reloadedProfessionCharacter)
+MOCK.Assert(savedProfessionData and savedProfessionData.skills.lumberjack.xp == 300 and
+    WO.Professions.GetSkillData(reloadedProfessionCharacter, "lumberjack").level == 2,
+    "опыт и ступень профессии сохраняются в wo_skills и восстанавливаются при загрузке")
+
+local startedSecondShift, secondShift = WO.Professions.StartShift(workPlayer, "lumberjack")
+MOCK.Assert(startedSecondShift and secondShift.rank == 2 and secondShift.basePay > shift.basePay,
+    "следующая смена начинается на второй ступени с более высокой ставкой")
+local moneyBeforeCancel = WO.Currency.Get(workPlayer)
+WO.Professions.CancelShift(workPlayer, secondShift.id)
+MOCK.Assert(workCharacter.activeProfessionShift == nil and WO.Currency.Get(workPlayer) == moneyBeforeCancel,
+    "отменённая смена не выдаёт зарплату")
+end
 
 local money = WO.Currency.Get(ply)
 

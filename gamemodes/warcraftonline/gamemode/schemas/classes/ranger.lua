@@ -27,5 +27,7 @@ WO.Classes.Register({
         { class = "wolf_pelt", amount = 2 },
     },
 
+    magicBonuses = { air = 0.05, earth = 0.04, water = 0.04 },
+    professionBonuses = { lumberjack = 0.08, fisher = 0.10, herbalist = 0.12 },
     modifiers = {},
 })

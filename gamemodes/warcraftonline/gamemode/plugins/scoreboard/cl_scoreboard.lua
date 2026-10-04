@@ -608,7 +608,8 @@ local function BuildPage(page)
         currentPage = "overview"
     end
 
-    if (currentPage == "inventory" or currentPage == "quests") and not HasLocalCharacter() then
+    if (currentPage == "inventory" or currentPage == "quests" or currentPage == "work") and
+        not HasLocalCharacter() then
         currentPage = "characters"
     end
 
@@ -629,6 +630,12 @@ local function BuildPage(page)
     elseif currentPage == "quests" then
         if WO.Quests and WO.Quests.BuildJournal then
             WO.Quests.BuildJournal(menuFrame.content)
+        else
+            BuildOverviewPage(menuFrame.content)
+        end
+    elseif currentPage == "work" then
+        if WO.ProfessionsUI and WO.ProfessionsUI.BuildPanel then
+            WO.ProfessionsUI.BuildPanel(menuFrame.content)
         else
             BuildOverviewPage(menuFrame.content)
         end
@@ -714,6 +721,7 @@ local function CreateMenuFrame()
         { id = "characters", text = WO.Lang:Get("menu.characters") },
         { id = "inventory", text = WO.Lang:Get("menu.inventory"), characterOnly = true },
         { id = "quests", text = WO.Lang:Get("menu.quests"), characterOnly = true },
+        { id = "work", text = "Ремёсла", characterOnly = true },
         { id = "settings", text = WO.Lang:Get("menu.settings") },
     }
 
@@ -839,7 +847,7 @@ local function ActivatePage(page)
         page = "overview"
     end
 
-    if page == "inventory" or page == "quests" then
+    if page == "inventory" or page == "quests" or page == "work" then
         if not HasLocalCharacter() then
             WO.Notify.Show("info", WO.Lang:Get("menu.no_character"))
             return false
@@ -847,7 +855,7 @@ local function ActivatePage(page)
     end
 
     if page == "overview" or page == "characters" or page == "inventory" or
-        page == "quests" or page == "settings" or page == "admin" then
+        page == "quests" or page == "work" or page == "settings" or page == "admin" then
         BuildPage(page)
         return true
     end

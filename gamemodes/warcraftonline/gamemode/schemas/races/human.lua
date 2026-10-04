@@ -23,9 +23,11 @@ WO.Races.Register({
     },
 
     modifiers = {},
+    magicBonuses = { life = 0.03, fire = 0.02 },
+    professionBonuses = { merchant = 0.12, baker = 0.05 },
 
     -- Доступные классы
-    classes = { "warrior", "paladin", "priest", "mage", "warlock", "rogue", "ranger", "deathknight", "monk" },
+    classes = {"warrior", "paladin", "priest", "mage", "warlock", "rogue", "ranger", "deathknight", "monk", "assassin", "runeknight", "alchemist"},
 
     customization = {
         bodygroups = {},

@@ -68,7 +68,10 @@ WO.Config.StartingWeaponClasses = {
     hands = "drc_unarmed",
     knife = "tfa_cso_coldsteelblade",
     mage = "wo_magic_grimoire", -- сохранили ключ для совместимости конфигураций
-    grimoireClasses = { "mage", "priest", "druid", "shaman", "warlock", "evoker" },
+    grimoireClasses = {
+        "mage", "priest", "druid", "shaman", "warlock", "evoker",
+        "alchemist", "runeknight",
+    },
 }
 
 ---------------------------------------------------------------------------

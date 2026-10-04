@@ -23,8 +23,10 @@ WO.Races.Register({
     },
 
     modifiers = {},
+    magicBonuses = { fire = 0.08, earth = 0.05 },
+    professionBonuses = { lumberjack = 0.12, builder = 0.08, weaponsmith = 0.08 },
 
-    classes = { "warrior", "rogue", "ranger", "shaman", "warlock", "mage", "deathknight", "monk" },
+    classes = {"warrior", "rogue", "ranger", "shaman", "warlock", "mage", "deathknight", "monk", "assassin", "runeknight", "alchemist"},
 
     customization = {
         bodygroups = {},
