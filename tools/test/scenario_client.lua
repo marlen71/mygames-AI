@@ -9,7 +9,10 @@ local MOCK = MOCK
 MOCK.mountedFiles = {
     ["models/mailer/character/human/male/humanmale00_00.mdl"] = true,
     ["models/mailer/character/human/female/humanfemale00_00.mdl"] = true,
+    ["models/mailer/character/human/male/humanmale00_99.mdl"] = true,
 }
+
+player_manager.AddValidModel("humanmale00_99", "models/mailer/character/human/male/humanmale00_99.mdl")
 
 for _, class in ipairs({ "drc_unarmed", "tfa_cso_coldsteelblade", "weapon_hpwr_stick" }) do
     weapons.Register({
@@ -55,13 +58,21 @@ MOCK.Assert(hudShouldDraw and isfunction(hudShouldDraw.wo_hud_hide) and
     "стандартный HUD и target ID не скрываются в лимбо до синхронизации персонажа")
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы видны на клиенте")
 MOCK.Assert(WO.Models ~= nil and WO.Models.GetRace ~= nil, "каталог моделей виден на клиенте")
+WO.Models.RefreshRaceLists()
+local refreshedHumanModels = WO.Races.GetModels("human", "male")
+MOCK.Assert(table.HasValue(refreshedHumanModels,
+    "models/mailer/character/human/male/humanmale00_99.mdl"),
+    "refresh обнаруживает слитый player_manager идентификатор humanmale00_99")
 MOCK.Assert(WO.Config.StartingWeaponClasses.hands == "drc_unarmed" and
     WO.Config.StartingWeaponClasses.knife == "tfa_cso_coldsteelblade" and
-    WO.Config.StartingWeaponClasses.mage == "weapon_hpwr_stick" and
+    WO.Config.StartingWeaponClasses.mage == "wo_magic_grimoire" and
+    WO.Config.StartingWeaponClasses.mageLegacy == "weapon_hpwr_stick" and
+    WO.Spells.WeaponClass == "wo_magic_grimoire" and
     weapons.GetStored("drc_unarmed") and
     weapons.GetStored("tfa_cso_coldsteelblade") and
+    weapons.GetStored("wo_magic_grimoire") and
     weapons.GetStored("weapon_hpwr_stick"),
-    "клиент видит точные классы стартовых SWEP из runtime registry")
+    "клиент видит новый grimoire и точный legacy wand для отката")
 MOCK.Assert(WO.Items.IsInventoryAllowed("starter_knife") and
     WO.Items.Get("starter_knife").weapon.class == "tfa_cso_coldsteelblade" and
     not WO.Items.IsInventoryAllowed("arcane_hands"),
@@ -353,8 +364,23 @@ LocalPlayer():SetNW2Bool("wo_inmenu", true)
 MOCK.drawnTextValues = {}
 local hudDrawsBefore = MOCK.drawTextCalls
 hook.Run("HUDPaint")
+local hudCanvas
+for i = #MOCK.createdPanels, 1, -1 do
+    local candidate = MOCK.createdPanels[i]
+    local width, height = 0, 0
+
+    if candidate.GetSize then width, height = candidate:GetSize() end
+
+    if rawget(candidate, "__class") == "DPanel" and width == ScrW() and height == ScrH() and
+        rawget(candidate, "__zpos") == -100 and isfunction(candidate.Paint) then
+        hudCanvas = candidate
+        break
+    end
+end
+MOCK.Assert(hudCanvas ~= nil, "WoW HUD создаёт прозрачный полноэкранный VGUI canvas")
+hudCanvas:Paint(ScrW(), ScrH())
 MOCK.Assert(MOCK.drawTextCalls > hudDrawsBefore,
-    "HUD не пропадает из-за устаревшего wo_inmenu после respawn")
+    "canvas HUD не пропадает из-за устаревшего wo_inmenu после respawn")
 local formattedMoney = WO.Currency.Format(1234)
 local hudShowsMoney = false
 for _, text in ipairs(MOCK.drawnTextValues) do
@@ -449,11 +475,48 @@ MOCK.Assert(#trackerLines > 0, "трекер HUD получает строки: 
 
 WO.Quests.OpenLog()
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeUI, "журнал квестов создаёт панели")
+local originalQuestLog = FindLatestLiveFrame()
+MOCK.NetDeliver({ name = "Quest.Sync", args = { {
+    ["supplies_for_the_road"] = { status = "completed", progress = { [1] = 3 }, tracked = true },
+    ["boar_hunt"] = { status = "active", progress = { [1] = 1 }, tracked = true },
+    ["wolves_of_elwynn"] = { status = "active", progress = { [1] = 1 }, tracked = true },
+} } }, 8, nil)
+local refreshedQuestLog = FindLatestLiveFrame()
+MOCK.Assert(originalQuestLog and rawget(originalQuestLog, "__removed") == true and
+    refreshedQuestLog and refreshedQuestLog ~= originalQuestLog and
+    WO.Quests.LocalStates["boar_hunt"].progress[1] == 1,
+    "открытый журнал автоматически перестраивается после Quest.Sync")
+local refreshedTracker = WO.Quests.GetTrackerLines()
+local trackerHasBoars = false
+for _, line in ipairs(refreshedTracker) do
+    if string.find(string.lower(line.text or ""), "кабан", 1, true) then trackerHasBoars = true end
+end
+MOCK.Assert(trackerHasBoars, "HUD-трекер сразу отражает новое состояние задания")
 
 -- События квестов (уведомления)
 MOCK.NetDeliver({ name = "Quest.Event", args = { { type = "accepted", questId = "q", name = "Тест" } } }, 8, nil)
 MOCK.NetDeliver({ name = "Quest.Event", args = { { type = "completed", questId = "q", name = "Тест",
     rewards = { xp = 10, money = 5 } } } }, 8, nil)
+
+MOCK.Assert(WO.Net.Messages["Spell.Sync"] ~= nil and isfunction(WO.Spells.OpenBook),
+    "клиент зарегистрировал независимый Spell.Sync и окно книги")
+MOCK.NetDeliver({ name = "Spell.Sync", args = { {
+    ranks = { healing_wave = 1 }, selected = "healing_wave", points = 0, level = 3,
+} } }, 8, nil)
+MOCK.Assert(WO.Spells.LocalBook.selected == "healing_wave" and
+    WO.Spells.LocalBook.ranks.healing_wave == 1,
+    "ранги и выбранное заклинание синхронизированы клиенту")
+local spellPanelsBefore = #MOCK.createdPanels
+local magicSWEP = weapons.GetStored("wo_magic_grimoire")
+local fakeMagicWeapon = {
+    GetOwner = function() return LocalPlayer() end,
+    SetNextSecondaryFire = function() end,
+}
+MOCK.Assert(magicSWEP and isfunction(magicSWEP.PrimaryAttack) and
+    isfunction(magicSWEP.SecondaryAttack), "новый spellbook SWEP содержит ЛКМ и ПКМ обработчики")
+magicSWEP.SecondaryAttack(fakeMagicWeapon)
+MOCK.Assert(#MOCK.createdPanels > spellPanelsBefore,
+    "ПКМ нового SWEP открывает самостоятельное окно выбора и изучения заклинаний")
 
 -- Диалог
 local panelsBeforeDlg = #MOCK.createdPanels

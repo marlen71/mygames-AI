@@ -21,6 +21,34 @@ local function SendEvent(ply, data)
     WO.Net.Send("Quest.Event", ply, data)
 end
 
+local function ProgressReady(ply, questId)
+    local char = IsValid(ply) and ply:GetCharacter()
+    local def = WO.Quests.Get(questId)
+    local state = char and WO.Quests.GetState(char, questId)
+
+    if not def or not state or state.status ~= "active" or
+        not WO.Quests.AreStepsDone(char, questId) then
+        return false
+    end
+
+    if def.turnInRequired then
+        if state.turnInNotified then return true end
+
+        state.turnInNotified = true
+        local turnInNPC = WO.NPCs and WO.NPCs.Get and
+            WO.NPCs.Get(def.turnInGiver or def.giver)
+        local turnInName = turnInNPC and turnInNPC.name or (def.turnInGiver or def.giver)
+
+        WO.SaveQueue.MarkDirty(char)
+        Sync(ply)
+        SendEvent(ply, { type = "ready", questId = questId, name = def.name,
+            turnInGiver = def.turnInGiver or def.giver, turnInName = turnInName })
+        return true
+    end
+
+    return WO.Quests.TryComplete(ply, questId)
+end
+
 ---------------------------------------------------------------------------
 -- Проверки доступности
 ---------------------------------------------------------------------------
@@ -37,7 +65,7 @@ local function PrerequisitesDone(char, def)
     return true
 end
 
-local function IsQuestgiverInteractionValid(ply, npcDef, ent, questId)
+local function IsQuestgiverInteractionValid(ply, npcDef, ent, questId, interaction)
     if not IsValid(ply) or not ply:HasCharacter() or not istable(npcDef) or
         not IsValid(ent) or ent:GetClass() ~= "wo_npc" or not isfunction(ent.GetNPCID) or
         ent.npcDef ~= npcDef or not WO.NPCs or WO.NPCs.Get(ent:GetNPCID()) ~= npcDef or
@@ -50,7 +78,15 @@ local function IsQuestgiverInteractionValid(ply, npcDef, ent, questId)
     if questId then
         local questDef = WO.Quests.Get(questId)
 
-        if not questDef or questDef.giver ~= npcDef.id then return false end
+        if not questDef then return false end
+
+        local isGiver = questDef.giver == npcDef.id
+        local isTurnIn = (questDef.turnInGiver or questDef.giver) == npcDef.id
+
+        if interaction == "giver" and not isGiver then return false end
+        if interaction == "turnin" and not isTurnIn then return false end
+        if interaction == "either" and not (isGiver or isTurnIn) then return false end
+        if not interaction and not isGiver then return false end
 
         for _, offeredId in ipairs(npcDef.quests or {}) do
             if offeredId == questId then return true end
@@ -73,12 +109,17 @@ function WO.Quests.Accept(ply, questId, npcDef, ent)
     local def = WO.Quests.Get(questId)
 
     if not def then return false, "unknown_quest" end
-    if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId) then
+    if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId, "giver") then
         return false, "invalid_giver"
     end
 
     local char = ply:GetCharacter()
     local state = WO.Quests.GetState(char, questId)
+
+    if state and state.status == "failed" then
+        char.quests[questId] = nil
+        state = nil
+    end
 
     if state then
         return false, state.status == "completed" and "already_completed" or "already_active"
@@ -100,9 +141,6 @@ function WO.Quests.Accept(ply, questId, npcDef, ent)
         acceptedAt = WO.Util.Time(),
     }
 
-    -- collect-шаги могли быть уже выполнены (предметы уже в инвентаре)
-    WO.Quests.RecheckCollect(ply, questId)
-
     WO.SaveQueue.MarkDirty(char)
     Sync(ply)
     SendEvent(ply, { type = "accepted", questId = questId, name = def.name })
@@ -110,8 +148,10 @@ function WO.Quests.Accept(ply, questId, npcDef, ent)
 
     WO.Log("Quest accepted: " .. questId .. " by " .. char:GetFullName())
 
-    -- Возможно, квест сразу готов к сдаче
-    WO.Quests.TryComplete(ply, questId)
+    -- Предметы/экипировка могли быть подготовлены до принятия квеста.
+    WO.Quests.RecheckCollect(ply, questId)
+    if WO.Quests.RecheckEquipped then WO.Quests.RecheckEquipped(ply, questId) end
+    ProgressReady(ply, questId)
 
     return true
 end
@@ -137,6 +177,28 @@ function WO.Quests.Abandon(ply, questId)
     return true
 end
 
+--- Отмечает активное задание проваленным (server API, например для будущих таймеров).
+function WO.Quests.Fail(ply, questId, reason)
+    if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
+
+    local char = ply:GetCharacter()
+    local state = WO.Quests.GetState(char, questId)
+
+    if not state or state.status ~= "active" then return false, "not_active" end
+
+    local def = WO.Quests.Get(questId)
+    state.status = "failed"
+    state.failedAt = WO.Util.Time()
+    state.failReason = tostring(reason or "failed")
+
+    WO.SaveQueue.MarkDirty(char)
+    Sync(ply)
+    SendEvent(ply, { type = "failed", questId = questId,
+        name = def and def.name or questId, reason = state.failReason })
+    WO.Hook.Run("QuestStateChanged", ply, questId, "failed")
+    return true
+end
+
 --- Включает/выключает отслеживание в HUD.
 function WO.Quests.Track(ply, questId, tracked)
     if not IsValid(ply) or not ply:HasCharacter() then return end
@@ -156,13 +218,26 @@ end
 -- Прогресс шагов
 ---------------------------------------------------------------------------
 
+local function PreviousStepsDone(state, def, stepIndex)
+    if not def.sequential then return true end
+
+    for index = 1, stepIndex - 1 do
+        local need = def.steps[index].amount or 1
+        local have = (state.progress or {})[index] or 0
+
+        if have < need then return false end
+    end
+
+    return true
+end
+
 local function StepProgress(char, state, def, stepIndex, value)
     local step = def.steps[stepIndex]
 
-    if not step then return false end
+    if not step or not PreviousStepsDone(state, def, stepIndex) then return false end
 
     local need = step.amount or 1
-    local have = math.min(value, need)
+    local have = math.max(0, math.min(tonumber(value) or 0, need))
 
     if (state.progress or {})[stepIndex] == have then
         return false
@@ -182,7 +257,8 @@ function WO.Quests.RecheckCollect(ply, questId)
     local def = WO.Quests.Get(questId)
     local state = WO.Quests.GetState(char, questId)
 
-    if not def or not state or state.status ~= "active" then return false end
+    if not def or not state or state.status ~= "active" or state.turningIn or
+        not PrerequisitesDone(char, def) then return false end
 
     local container = WO.Inventory and WO.Inventory.GetContainer(char)
     local changed = false
@@ -193,8 +269,114 @@ function WO.Quests.RecheckCollect(ply, questId)
         if step.type == "collect" and step.class then
             local have = container:CountItem(step.class)
 
+            if not PreviousStepsDone(state, def, index) then
+                have = 0
+            end
+
             if StepProgress(char, state, def, index, have) then
                 changed = true
+                SendEvent(ply, { type = "progress", questId = questId, name = def.name,
+                    text = step.text or step.class,
+                    have = math.min(have, step.amount or 1), need = step.amount or 1 })
+            end
+        end
+    end
+
+    if changed then
+        if not WO.Quests.AreStepsDone(char, questId) then state.turnInNotified = nil end
+        WO.SaveQueue.MarkDirty(char)
+        Sync(ply)
+        ProgressReady(ply, questId)
+    end
+
+    return changed
+end
+
+--- Обновляет kill/talk-шаги; sequential quests принимают только текущий этап.
+local function ProgressStep(ply, stepType, targetId, targetLevel)
+    if not IsValid(ply) or not ply:HasCharacter() then return end
+
+    local char = ply:GetCharacter()
+    local changedQuests = {}
+    local progressEvents = {}
+
+    for questId, state in pairs(char.quests or {}) do
+        local def = WO.Quests.Get(questId)
+
+        if def and state.status == "active" and PrerequisitesDone(char, def) then
+            for index, step in ipairs(def.steps) do
+                if step.type == stepType and step.target == targetId and
+                    (not step.level or tonumber(step.level) == tonumber(targetLevel)) then
+                    local have = ((state.progress or {})[index] or 0) + 1
+
+                    if StepProgress(char, state, def, index, have) then
+                        changedQuests[questId] = true
+                        progressEvents[#progressEvents + 1] = {
+                            type = "progress", questId = questId, name = def.name,
+                            text = step.text or step.target or step.type,
+                            have = math.min(have, step.amount or 1), need = step.amount or 1,
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    if next(changedQuests) then
+        WO.SaveQueue.MarkDirty(char)
+        Sync(ply)
+
+        for _, event in ipairs(progressEvents) do SendEvent(ply, event) end
+
+        for questId in pairs(changedQuests) do
+            -- A newly unlocked sequential step may already be satisfied by the
+            -- current inventory/equipment; re-evaluate it on the server.
+            WO.Quests.RecheckCollect(ply, questId)
+            WO.Quests.RecheckEquipped(ply, questId)
+            ProgressReady(ply, questId)
+        end
+    end
+end
+
+function WO.Quests.RecheckEquipped(ply, questId)
+    if not IsValid(ply) or not ply:HasCharacter() then return false end
+
+    local char = ply:GetCharacter()
+    local container = WO.Inventory and WO.Inventory.GetContainer(char)
+    local def = WO.Quests.Get(questId)
+    local state = WO.Quests.GetState(char, questId)
+    local equipment = WO.Equipment and WO.Equipment.Get and WO.Equipment.Get(char)
+
+    if not def or not state or state.status ~= "active" or state.turningIn or
+        not equipment or not PrerequisitesDone(char, def) then
+        return false
+    end
+
+    local changed = false
+
+    for index, step in ipairs(def.steps) do
+        if step.type == "equip" and step.class then
+            local have = 0
+
+            for _, instance in pairs(equipment.slots or {}) do
+                if instance and instance.class == step.class then
+                    have = have + (instance.amount or 1)
+                end
+            end
+
+            if not PreviousStepsDone(state, def, index) then
+                have = 0
+            else
+                -- Equip is an action step: once the player has equipped the
+                -- required item, later unequipping must not erase that progress.
+                have = math.max(have, (state.progress or {})[index] or 0)
+            end
+
+            if StepProgress(char, state, def, index, have) then
+                changed = true
+                SendEvent(ply, { type = "progress", questId = questId, name = def.name,
+                    text = step.text or step.class, have = math.min(have, step.amount or 1),
+                    need = step.amount or 1 })
             end
         end
     end
@@ -202,44 +384,40 @@ function WO.Quests.RecheckCollect(ply, questId)
     if changed then
         WO.SaveQueue.MarkDirty(char)
         Sync(ply)
+        ProgressReady(ply, questId)
     end
 
     return changed
 end
 
---- Обновляет kill/talk-шаги.
-local function ProgressStep(ply, stepType, targetId, targetLevel)
-    if not IsValid(ply) or not ply:HasCharacter() then return end
+local function ProgressEquippedItem(char, instance)
+    local ply = char and char.player
 
-    local char = ply:GetCharacter()
-    local changedQuests = false
+    if not IsValid(ply) or not instance or not instance.class then return end
 
     for questId, state in pairs(char.quests or {}) do
         local def = WO.Quests.Get(questId)
 
-        if def and state.status == "active" then
+        if def and state.status == "active" and PrerequisitesDone(char, def) then
             for index, step in ipairs(def.steps) do
-                if step.type == stepType and step.target == targetId and
-                    (not step.level or tonumber(step.level) == tonumber(targetLevel)) then
-                    local have = ((state.progress or {})[index] or 0) + 1
-
-                    if StepProgress(char, state, def, index, have) then
-                        changedQuests = true
+                if step.type == "equip" and step.class == instance.class and
+                    PreviousStepsDone(state, def, index) then
+                    if StepProgress(char, state, def, index,
+                        ((state.progress or {})[index] or 0) + 1) then
+                        WO.SaveQueue.MarkDirty(char)
+                        Sync(ply)
+                        SendEvent(ply, { type = "progress", questId = questId,
+                            name = def.name, text = step.text or step.class,
+                            have = step.amount or 1, need = step.amount or 1 })
+                        ProgressReady(ply, questId)
                     end
                 end
             end
         end
     end
-
-    if changedQuests then
-        WO.SaveQueue.MarkDirty(char)
-        Sync(ply)
-
-        for questId in pairs(char.quests or {}) do
-            WO.Quests.TryComplete(ply, questId)
-        end
-    end
 end
+
+WO.Hook.Add("ItemEquipped", "quests_equip_progress", ProgressEquippedItem)
 
 ---------------------------------------------------------------------------
 -- Завершение и награды
@@ -274,22 +452,90 @@ local function GrantRewards(ply, def)
     return itemsGiven
 end
 
---- Проверяет готовность и завершает квест (автоматически).
-function WO.Quests.TryComplete(ply, questId)
+local function ConsumeTurnInItems(ply, def)
+    local char = ply:GetCharacter()
+    local container = WO.Inventory and WO.Inventory.GetContainer(char)
+
+    if not container then return false, "no_container" end
+
+    local required = {}
+
+    for _, step in ipairs(def.steps or {}) do
+        if step.type == "collect" and step.consume == true and step.class then
+            required[step.class] = (required[step.class] or 0) + math.max(1, math.floor(tonumber(step.amount) or 1))
+        end
+    end
+
+    for class, amount in pairs(required) do
+        if container:CountItem(class) < amount then return false, "missing_items" end
+    end
+
+    local uids = {}
+
+    for uid in pairs(container:GetItems() or {}) do uids[#uids + 1] = uid end
+    table.sort(uids)
+
+    for class, remaining in pairs(required) do
+        for _, uid in ipairs(uids) do
+            if remaining <= 0 then break end
+
+            local instance = container:GetItem(uid)
+
+            if instance and instance.class == class then
+                local amount = math.min(remaining, instance.amount or 1)
+
+                if not WO.Inventory.RemoveItem(ply, uid, amount) then
+                    return false, "consume_failed"
+                end
+
+                remaining = remaining - amount
+            end
+        end
+
+        if remaining > 0 then return false, "missing_items" end
+    end
+
+    return true
+end
+
+--- Проверяет готовность; обычные квесты закрываются автоматически, turn-in квесты — у NPC.
+function WO.Quests.TryComplete(ply, questId, turnInContext)
     if not IsValid(ply) or not ply:HasCharacter() then return false end
 
     local char = ply:GetCharacter()
     local def = WO.Quests.Get(questId)
     local state = WO.Quests.GetState(char, questId)
 
-    if not def or not state or state.status ~= "active" then return false end
+    if not def or not state or state.status ~= "active" or state.turningIn then return false end
 
-    if not WO.Quests.AreStepsDone(char, questId) then
+    if not PrerequisitesDone(char, def) then
+        WO.Notify(ply, "error", "Сначала завершите предыдущие задания в цепочке.")
         return false
+    end
+
+    if not WO.Quests.AreStepsDone(char, questId) then return false end
+
+    if def.turnInRequired == true then
+        if not istable(turnInContext) or
+            not IsQuestgiverInteractionValid(ply, turnInContext.npcDef,
+                turnInContext.ent, questId, "turnin") then
+            ProgressReady(ply, questId)
+            return false
+        end
+
+        state.turningIn = true
+        local consumed, consumeReason = ConsumeTurnInItems(ply, def)
+        state.turningIn = nil
+
+        if not consumed then
+            WO.Notify(ply, "error", "Не удалось сдать предметы: " .. tostring(consumeReason))
+            return false
+        end
     end
 
     state.status = "completed"
     state.completedAt = WO.Util.Time()
+    state.turnInNotified = nil
 
     local itemsGiven = GrantRewards(ply, def)
 
@@ -312,29 +558,58 @@ function WO.Quests.TryComplete(ply, questId)
     return true
 end
 
+function WO.Quests.TurnIn(ply, questId, npcDef, ent)
+    if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId, "turnin") then
+        return false, "invalid_turnin"
+    end
+
+    local char = ply:GetCharacter()
+    local def = WO.Quests.Get(questId)
+    local state = WO.Quests.GetState(char, questId)
+
+    if not def or not state or state.status ~= "active" then return false, "not_active" end
+
+    if not def.turnInRequired then
+        return WO.Quests.TryComplete(ply, questId)
+    end
+
+    WO.Quests.RecheckCollect(ply, questId)
+    if WO.Quests.RecheckEquipped then WO.Quests.RecheckEquipped(ply, questId) end
+
+    if not WO.Quests.AreStepsDone(char, questId) then
+        SendEvent(ply, { type = "info", questId = questId, text = WO.Lang:Get("quest.in_progress") })
+        return false, "incomplete"
+    end
+
+    return WO.Quests.TryComplete(ply, questId, { npcDef = npcDef, ent = ent })
+end
+
 ---------------------------------------------------------------------------
 -- События прогресса
 ---------------------------------------------------------------------------
 
 -- Сбор предметов
-WO.Hook.Add("ItemAdded", "quests", function(char, instance, amount)
+local function RecheckChangedCollectItem(char, instance)
     local ply = char and char.player
 
-    if not IsValid(ply) then return end
+    if not IsValid(ply) or not instance then return end
 
     for questId, state in pairs(char.quests or {}) do
         local def = WO.Quests.Get(questId)
 
         if def and state.status == "active" then
             for _, step in ipairs(def.steps) do
-                if step.type == "collect" and step.class == (instance and instance.class) then
+                if step.type == "collect" and step.class == instance.class then
                     WO.Quests.RecheckCollect(ply, questId)
                     break
                 end
             end
         end
     end
-end)
+end
+
+WO.Hook.Add("ItemAdded", "quests", RecheckChangedCollectItem)
+WO.Hook.Add("ItemRemoved", "quests", RecheckChangedCollectItem)
 
 -- Убийства NPC
 WO.Hook.Add("NPCKilled", "quests", function(npcDef, ply, level)
@@ -352,9 +627,9 @@ end
 -- Предложение квеста из диалога
 ---------------------------------------------------------------------------
 
---- Действие "quest:<id>" в диалоге: принять/показать состояние.
+--- Действие "quest:<id>" принимает задание у giver или сдаёт его у turnInGiver.
 function WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
-    if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId) then return false end
+    if not IsQuestgiverInteractionValid(ply, npcDef, ent, questId, "either") then return false end
 
     local def = WO.Quests.Get(questId)
 
@@ -363,40 +638,74 @@ function WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
         return false
     end
 
-    local state = WO.Quests.GetState(ply:GetCharacter(), questId)
+    local char = ply:GetCharacter()
+    local state = WO.Quests.GetState(char, questId)
 
     if state and state.status == "completed" then
         SendEvent(ply, { type = "info", questId = questId, text = WO.Lang:Get("quest.already_completed") })
-        return
+        return false
+    end
+
+    if state and state.status == "failed" then
+        char.quests[questId] = nil
+        state = nil
     end
 
     if state and state.status == "active" then
-        SendEvent(ply, { type = "info", questId = questId, text = WO.Lang:Get("quest.in_progress") })
-        WO.Quests.TryComplete(ply, questId)
-        return
+        if (def.turnInGiver or def.giver) == npcDef.id and def.turnInRequired then
+            return WO.Quests.TurnIn(ply, questId, npcDef, ent)
+        end
+
+        if def.giver == npcDef.id and not def.turnInRequired and
+            WO.Quests.AreStepsDone(char, questId) then
+            return WO.Quests.TryComplete(ply, questId)
+        end
+
+        local turnInNPC = WO.NPCs.Get(def.turnInGiver or def.giver)
+        local message = WO.Lang:Get("quest.in_progress")
+
+        if def.turnInRequired and WO.Quests.AreStepsDone(char, questId) and turnInNPC then
+            message = "Готово. Вернитесь к " .. turnInNPC.name .. "."
+        end
+
+        SendEvent(ply, { type = "info", questId = questId, text = message })
+        return false
+    end
+
+    if def.giver ~= npcDef.id then
+        local giver = WO.NPCs.Get(def.giver)
+        local giverName = giver and giver.name or def.giver
+        SendEvent(ply, { type = "info", questId = questId,
+            text = "Это задание выдаёт " .. tostring(giverName) .. "." })
+        return false
     end
 
     local ok, reason = WO.Quests.Accept(ply, questId, npcDef, ent)
 
     if not ok then
-        SendEvent(ply, {
-            type = "info",
-            questId = questId,
-            text = WO.Lang:Get("quest.not_available") .. " (" .. tostring(reason) .. ")",
-        })
+        local message
 
-        return
+        if reason == "prerequisites" then
+            message = "Сначала завершите предыдущее задание в цепочке."
+        elseif reason == "level_too_low" then
+            message = "Ваш уровень пока слишком низок для этого задания."
+        else
+            message = WO.Lang:Get("quest.not_available") .. " (" .. tostring(reason) .. ")"
+        end
+
+        SendEvent(ply, { type = "info", questId = questId, text = message })
+        return false
     end
 
-    -- Разговор с этим NPC уже состоялся — засчитываем talk-шаги
-    if npcDef and npcDef.id then
-        for index, step in ipairs(def.steps or {}) do
-            if step.type == "talk" and step.target == npcDef.id then
-                WO.Quests.OnTalk(ply, npcDef.id)
-                break
-            end
+    -- Разговор с этим NPC уже состоялся — засчитываем talk-шаги.
+    for _, step in ipairs(def.steps or {}) do
+        if step.type == "talk" and step.target == npcDef.id then
+            WO.Quests.OnTalk(ply, npcDef.id)
+            break
         end
     end
+
+    return true
 end
 
 ---------------------------------------------------------------------------
@@ -418,6 +727,8 @@ WO.Hook.Add("CharacterSave", "quests", function(char)
                 tracked = state.tracked == true,
                 acceptedAt = state.acceptedAt,
                 completedAt = state.completedAt,
+                failedAt = state.failedAt,
+                failReason = state.failReason,
             }),
             completed = (state.status == "completed") and 1 or 0,
         })
@@ -445,12 +756,31 @@ WO.Hook.Add("CharacterLoad", "quests", function(char)
             tracked = data.tracked == true,
             acceptedAt = data.acceptedAt,
             completedAt = data.completedAt,
+            failedAt = data.failedAt,
+            failReason = data.failReason,
         }
     end
 end)
 
 WO.Hook.Add("CharacterLoaded", "quests", function(char, ply)
     Sync(ply)
+
+    if not IsValid(ply) and char then ply = char.player end
+    if not IsValid(ply) or not ply:HasCharacter() then return end
+
+    for questId, state in pairs(char.quests or {}) do
+        if state.status == "active" then
+            local def = WO.Quests.Get(questId)
+
+            if def and not PrerequisitesDone(char, def) then
+                WO.Quests.Fail(ply, questId, "prerequisite_migration")
+            else
+                WO.Quests.RecheckCollect(ply, questId)
+                WO.Quests.RecheckEquipped(ply, questId)
+                ProgressReady(ply, questId)
+            end
+        end
+    end
 end)
 
 ---------------------------------------------------------------------------
@@ -464,14 +794,26 @@ function WO.Quests.OpenNPC(ply, npcDef, ent)
     local char = ply:GetCharacter()
 
     for _, questId in ipairs(npcDef.quests or {}) do
+        local def = WO.Quests.Get(questId)
         local state = WO.Quests.GetState(char, questId)
 
-        if not state then
-            WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
+        if state and state.status == "failed" then
+            state = nil
+        end
+
+        if state and state.status == "active" and
+            (def.turnInGiver or def.giver) == npcDef.id then
+            if def.turnInRequired and WO.Quests.AreStepsDone(char, questId) then
+                WO.Quests.TurnIn(ply, questId, npcDef, ent)
+            else
+                SendEvent(ply, { type = "info", questId = questId,
+                    text = WO.Lang:Get("quest.in_progress") })
+            end
             return
-        elseif state.status == "active" then
-            WO.Quests.TryComplete(ply, questId)
-            SendEvent(ply, { type = "info", questId = questId, text = WO.Lang:Get("quest.in_progress") })
+        end
+
+        if not state and def and def.giver == npcDef.id then
+            WO.Quests.OfferFromDialogue(ply, questId, npcDef, ent)
             return
         end
     end

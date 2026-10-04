@@ -43,7 +43,23 @@ function WO.NPCs.HasActiveQuest(questId)
             local state = char and char.quests and char.quests[questId]
 
             if state and state.status == "active" then
-                return true
+                local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(questId)
+                local prerequisitesMet = true
+
+                for _, prerequisite in ipairs(questDef and questDef.prerequisites or {}) do
+                    local prerequisiteState = char.quests[prerequisite]
+
+                    if not prerequisiteState or prerequisiteState.status ~= "completed" then
+                        prerequisitesMet = false
+                        break
+                    end
+                end
+
+                local waitingForTurnIn = prerequisitesMet and questDef and
+                    questDef.turnInRequired == true and WO.Quests.AreStepsDone and
+                    WO.Quests.AreStepsDone(char, questId)
+
+                if prerequisitesMet and not waitingForTurnIn then return true end
             end
         end
     end
@@ -56,7 +72,7 @@ function WO.NPCs.SpawnOne(def, pos, ang, spawn, spawnIndex)
     if not istable(def) or not isvector(pos) then return nil end
 
     local workshopClass = def.workshopClass
-    local entityClass = workshopClass or "wo_npc"
+    local entityClass = workshopClass or def.entityClass or "wo_npc"
 
     if workshopClass then
         if not (WO.Workshop and WO.Workshop.HasNPCClass and
@@ -65,11 +81,20 @@ function WO.NPCs.SpawnOne(def, pos, ang, spawn, spawnIndex)
                 "' (required " .. tostring(workshopClass) .. ")")
             return nil
         end
-    elseif not isstring(def.model) or def.model == "" or
-        (WO.Models and WO.Models.Exists and not WO.Models.Exists(def.model)) or
-        (util.IsValidModel and not util.IsValidModel(def.model)) then
-        WO.Warn("NPC model is unavailable; skipping '" .. tostring(def.id) .. "'")
-        return nil
+    else
+        if def.entityClass and not (scripted_ents and scripted_ents.GetStored and
+            scripted_ents.GetStored(def.entityClass)) then
+            WO.Warn("Custom NPC entity is not registered; skipping '" .. tostring(def.id) ..
+                "' (required " .. tostring(def.entityClass) .. ")")
+            return nil
+        end
+
+        if not isstring(def.model) or def.model == "" or
+            (WO.Models and WO.Models.Exists and not WO.Models.Exists(def.model)) or
+            (util.IsValidModel and not util.IsValidModel(def.model)) then
+            WO.Warn("NPC model is unavailable; skipping '" .. tostring(def.id) .. "'")
+            return nil
+        end
     end
 
     local ent = ents.Create(entityClass)
@@ -272,21 +297,17 @@ WO.Hook.Add("CharacterUnloaded", "npcs_quest_spawn_unload", function(char)
     end
 end)
 
--- Поддерживаем 7 целей в активной зоне и восстанавливаем точку, если животное
--- погибло без зачтённого убийства (урон мира/игрок без соответствующего задания).
-WO.Hook.Add("NPCKilled", "npcs_quest_spawn_replenish", function(npcDef)
+-- Восстанавливаем только убитые точки активной квестовой группы. Если все
+-- цели уже побеждены, группа не появляется повторно до сдачи/отказа.
+WO.Hook.Add("NPCDeath", "npcs_quest_spawn_replenish", function(npcDef)
     local questIds = {}
 
     for _, spawn in ipairs(npcDef and npcDef.spawns or {}) do
-        if spawn.questId then
-            questIds[spawn.questId] = true
-        end
+        if spawn.questId then questIds[spawn.questId] = true end
     end
 
     for questId in pairs(questIds) do
-        timer.Simple(0, function()
-            WO.NPCs.SyncQuestSpawns(questId)
-        end)
+        timer.Simple(0.9, function() WO.NPCs.SyncQuestSpawns(questId) end)
     end
 end)
 
@@ -315,14 +336,87 @@ local function ResolveDefinition(ent)
     return ent.WO_NPCDefinition or ent.npcDef
 end
 
+local function LootPosition(origin)
+    return origin + Vector(math.random(-48, 48), math.random(-48, 48), math.random(12, 32))
+end
+
+local function LootVelocity()
+    return Vector(math.random(-120, 120), math.random(-120, 120), math.random(70, 170))
+end
+
+local function ScaledChance(entry, level)
+    local chance = tonumber(entry.chance) or 0
+    chance = chance + math.max(0, level - 1) * (tonumber(entry.levelScale) or 0)
+    return math.Clamp(chance, 0, 1)
+end
+
+local function DropNPCLoot(ent, def)
+    if ent.WO_NPCLootDropped then return end
+
+    ent.WO_NPCLootDropped = true
+
+    local loot = def and def.loot
+    if not istable(loot) or not WO.World then return end
+
+    local level = WO.NPCs.ClampLevel(def, ent.WO_NPCLevel or def.level or 1)
+    local origin = isfunction(ent.GetPos) and ent:GetPos() or vector_origin
+    local currency = loot.currency
+
+    if istable(currency) and math.random() <= ScaledChance(currency, level) then
+        local minimum = math.max(1, math.floor((tonumber(currency.min) or 1) * level))
+        local maximum = math.max(minimum, math.floor((tonumber(currency.max) or minimum) * level))
+        local amount = math.random(minimum, maximum)
+        local ok, reason = WO.World.SpawnLootCoins(amount, LootPosition(origin), LootVelocity())
+
+        if not ok then WO.Warn("NPC coin loot failed for '" .. def.id .. "': " .. tostring(reason)) end
+    end
+
+    for _, entry in ipairs(loot.items or {}) do
+        if istable(entry) and isstring(entry.class) and
+            math.random() <= ScaledChance(entry, level) then
+            local amount = math.max(1, math.floor(tonumber(entry.amount) or 1))
+
+            if entry.minAmount or entry.maxAmount then
+                local minimum = math.max(1, math.floor(tonumber(entry.minAmount) or 1))
+                local maximum = math.max(minimum, math.floor(tonumber(entry.maxAmount) or minimum))
+                amount = math.random(minimum, maximum)
+            end
+
+            local instance = WO.Items.CreateInstance(entry.class, amount)
+
+            if instance then
+                local ok, reason = WO.World.SpawnLootItem(instance,
+                    LootPosition(origin), LootVelocity())
+
+                if not ok then
+                    WO.Items.SetState(instance, WO.Items.State.DESTROYED)
+                    WO.Warn("NPC item loot failed for '" .. def.id .. "/" .. entry.class ..
+                        "': " .. tostring(reason))
+                end
+            end
+        end
+    end
+end
+
 function WO.NPCs.HandleKilled(ent, attacker)
     local def = ResolveDefinition(ent)
 
-    if not def or not def.hostile or ent.WO_NPCKillEventSent then return false end
-    if not IsValid(attacker) or not attacker:IsPlayer() or not attacker:HasCharacter() then return false end
+    if not def then return false end
 
-    ent.WO_NPCKillEventSent = true
-    WO.Hook.Run("NPCKilled", def, attacker, ent.WO_NPCLevel or def.level or 1)
+    DropNPCLoot(ent, def)
+
+    local level = ent.WO_NPCLevel or def.level or 1
+
+    if not ent.WO_NPCDeathEventSent then
+        ent.WO_NPCDeathEventSent = true
+        WO.Hook.Run("NPCDeath", def, ent, attacker, level)
+    end
+
+    if IsValid(attacker) and attacker:IsPlayer() and attacker:HasCharacter() and
+        not ent.WO_NPCKillEventSent then
+        ent.WO_NPCKillEventSent = true
+        WO.Hook.Run("NPCKilled", def, attacker, level)
+    end
 
     return true
 end
@@ -352,25 +446,15 @@ hook.Add("EntityTakeDamage", "wo_npc_level_damage", function(target, damageInfo)
     damageInfo:ScaleDamage(stats.damage / baseline.damage)
 end)
 
--- Engine death hooks for external Workshop NPC/SENT classes. The WO entity
--- calls HandleKilled from OnTakeDamage directly; the sent flag deduplicates it
--- against either engine hook when both are emitted.
-local function HandleExternalNPCDeath(ent, attacker)
+-- Combat pipeline, native NPC death and SENT damage all converge here; the
+-- per-entity event flags prevent duplicate loot or quest progress.
+local function HandleRegisteredNPCDeath(ent, attacker)
     if not IsValid(ent) or not ResolveDefinition(ent) then return end
-
     WO.NPCs.HandleKilled(ent, attacker)
-
-    local questId = ent.WO_NPCSpawnQuestId
-
-    if questId then
-        -- Defer until the engine has finished removing the killed entity.
-        timer.Simple(0, function()
-            WO.NPCs.SyncQuestSpawns(questId)
-        end)
-    end
 end
 
-hook.Add("OnNPCKilled", "wo_external_npc_killed", HandleExternalNPCDeath)
+WO.Hook.Add("EntityKilled", "wo_combat_npc_killed", HandleRegisteredNPCDeath)
+hook.Add("OnNPCKilled", "wo_external_npc_killed", HandleRegisteredNPCDeath)
 
 hook.Add("PostEntityTakeDamage", "wo_external_npc_damage_killed", function(ent, damageInfo, wasDamageTaken)
     if wasDamageTaken ~= true or not IsValid(ent) or not damageInfo or
@@ -379,7 +463,7 @@ hook.Add("PostEntityTakeDamage", "wo_external_npc_damage_killed", function(ent, 
     end
 
     local attacker = isfunction(damageInfo.GetAttacker) and damageInfo:GetAttacker() or nil
-    HandleExternalNPCDeath(ent, attacker)
+    HandleRegisteredNPCDeath(ent, attacker)
 end)
 
 ---------------------------------------------------------------------------

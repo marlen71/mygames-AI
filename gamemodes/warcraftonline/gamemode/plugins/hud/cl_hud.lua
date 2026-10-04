@@ -9,6 +9,9 @@ local playerPortrait
 local playerPortraitKey
 local targetPortrait
 local targetPortraitModel
+local hudCanvas
+local hudCanvasSize = { w = 0, h = 0 }
+local hudDrawErrors = {}
 
 ---------------------------------------------------------------------------
 -- Скрытие стандартного HUD
@@ -57,7 +60,7 @@ end)
 
 local function GetPlayerPortrait(char, x, y, size)
     if not IsValid(playerPortrait) then
-        playerPortrait = WO.UI.CreateCharacterModel(nil, nil)
+        playerPortrait = WO.UI.CreateCharacterModel(hudCanvas, nil)
 
         if not IsValid(playerPortrait) then
             playerPortrait = nil
@@ -126,10 +129,10 @@ function WO.HUD.DrawPlayerFrame()
 
     WO.UI.DrawPanelOutlined(x, y, w, h, WO.UI.Colors.panel, WO.UI.Colors.accentDark)
 
-    GetPlayerPortrait(char, portraitX, portraitY, portraitSize)
-
-    local name = char:GetFullName()
-    local level = (WO.Leveling.ClientData and WO.Leveling.ClientData.level) or char.level or 1
+    local name = isfunction(char.GetFullName) and char:GetFullName() or
+        (tostring(char.name or "") .. " " .. tostring(char.surname or ""))
+    local levelData = WO.Leveling and WO.Leveling.ClientData
+    local level = (levelData and levelData.level) or char.level or 1
 
     WO.UI.DrawTextFit(name, "WO.HUDName", detailsX, y + 12, WO.UI.Colors.accent,
         TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, detailsWidth, 24)
@@ -146,11 +149,13 @@ function WO.HUD.DrawPlayerFrame()
         WO.Lang:Get("stats.maxHealth") .. "  " .. hp .. " / " .. maxHp)
     barY = barY + 22
 
-    local maxMana = ply:GetNW2Int("wo_maxmana", 0)
-    local maxStamina = ply:GetNW2Int("wo_maxstamina", 0)
+    local networkedStats = WO.Stats and WO.Stats.Networked or {}
+    local maxMana = math.max(0, ply:GetNW2Int("wo_maxmana", tonumber(networkedStats.maxMana) or 0))
+    local maxStamina = math.max(0, ply:GetNW2Int("wo_maxstamina", tonumber(networkedStats.maxStamina) or 0))
 
     if maxMana > 0 then
-        local mana = math.Clamp(ply:GetMana(), 0, maxMana)
+        local mana = math.Clamp(isfunction(ply.GetMana) and ply:GetMana() or
+            ply:GetNW2Int("wo_mana", 0), 0, maxMana)
         WO.UI.DrawBar(detailsX, barY, detailsWidth, 13, mana / maxMana,
             WO.UI.Colors.mana, WO.UI.Colors.manaBg,
             WO.Lang:Get("stats.maxMana") .. "  " .. mana .. " / " .. maxMana)
@@ -158,19 +163,24 @@ function WO.HUD.DrawPlayerFrame()
     end
 
     if maxStamina > 0 then
-        local stamina = math.Clamp(ply:GetStamina(), 0, maxStamina)
+        local stamina = math.Clamp(isfunction(ply.GetStamina) and ply:GetStamina() or
+            ply:GetNW2Int("wo_stamina", 0), 0, maxStamina)
         WO.UI.DrawBar(detailsX, barY, detailsWidth, 13, stamina / maxStamina,
             WO.UI.Colors.stamina, WO.UI.Colors.staminaBg,
             WO.Lang:Get("stats.maxStamina") .. "  " .. stamina .. " / " .. maxStamina)
     end
 
-    local xpData = WO.Leveling.ClientData
-    local xp = xpData and xpData.experience or 0
-    local xpNeeded = math.max(1, xpData and xpData.needed or 1)
+    local xpData = WO.Leveling and WO.Leveling.ClientData or {}
+    local xp = tonumber(xpData.experience) or tonumber(char.experience) or 0
+    local xpNeeded = math.max(1, tonumber(xpData.needed) or 1)
     local xpBarY = y + h - 9
 
     WO.UI.DrawBar(x + 9, xpBarY, w - 18, 5, xp / xpNeeded,
         WO.UI.Colors.xp, WO.UI.Colors.xpBg, nil)
+
+    -- Create the VGUI portrait last: custom HUD text/bars must never be hidden
+    -- by DModelPanel's higher VGUI paint layer.
+    GetPlayerPortrait(char, portraitX, portraitY, portraitSize)
 end
 
 ---------------------------------------------------------------------------
@@ -187,7 +197,7 @@ local function GetTargetPortrait(modelPath, x, y, size)
     end
 
     if not IsValid(targetPortrait) then
-        targetPortrait = vgui.Create("DModelPanel")
+        targetPortrait = vgui.Create("DModelPanel", hudCanvas)
 
         if not IsValid(targetPortrait) then
             targetPortrait = nil
@@ -355,25 +365,94 @@ end
 -- Отрисовка
 ---------------------------------------------------------------------------
 
+local function HideHUDModels()
+    if IsValid(playerPortrait) then playerPortrait:SetVisible(false) end
+    if IsValid(targetPortrait) then targetPortrait:SetVisible(false) end
+end
+
+local function DrawHUDSection(name, callback)
+    local ok, reason = pcall(callback)
+
+    if not ok and not hudDrawErrors[name] then
+        hudDrawErrors[name] = true
+        ErrorNoHalt("[WO HUD] " .. name .. " failed: " .. tostring(reason) .. "\n")
+    end
+end
+
+local function EnsureHUDCanvas()
+    if IsValid(hudCanvas) then return hudCanvas end
+
+    hudCanvas = vgui.Create("DPanel")
+
+    if not IsValid(hudCanvas) then
+        hudCanvas = nil
+        return nil
+    end
+
+    hudCanvas:SetPos(0, 0)
+    hudCanvas:SetSize(ScrW(), ScrH())
+    hudCanvas:SetPaintBackground(false)
+    hudCanvas:SetMouseInputEnabled(false)
+    hudCanvas:SetKeyboardInputEnabled(false)
+    hudCanvas:SetZPos(-100)
+    hudCanvasSize.w = ScrW()
+    hudCanvasSize.h = ScrH()
+
+    hudCanvas.Think = function(self)
+        if hudCanvasSize.w ~= ScrW() or hudCanvasSize.h ~= ScrH() then
+            hudCanvas:SetPos(0, 0)
+            hudCanvas:SetSize(ScrW(), ScrH())
+            hudCanvasSize.w = ScrW()
+            hudCanvasSize.h = ScrH()
+        end
+    end
+
+    hudCanvas.Paint = function()
+        local ply = LocalPlayer()
+
+        if not IsValid(ply) then
+            HideHUDModels()
+            return
+        end
+
+        if deathInfo then
+            DrawHUDSection("death", WO.HUD.DrawDeathScreen)
+        end
+
+        -- The DModelPanels are children of this transparent canvas, so all
+        -- HUD frames and labels paint in the same VGUI layer and remain visible.
+        if not ply:HasCharacter() or not WO.Character or not WO.Character.GetLocal or
+            not WO.Character.GetLocal() then
+            HideHUDModels()
+            return
+        end
+
+        DrawHUDSection("player frame", WO.HUD.DrawPlayerFrame)
+        DrawHUDSection("target frame", WO.HUD.DrawTargetFrame)
+        DrawHUDSection("quest tracker", WO.HUD.DrawQuestTracker)
+    end
+
+    return hudCanvas
+end
+
+-- VGUI paints after HUDPaint. Keeping the WoW HUD in a transparent full-screen
+-- panel (with its portraits as children) prevents DModelPanel from covering the
+-- text/resource frames and makes the z-order deterministic.
 hook.Add("HUDPaint", "wo_hud_paint", function()
-    local ply = LocalPlayer()
+    EnsureHUDCanvas()
+end)
 
-    if not IsValid(ply) then return end
+hook.Add("InitPostEntity", "wo_hud_canvas_init", function()
+    timer.Simple(0, EnsureHUDCanvas)
+end)
 
-    -- Экран смерти
-    if deathInfo then
-        WO.HUD.DrawDeathScreen()
-    end
-
-    -- HUD существует только для выбранного персонажа. Не полагаемся на
-    -- wo_inmenu здесь: после возрождения NW2-флаг может прийти с задержкой.
-    if not ply:HasCharacter() or not WO.Character.GetLocal() then
-        if IsValid(playerPortrait) then playerPortrait:SetVisible(false) end
-        if IsValid(targetPortrait) then targetPortrait:SetVisible(false) end
-        return
-    end
-
-    WO.HUD.DrawPlayerFrame()
-    WO.HUD.DrawTargetFrame()
-    WO.HUD.DrawQuestTracker()
+hook.Add("OnScreenSizeChanged", "wo_hud_canvas_resize", function()
+    timer.Simple(0, function()
+        if IsValid(hudCanvas) then
+            hudCanvas:SetPos(0, 0)
+            hudCanvas:SetSize(ScrW(), ScrH())
+            hudCanvasSize.w = ScrW()
+            hudCanvasSize.h = ScrH()
+        end
+    end)
 end)

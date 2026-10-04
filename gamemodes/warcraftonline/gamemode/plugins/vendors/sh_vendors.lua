@@ -42,10 +42,25 @@ end
 function WO.Vendors.GetSellPrice(npcDef, class)
     local def = WO.Items.Get(class)
 
-    if not def or not def.price then return nil end
+    if not def or not def.price or def.noSell == true or def.bound == true then return nil end
+
+    local allowed = npcDef and npcDef.vendor and npcDef.vendor.buybackClasses
+
+    if istable(allowed) then
+        local accepted = false
+
+        for _, allowedClass in ipairs(allowed) do
+            if allowedClass == class then
+                accepted = true
+                break
+            end
+        end
+
+        if not accepted then return nil end
+    end
 
     local base = tonumber(def.price.sell) or math.floor((tonumber(def.price.buy) or 0) * 0.4)
-    local rate = (npcDef and npcDef.vendor and npcDef.vendor.sellRate) or 0.35
+    local rate = tonumber(npcDef and npcDef.vendor and npcDef.vendor.sellRate) or 0.35
 
     return math.max(1, math.floor(base * rate))
 end

@@ -1,35 +1,28 @@
 --[[
-    Warcraft Online — торговка Марла.
-    Экономика data-driven; модель должна быть смонтированной WoW-моделью.
+    Warcraft Online — торговка Марла: скупщица низкоуровневого хлама.
+    Точная WoW-модель пользователя; ассортимент и buyback проверяются сервером.
 ]]
-
-local humanModels = WO.Models.GetRace("human")
 
 WO.NPCs.Register({
     id = "trader_marla",
     name = "Торговка Марла",
     type = "vendor",
-
-    model = WO.Workshop.NPCModelOr("wow_vendor",
-        humanModels.female and humanModels.female[1]),
+    model = "models/mailer/wow_characters/wowanim_gnome_male.mdl",
     skin = 0,
     scale = 1,
-
     spawns = WO.Config.NPCSpawnPoints.trader_marla or {},
-
     dialogue = "trader_marla",
     quests = { "meet_the_trader" },
-
     vendor = {
         stock = {
-            { class = "bread",          price = 4,  amount = 20 },
-            { class = "health_potion",  price = 25, amount = 10 },
-            { class = "wolf_pelt",      price = 12, amount = 5 },
+            { class = "bread", price = 4, amount = 20 },
+            { class = "health_potion", price = 25, amount = 10 },
+            { class = "wolf_pelt", price = 12, amount = 5 },
             { class = "leather_helmet", price = 60, amount = 2 },
-            { class = "wooden_shield",  price = 45, amount = 2 },
+            { class = "wooden_shield", price = 45, amount = 2 },
         },
-        sellRate = 0.35,
+        sellRate = 0.65,
+        buybackClasses = { "wolf_pelt", "wolf_fang", "boar_tusk", "boar_meat" },
     },
-
     interactRange = WO.Config.InteractDistance,
 })

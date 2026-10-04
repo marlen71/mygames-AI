@@ -29,22 +29,6 @@ local function ContainsAny(text, terms)
     return false
 end
 
-local function ContainsWord(text, terms)
-    if not istable(terms) or #terms == 0 then return false end
-
-    text = Lower(text)
-
-    for _, term in ipairs(terms) do
-        local value = Lower(term)
-
-        if value ~= "" and string.find(text, "%f[%w]" .. value .. "%f[%W]") then
-            return true
-        end
-    end
-
-    return false
-end
-
 local function IsMountedModel(path)
     return isstring(path) and path ~= "" and
         string.EndsWith(Lower(path), ".mdl") and file.Exists(path, "GAME") == true
@@ -228,9 +212,12 @@ local function PlayerManagerModels(search)
 
     local function matches(identity)
         if not ContainsAny(identity, nameTerms) then return false end
+
+        -- player_manager identifiers commonly concatenate race and gender
+        -- (e.g. "humanmale00_00"); frontier-based word matching misses those.
         if istable(genderTerms) and #genderTerms > 0 and
-            not ContainsWord(identity, genderTerms) then return false end
-        if istable(excludeTerms) and ContainsWord(identity, excludeTerms) then return false end
+            not ContainsAny(identity, genderTerms) then return false end
+        if istable(excludeTerms) and ContainsAny(identity, excludeTerms) then return false end
 
         return true
     end
@@ -558,6 +545,17 @@ function WO.Workshop.GetDiagnostics()
     table.sort(report, function(a, b) return a.id < b.id end)
 
     return report, modelScanTruncated
+end
+
+if WO.Models and WO.Models.RefreshRaceLists then
+    WO.Models.RefreshRaceLists()
+
+    -- Workshop addons may finish mounting shortly after the player joins. Rebuild
+    -- the validated client/server model lists briefly during startup; later UI
+    -- opens also trigger an on-demand refresh if a previously missing model appears.
+    timer.Create("wo_workshop_race_model_refresh", 2, 15, function()
+        WO.Models.RefreshRaceLists()
+    end)
 end
 
 WO.Log("Workshop asset adapter loaded (" .. table.Count(WO.Workshop.Catalog) .. " catalog entries)")

@@ -25,10 +25,11 @@ local function GetDesired(char)
 
     if isMage then
         add(configured.mage)
+        add(configured.mageLegacy)
     end
 
-    -- Non-mages keep the standard hands SWEP until they equip their starter
-    -- knife item from the inventory. The mage wand remains a direct loadout.
+    -- New grimoire is selected first. The previous HPWR wand remains registered
+    -- and on the mage loadout during validation, so rollback is one config change.
     local primary = isMage and configured.mage or configured.hands
 
     return desired, primary
@@ -87,6 +88,15 @@ function WO.Loadout.Apply(ply, char)
 
     if primary and IsRegistered(primary) and ply:HasWeapon(primary) then
         return primary
+    end
+
+    if char.class == "mage" then
+        local legacy = WO.Config.StartingWeaponClasses and
+            WO.Config.StartingWeaponClasses.mageLegacy
+
+        if legacy and IsRegistered(legacy) and ply:HasWeapon(legacy) then
+            return legacy
+        end
     end
 
     local hands = WO.Config.StartingWeaponClasses and WO.Config.StartingWeaponClasses.hands

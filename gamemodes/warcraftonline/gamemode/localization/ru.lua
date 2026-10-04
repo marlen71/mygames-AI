@@ -39,9 +39,9 @@ WO.Lang.Register("ru", {
     ["character.rotate_left"] = "Повернуть влево",
     ["character.rotate_right"] = "Повернуть вправо",
     ["character.rotate_hint"] = "Потяните мышью или используйте кнопки поворота",
-    ["character.model_preview_unavailable"] = "Модель WoW не найдена. Проверьте установку Workshop-пака.",
-    ["character.no_models_available"] = "Нет доступных расовых моделей. Установите Playable Characters Megapack и перезапустите сервер.",
-    ["character.model_unavailable"] = "Модель персонажа недоступна. Проверьте установленный Workshop-пак.",
+    ["character.model_preview_unavailable"] = "3D-превью недоступно: модель пока не обнаружена в смонтированном контенте.",
+    ["character.no_models_available"] = "В этой сессии не обнаружены доступные модели рас. Обновите меню; при повторе проверьте Workshop-монтирование клиента и сервера.",
+    ["character.model_unavailable"] = "Модель не обнаружена в смонтированном контенте этой сессии. Повторите попытку после обновления меню.",
 
     ["character.step.race"] = "Раса",
     ["character.step.gender"] = "Пол",

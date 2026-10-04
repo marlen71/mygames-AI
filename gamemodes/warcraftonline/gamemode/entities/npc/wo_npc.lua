@@ -139,10 +139,8 @@ if SERVER then
         local attacker = dmg:GetAttacker()
 
         if self:Health() <= 0 then
-            local ply = (IsValid(attacker) and attacker:IsPlayer()) and attacker or nil
-
-            if ply and WO.NPCs and WO.NPCs.HandleKilled then
-                WO.NPCs.HandleKilled(self, ply)
+            if WO.NPCs and WO.NPCs.HandleKilled then
+                WO.NPCs.HandleKilled(self, attacker)
             end
 
             self:Remove()

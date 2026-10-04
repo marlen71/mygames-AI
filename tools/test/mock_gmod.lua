@@ -41,11 +41,16 @@ function isbool(v) return type(v) == "boolean" end
 function isentity(v) return type(v) == "table" and v.__entity == true end
 
 local clock = 0
+local timeOffset = 0
 
-function SysTime() return py.now() end
-function RealTime() return py.now() end
+function SysTime() return py.now() + timeOffset end
+function RealTime() return py.now() + timeOffset end
 function CurTime() return clock end
-function MOCK.AdvanceTime(n) clock = clock + n end
+function MOCK.AdvanceTime(n)
+    n = tonumber(n) or 0
+    clock = clock + n
+    timeOffset = timeOffset + n
+end
 
 function MsgN(...) print(...) end
 function Msg(...) print(...) end
@@ -89,10 +94,24 @@ SIMPLE_USE = 3
 MOVETYPE_NONE = 0
 MOVETYPE_WALK = 2
 MOVETYPE_NOCLIP = 8
+MOVETYPE_STEP = 3
+MOVETYPE_VPHYSICS = 6
 SOLID_NONE = 0
 SOLID_BBOX = 2
+SOLID_VPHYSICS = 6
+HULL_HUMAN = 1
 COLLISION_GROUP_PLAYER = 5
 COLLISION_GROUP_WEAPON = 21
+COLLISION_GROUP_NPC = 9
+CAP_MOVE_GROUND = 1
+CAP_OPEN_DOORS = 2
+NPC_STATE_IDLE = 1
+NPC_STATE_ALERT = 2
+D_HT = 1
+D_LI = 3
+SCHED_NONE = 0
+SCHED_CHASE_ENEMY = 1
+SCHED_IDLE_STAND = 2
 CONTENTS_SOLID = 1
 MASK_SOLID = 1
 TEXT_ALIGN_LEFT = 0
@@ -322,6 +341,14 @@ end
 
 vector_origin = Vector(0, 0, 0)
 
+function VectorRand()
+    return Vector(0, 0, 0)
+end
+
+function AngleRand()
+    return Angle(0, 0, 0)
+end
+
 local ANG = {}
 ANG.__index = ANG
 
@@ -517,6 +544,7 @@ function MOCK.NewEntity(class)
     e.__methods.SetModelScale = function(tt, s) tt.__scale = s end
     e.__methods.GetHull = function(tt) return Vector(-16, -16, 0), Vector(16, 16, 72) end
     e.__methods.EyePos = function(tt) return tt.__pos + Vector(0, 0, 64) end
+    e.__methods.GetShootPos = e.__methods.EyePos
     e.__methods.EyeAngles2 = e.__methods.EyeAngles
     e.__methods.GetAimVector = function(tt) return Vector(0, 1, 0) end
     e.__methods.LagCompensation = function() end
@@ -559,10 +587,35 @@ function MOCK.NewEntity(class)
             return t2["__nv_" .. name]
         end
     end
-    e.__methods.SetSolid = function() end
-    e.__methods.GetSolid = function() return 0 end
-    e.__methods.SetCollisionGroup = function() end
+    e.__methods.SetSolid = function(tt, value) tt.__solid = value end
+    e.__methods.GetSolid = function(tt) return tt.__solid or 0 end
+    e.__methods.SetCollisionGroup = function(tt, value) tt.__collisionGroup = value end
+    e.__methods.PhysicsInit = function(tt, solid) tt.__physicsInit = solid end
+    e.__methods.PhysicsInitBox = function(tt) tt.__physicsInit = true end
+    e.__methods.GetPhysicsObject = function(tt)
+        if not tt.__physicsObject then
+            tt.__physicsObject = {
+                Wake = function() end,
+                SetMass = function(_, mass) tt.__physicsMass = mass end,
+                SetVelocity = function(_, velocity) tt.__physicsVelocity = velocity end,
+                AddAngleVelocity = function() end,
+            }
+        end
+        return tt.__physicsObject
+    end
     e.__methods.DropToFloor = function() end
+    e.__methods.SetHullType = function() end
+    e.__methods.SetHullSizeNormal = function() end
+    e.__methods.SetMaxYawSpeed = function() end
+    e.__methods.CapabilitiesAdd = function() end
+    e.__methods.SetNPCState = function() end
+    e.__methods.SetEnemy = function(tt, target) tt.__enemy = target end
+    e.__methods.UpdateEnemyMemory = function() end
+    e.__methods.SetSchedule = function(tt, schedule) tt.__schedule = schedule end
+    e.__methods.AddEntityRelationship = function() end
+    e.__methods.ResetSequence = function(tt, sequence) tt.__sequence = sequence end
+    e.__methods.SetPlaybackRate = function(tt, rate) tt.__playbackRate = rate end
+    e.__methods.NextThink = function(tt, at) tt.__nextThink = at end
     e.__methods.Spawn = function() end
     e.__methods.Activate = function() end
     e.__methods.SetOwner = function() end
@@ -1347,7 +1400,7 @@ local function NewPanel(class)
     p.SetVisible = function(tt, visible) tt.__visible = visible == true end
     p.IsVisible = function(tt) return tt.__visible end
     p.Remove = function(tt)
-        if tt.__removed then return end
+        if rawget(tt, "__removed") == true then return end
         tt.__removed = true
 
         if isfunction(tt.OnRemove) then

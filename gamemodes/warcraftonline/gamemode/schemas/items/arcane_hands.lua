@@ -1,6 +1,6 @@
 --[[
     Legacy tombstone for old saves that used arcane_hands as an item.
-    Mages now receive weapon_hpwr_stick directly; it is not inventory/equipment.
+    Mages now receive wo_magic_grimoire; weapon_hpwr_stick remains an alternate rollback SWEP.
 ]]
 WO.Items.Register({
     id = "arcane_hands",
@@ -9,7 +9,7 @@ WO.Items.Register({
     category = "magic",
     noInventory = true,
     legacyStarter = true,
-    description = "This legacy inventory definition is disabled; the class loadout grants its SWEP.",
+    description = "This legacy inventory definition is disabled; mages receive wo_magic_grimoire.",
     stackable = false,
     stats = {},
 })

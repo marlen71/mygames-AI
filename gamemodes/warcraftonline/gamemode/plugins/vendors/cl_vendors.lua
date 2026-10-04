@@ -119,11 +119,19 @@ function WO.Vendors.OpenUI(data)
             end
         end
 
+        local sellableCount = 0
+        local sellVendor = { vendor = {
+            sellRate = current.sellRate,
+            buybackClasses = current.buybackClasses,
+        } }
+
         for _, instance in ipairs(states) do
             local def = WO.Items.Get(instance.class)
-            local price = WO.Vendors.GetSellPrice and math.floor(
-                ((def and def.price and def.price.sell) or 0) * (current.sellRate or 0.35)) or 0
+            local price = WO.Vendors.GetSellPrice and
+                WO.Vendors.GetSellPrice(sellVendor, instance.class) or nil
 
+            if price then
+            sellableCount = sellableCount + 1
             local row = vgui.Create("DPanel", sellScroll)
 
             row:Dock(TOP)
@@ -145,9 +153,10 @@ function WO.Vendors.OpenUI(data)
 
             sellBtn:Dock(RIGHT)
             sellBtn:SetWide(96)
+            end
         end
 
-        if #states == 0 then
+        if sellableCount == 0 then
             local empty = WO.UI.Label(sellScroll, WO.Lang:Get("vendor.no_items"), "WO.Small", WO.UI.Colors.textDim)
 
             empty:Dock(TOP)

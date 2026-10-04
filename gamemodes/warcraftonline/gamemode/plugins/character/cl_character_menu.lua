@@ -176,6 +176,10 @@ end
 function WO.CharacterUI.OpenSelect()
     CloseAllCharacterUI()
 
+    if WO.Models and WO.Models.RefreshRaceLists then
+        WO.Models.RefreshRaceLists()
+    end
+
     local list = WO.Character.GetList()
 
     frame = vgui.Create("DFrame")

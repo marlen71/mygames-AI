@@ -503,6 +503,10 @@ end
 function WO.Character.ApplyToPlayer(ply)
     if not IsValid(ply) then return end
 
+    if WO.Models and WO.Models.RefreshRaceLists then
+        WO.Models.RefreshRaceLists()
+    end
+
     local char = ply:GetCharacter()
 
     if not char then

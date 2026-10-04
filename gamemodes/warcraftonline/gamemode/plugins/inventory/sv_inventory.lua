@@ -114,7 +114,7 @@ end
     @param amount number|nil количество
     @return boolean success, string|nil reason
 ]]
-function WO.Inventory.GiveItem(ply, class, amount)
+function WO.Inventory.GiveItem(ply, class, amount, customData)
     if not IsValid(ply) then return false, "invalid_player" end
 
     local char = ply:GetCharacter()
@@ -131,6 +131,12 @@ function WO.Inventory.GiveItem(ply, class, amount)
     local container = WO.Inventory.GetContainer(char)
 
     if not container then return false, "no_container" end
+
+    if def.uniquePerCharacter == true then
+        if amount ~= 1 or container:CountItem(class) > 0 then
+            return false, "already_owned"
+        end
+    end
 
     -- Защита от спама выдачей: ограничение суммарного количества за раз
     if amount > 1000 then
@@ -165,7 +171,7 @@ function WO.Inventory.GiveItem(ply, class, amount)
         end
 
         if not stacked then
-            local instance = WO.Items.CreateInstance(class, toGive)
+            local instance = WO.Items.CreateInstance(class, toGive, customData)
 
             if not instance then
                 return false, "create_failed"
@@ -345,9 +351,41 @@ function WO.Inventory.UseItem(ply, uid)
     if not def then return false, "unknown_class" end
     if not WO.Items.IsInventoryAllowed(def) then return false, "not_inventory_item" end
 
-    -- Оружие/броня экипируются, а не «используются»
+    -- Оружие/броня экипируются, а не «используются».
     if def.equipment then
         return WO.Equipment.Equip(ply, uid)
+    end
+
+    -- Utility callbacks run on the server and can be persistent (mount stone)
+    -- or explicitly consumable (feed/training kit). Client packets contain only UID.
+    if isfunction(def.useHandler) then
+        local canUse, requirement = WO.Items.CanUse(ply, instance)
+
+        if not canUse then return false, requirement end
+
+        instance.locked = true
+        local called, result, reason = pcall(def.useHandler, ply, instance, def)
+        instance.locked = nil
+
+        if not called then
+            WO.Error("Item useHandler failed (" .. instance.class .. "): " .. tostring(result))
+            return false, "use_failed"
+        end
+
+        if result == false then
+            return false, reason or "use_failed"
+        end
+
+        if def.consumeOnUse == true then
+            if not WO.Inventory.RemoveItem(ply, uid, 1) then
+                return false, "consume_failed"
+            end
+        else
+            WO.Inventory.SendDelta(ply, "update", instance)
+            MarkDirty(char)
+        end
+
+        return true
     end
 
     if not def.consumable then
@@ -526,6 +564,12 @@ function WO.Inventory.DropItem(ply, uid, amount)
     if not instance then return false, "not_found" end
 
     if instance.locked then return false, "locked" end
+
+    local itemDef = WO.Items.Get(instance.class)
+
+    if itemDef and (itemDef.noDrop == true or itemDef.bound == true) then
+        return false, "bound_item"
+    end
 
     if not WO.World or not WO.World.DropItem then
         return false, "world_unavailable"

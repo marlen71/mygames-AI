@@ -81,6 +81,99 @@ function WO.World.DropItem(ply, instance)
     return true
 end
 
+--- Спавнит свежесозданный loot-item с физикой в заданной точке смерти NPC.
+function WO.World.SpawnLootItem(instance, position, velocity)
+    if not istable(instance) or not isstring(instance.uid) or not isvector(position) then
+        return false, "invalid_loot"
+    end
+
+    local def = WO.Items.Get(instance.class)
+
+    if not def or not WO.Items.IsInventoryAllowed(instance.class) then
+        return false, "invalid_item"
+    end
+
+    local ent = ents.Create("wo_item_world")
+
+    if not IsValid(ent) then return false, "spawn_failed" end
+
+    ent:SetPos(position)
+    ent:SetAngles(AngleRand())
+    ent:Spawn()
+    ent:Activate()
+
+    if not ent:SetItem(instance) then
+        ent:Remove()
+        return false, "set_item_failed"
+    end
+
+    if not WO.Items.SetState(instance, WO.Items.State.WORLD) then
+        ent:Remove()
+        return false, "state_failed"
+    end
+
+    ent:ApplyThrow(velocity or VectorRand() * 90 + Vector(0, 0, 100))
+
+    if WO.Config.WorldItemsPersist then
+        WO.World.SaveWorldItem(ent, instance)
+    end
+
+    return true, ent
+end
+
+--- Создаёт физическую кучку валюты, подбираемую через E.
+function WO.World.SpawnLootCoins(amount, position, velocity)
+    amount = math.floor(tonumber(amount) or 0)
+
+    if amount <= 0 or not isvector(position) then return false, "invalid_amount" end
+
+    local ent = ents.Create("wo_coin_pile")
+
+    if not IsValid(ent) then return false, "spawn_failed" end
+
+    ent:SetPos(position)
+    ent:SetAngles(AngleRand())
+    ent:Spawn()
+    ent:Activate()
+
+    if not ent:SetCoinAmount(amount) then
+        ent:Remove()
+        return false, "set_amount_failed"
+    end
+
+    ent:ApplyThrow(velocity or VectorRand() * 100 + Vector(0, 0, 120))
+    return true, ent
+end
+
+--- Поднимает только серверную сумму монет; блокировка закрывает двойное начисление.
+function WO.World.PickupCoins(ply, ent)
+    if not IsValid(ply) or not ply:HasCharacter() or not IsValid(ent) or
+        ent:GetClass() ~= "wo_coin_pile" or not ent:CanInteract(ply) then
+        return false, "cannot_interact"
+    end
+
+    if ent.PickupLock then return false, "busy" end
+
+    ent.PickupLock = true
+    local amount = math.floor(tonumber(ent.WOCoinAmount) or 0)
+
+    if amount <= 0 then
+        ent.PickupLock = nil
+        return false, "empty"
+    end
+
+    if not WO.Currency.Add(ply, amount, "npc_loot") then
+        ent.PickupLock = nil
+        return false, "currency_failed"
+    end
+
+    ent.WOCoinAmount = 0
+    ent:SetNW2Int("wo_coin_amount", 0)
+    ent:Remove()
+    WO.Notify(ply, "item", "Подобраны монеты: " .. amount .. ".")
+    return true
+end
+
 ---------------------------------------------------------------------------
 -- Подбор предмета (World → Inventory)
 ---------------------------------------------------------------------------
@@ -144,7 +237,7 @@ function WO.World.PickupItem(ply, ent)
     if def and def.stackable then
         local stack = container:FindStack(def.id, def.maxStack)
 
-        if stack then
+        if stack and (stack.amount or 1) + (instance.amount or 1) <= def.maxStack then
             stack.amount = (stack.amount or 1) + (instance.amount or 1)
 
             WO.Inventory.SendDelta(ply, "update", stack)

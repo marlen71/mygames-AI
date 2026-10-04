@@ -8,6 +8,6 @@ return {
     id = "npcs",
     author = "Warcraft Online Team",
     version = "1.0.0",
-    dependencies = { "character" },
+    dependencies = { "character", "world", "items", "currency" },
     priority = 45,
 }

@@ -711,6 +711,10 @@ local function BuildStep(parent, modelPanel)
 end
 
 function WO.CharacterUI.OpenCreate()
+    if WO.Models and WO.Models.RefreshRaceLists then
+        WO.Models.RefreshRaceLists()
+    end
+
     if WO.CharacterUI.CloseMenus then
         WO.CharacterUI.CloseMenus()
     else

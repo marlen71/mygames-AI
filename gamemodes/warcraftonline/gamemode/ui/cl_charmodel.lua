@@ -36,6 +36,14 @@ local function IsPlayableModel(modelPath)
     if util.IsValidModel and not util.IsValidModel(modelPath) then return false end
 
     if WO.Races and WO.Races.IsPlayableModel then
+        if WO.Races.IsPlayableModel(modelPath) then return true end
+
+        -- Workshop/GMA mounts can finish after the initial realm bootstrap.
+        -- Refresh the verified race lists once before declaring a visible model missing.
+        if WO.Models and WO.Models.RefreshRaceLists then
+            WO.Models.RefreshRaceLists()
+        end
+
         return WO.Races.IsPlayableModel(modelPath)
     end
 

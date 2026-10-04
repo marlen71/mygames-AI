@@ -197,11 +197,19 @@ function WO.Combat.Damage(attacker, target, info)
         if target:IsPlayer() then
             target:Kill() -- вызовет PlayerDeath
         else
-            -- Общий lifecycle-hook позволяет независимым плагинам (NPC, боссам,
-            -- разрушаемым объектам) обработать смерть без связки Combat -> NPC.
+            -- Сущность может взять на себя визуальную/отложенную смерть (например,
+            -- собственная анимация NPC). Lifecycle-hook остаётся общим и не связан
+            -- с конкретным плагином.
+            local deathHandled = false
+
+            if isfunction(target.OnWOCombatKilled) then
+                local ok, handled = pcall(target.OnWOCombatKilled, target, attacker, info)
+                deathHandled = ok and handled == true
+            end
+
             WO.Hook.Run("EntityKilled", target, attacker, info)
 
-            if IsValid(target) then
+            if IsValid(target) and not deathHandled then
                 target:Remove()
             end
         end

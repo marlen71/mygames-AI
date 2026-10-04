@@ -45,14 +45,15 @@ WO.Workshop.RequiredAddons = {
 }
 
 WO.Workshop.RequestedNPCClasses = {
-    fang = "wow_npc_14892",
     boar = "wow_npc_2809",
+    horseMount = "wow_npc_8883",
 }
 
 WO.Workshop.RequestedSWEPs = {
     hands = WO.Config.StartingWeaponClasses.hands,
     starterKnife = WO.Config.StartingWeaponClasses.knife,
-    mageStick = WO.Config.StartingWeaponClasses.mage,
+    mageGrimoire = WO.Config.StartingWeaponClasses.mage,
+    legacyMageStick = WO.Config.StartingWeaponClasses.mageLegacy,
 }
 
 WO.Workshop.Catalog = {

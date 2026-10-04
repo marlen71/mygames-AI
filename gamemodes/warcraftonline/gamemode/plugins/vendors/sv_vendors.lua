@@ -58,7 +58,8 @@ local function SendSync(ply)
         npcId = def.id or "",
         npcName = def.name or "",
         money = WO.Currency.Get(ply),
-        sellRate = (def.vendor and def.vendor.sellRate) or 0.35,
+        sellRate = def.vendor and def.vendor.sellRate or 0.35,
+        buybackClasses = def.vendor and def.vendor.buybackClasses or nil,
         stock = stock,
     })
 end
@@ -107,6 +108,9 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
     end
 
     local def = session.npcDef
+    amount = math.floor(tonumber(amount) or 0)
+
+    if amount < 1 or amount > 100 then return false, "invalid_amount" end
 
     if not WO.Vendors.HasStock(def, class) then
         return false, "not_in_stock"
@@ -125,6 +129,25 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
     if not WO.Currency.CanAfford(ply, total) then
         WO.Notify(ply, "error", WO.Lang:Get("vendor.not_enough_money"))
         return false, "not_enough_money"
+    end
+
+    local itemDef = WO.Items.Get(class)
+
+    if itemDef and itemDef.mountClass then
+        if amount ~= 1 or not WO.Mounts or not WO.Mounts.Purchase then
+            return false, "mount_unavailable"
+        end
+
+        local purchased, reason = WO.Mounts.Purchase(ply, class, price)
+
+        if not purchased then
+            WO.Notify(ply, "error", "Покупка маунта отклонена: " .. tostring(reason or "ошибка"))
+            return false, reason or "mount_purchase_failed"
+        end
+
+        SendSync(ply)
+        WO.Log("Vendor mount purchase: " .. ply:Nick() .. " " .. class .. " for " .. total)
+        return true
     end
 
     -- Деньги списываем ТОЛЬКО после успешной выдачи
@@ -164,6 +187,12 @@ function WO.Vendors.Sell(ply, npcId, uid, amount)
 
     if not WO.Items.IsInventoryAllowed(instance.class) then
         return false, "not_inventory_item"
+    end
+
+    local itemDef = WO.Items.Get(instance.class)
+
+    if itemDef and (itemDef.noSell == true or itemDef.bound == true) then
+        return false, "cannot_sell"
     end
 
     local sellPrice = WO.Vendors.GetSellPrice(session.npcDef, instance.class)

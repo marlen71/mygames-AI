@@ -120,6 +120,10 @@ end
 function WO.Character.Validate(data, opts)
     opts = opts or {}
 
+    if WO.Models and WO.Models.RefreshRaceLists then
+        WO.Models.RefreshRaceLists()
+    end
+
     if not istable(data) then
         return false, "invalid_data"
     end
@@ -249,6 +253,10 @@ end
 ]]
 function WO.Character.SanitizeLoaded(data)
     local warnings = {}
+
+    if WO.Models and WO.Models.RefreshRaceLists then
+        WO.Models.RefreshRaceLists()
+    end
 
     if not istable(data) then
         return nil, { "empty_data" }

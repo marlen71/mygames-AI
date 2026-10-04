@@ -49,6 +49,11 @@ function WO.NPCs.Register(def)
         return false
     end
 
+    if def.entityClass ~= nil and (not isstring(def.entityClass) or def.entityClass == "") then
+        WO.Error("WO.NPCs.Register: invalid entityClass for '" .. def.id .. "'")
+        return false
+    end
+
     WO.NPCs.List[def.id] = def
 
     WO.Debug("NPC registered: " .. def.id)

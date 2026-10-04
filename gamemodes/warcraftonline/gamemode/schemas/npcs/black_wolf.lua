@@ -1,27 +1,36 @@
 --[[
-    Warcraft Online — Fang (Клык), цель стартового kill-квеста.
-
-    Используется только точный класс Creatures Megapack. Без регистрации класса
-    сущность не спавнится: никакой подмены зомби/стоковой моделью.
+    Warcraft Online — собственный враждебный волк Клык.
+    Это WO SENT, не внешний wow_npc_14892; модель не подменяется fallback-моделью.
 ]]
 
 WO.NPCs.Register({
     id = "black_wolf",
-    name = "Клык",
+    name = "Волк",
     type = "creature",
+    entityClass = "wo_wolf",
+    model = "models/wow_monsters/direwolf.mdl",
     hostile = true,
-    workshopClass = WO.Workshop.RequestedNPCClasses.fang,
     level = 1,
     minLevel = 1,
-    maxLevel = 5,
+    maxLevel = 4,
     levelStats = {
-        [1] = { health = 45,  damage = 4 },
-        [2] = { health = 62,  damage = 5 },
-        [3] = { health = 82,  damage = 6 },
-        [4] = { health = 106, damage = 8 },
-        [5] = { health = 134, damage = 10 },
+        [1] = { health = 45, damage = 4 },
+        [2] = { health = 62, damage = 5 },
+        [3] = { health = 82, damage = 7 },
+        [4] = { health = 106, damage = 9 },
     },
-    attackRange = 110,
+    attackRange = 96,
+    sightRange = 900,
     interactRange = 0,
+    loot = {
+        currency = { min = 2, max = 5, chance = 0.80, levelScale = 0.05 },
+        items = {
+            { class = "wolf_pelt", chance = 0.42, levelScale = 0.035 },
+            { class = "wolf_fang", chance = 0.28, levelScale = 0.025 },
+            { class = "bread", chance = 0.07, levelScale = 0.01 },
+            { class = "health_potion", chance = 0.025, levelScale = 0.008 },
+            { class = "iron_sword", chance = 0.003, levelScale = 0.001 },
+        },
+    },
     spawns = WO.Config.NPCSpawnPoints.black_wolf or {},
 })

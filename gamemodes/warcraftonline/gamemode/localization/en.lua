@@ -39,9 +39,9 @@ WO.Lang.Register("en", {
     ["character.rotate_left"] = "Rotate Left",
     ["character.rotate_right"] = "Rotate Right",
     ["character.rotate_hint"] = "Drag the model or use the rotation buttons",
-    ["character.model_preview_unavailable"] = "WoW model not found. Check the installed Workshop pack.",
-    ["character.no_models_available"] = "No playable race models found. Install the Playable Characters Megapack and restart the server.",
-    ["character.model_unavailable"] = "This character model is unavailable. Check the installed Workshop pack.",
+    ["character.model_preview_unavailable"] = "3D preview unavailable: the model was not detected in mounted content.",
+    ["character.no_models_available"] = "No race models were detected in this session. Refresh the menu; if this repeats, check Workshop mounting on the client and server.",
+    ["character.model_unavailable"] = "The model was not detected in this session's mounted content. Refresh the menu and try again.",
 
     ["character.step.race"] = "Race",
     ["character.step.gender"] = "Gender",

@@ -4,6 +4,15 @@
 
 WO.Quests.LocalStates = WO.Quests.LocalStates or {}
 
+local function GetStateSnapshot()
+    local states = WO.Quests.LocalStates or {}
+
+    if next(states) ~= nil then return states end
+
+    local char = WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()
+    return (char and char.quests) or states
+end
+
 ---------------------------------------------------------------------------
 -- Трекер HUD (используется hud-плагином)
 ---------------------------------------------------------------------------
@@ -12,14 +21,8 @@ WO.Quests.LocalStates = WO.Quests.LocalStates or {}
 function WO.Quests.GetTrackerLines()
     local lines = {}
 
-    -- Источник: синхронизированное состояние (Quest.Sync), fallback — кэш персонажа
-    local states = WO.Quests.LocalStates or {}
-
-    if next(states) == nil then
-        local char = WO.Character.GetLocal()
-
-        states = (char and char.quests) or {}
-    end
+    -- Источник: синхронизированное состояние (Quest.Sync), fallback — кэш персонажа.
+    local states = GetStateSnapshot()
 
     for questId, state in pairs(states) do
         if state.status == "active" and state.tracked ~= false then
@@ -80,7 +83,7 @@ function WO.Quests.OpenLog()
     scroll:Dock(FILL)
     scroll:DockMargin(16, 50, 16, 16)
 
-    local states = WO.Quests.LocalStates or {}
+    local states = GetStateSnapshot()
     local shown = 0
 
     for questId, state in pairs(states) do
@@ -89,13 +92,16 @@ function WO.Quests.OpenLog()
         if def then
             shown = shown + 1
 
-            local statusKey = state.status == "completed" and "quest.status_completed" or "quest.status_active"
+            local statusText = state.status == "completed" and WO.Lang:Get("quest.status_completed") or
+                state.status == "failed" and "Провалено" or WO.Lang:Get("quest.status_active")
+            local statusColor = state.status == "completed" and WO.UI.Colors.good or
+                state.status == "failed" and WO.UI.Colors.bad or WO.UI.Colors.accent
+            local statusIcon = state.status == "completed" and "✔ " or
+                state.status == "failed" and "✖ " or "• "
 
             local header = WO.UI.Label(scroll,
-                (state.status == "completed" and "✔ " or "• ") .. def.name ..
-                "  (" .. WO.Lang:Get(statusKey) .. ")",
-                "WO.Subtitle",
-                state.status == "completed" and WO.UI.Colors.good or WO.UI.Colors.accent)
+                statusIcon .. def.name .. "  (" .. statusText .. ")",
+                "WO.Subtitle", statusColor)
 
             header:Dock(TOP)
             header:DockMargin(0, 8, 0, 2)
@@ -119,6 +125,28 @@ function WO.Quests.OpenLog()
                 stepLabel:Dock(TOP)
                 stepLabel:DockMargin(12, 0, 12, 0)
                 stepLabel:SetTall(16)
+            end
+
+            if state.status == "active" and def.turnInRequired then
+                local complete = true
+
+                for index, step in ipairs(def.steps or {}) do
+                    if ((state.progress or {})[index] or 0) < (step.amount or 1) then
+                        complete = false
+                        break
+                    end
+                end
+
+                if complete then
+                    local npc = WO.NPCs and WO.NPCs.Get and
+                        WO.NPCs.Get(def.turnInGiver or def.giver)
+                    local turnInLabel = WO.UI.Label(scroll,
+                        "Готово — сдайте задание у " .. tostring(npc and npc.name or def.turnInGiver or def.giver),
+                        "WO.Small", WO.UI.Colors.good)
+                    turnInLabel:Dock(TOP)
+                    turnInLabel:DockMargin(12, 2, 12, 2)
+                    turnInLabel:SetTall(18)
+                end
             end
 
             if state.status == "active" then
@@ -163,7 +191,7 @@ end
 ---------------------------------------------------------------------------
 
 WO.Hook.Add("QuestsSynced", "quest_ui", function()
-    -- HUD читает трекер сам; журнал обновится при следующем открытии
+    if IsValid(questFrame) then WO.Quests.OpenLog() end
 end)
 
 WO.Hook.Add("QuestEvent", "quest_ui", function(data)
@@ -171,6 +199,13 @@ WO.Hook.Add("QuestEvent", "quest_ui", function(data)
 
     if data.type == "accepted" then
         WO.Notify.Show("success", WO.Lang:Get("quest.accepted") .. ": " .. tostring(data.name or data.questId))
+    elseif data.type == "progress" then
+        WO.Notify.Show("info", tostring(data.name or data.questId) .. ": " ..
+            tostring(data.text or "Прогресс") .. "  " .. tostring(data.have or 0) .. "/" ..
+            tostring(data.need or 1))
+    elseif data.type == "ready" then
+        WO.Notify.Show("success", "Задание выполнено. Вернитесь к " ..
+            tostring(data.turnInName or data.turnInGiver or "заказчику") .. ".")
     elseif data.type == "completed" then
         local rewardText = ""
 
@@ -190,11 +225,15 @@ WO.Hook.Add("QuestEvent", "quest_ui", function(data)
 
         WO.Notify.Show("success", WO.Lang:Get("quest.completed") .. ": " ..
             tostring(data.name or data.questId) .. (rewardText ~= "" and (" (" .. rewardText .. ")") or ""))
+    elseif data.type == "failed" then
+        WO.Notify.Show("error", "Задание провалено: " .. tostring(data.name or data.questId))
     elseif data.type == "abandoned" then
         WO.Notify.Show("info", WO.Lang:Get("quest.abandoned"))
     elseif data.type == "info" then
         WO.Notify.Show("info", tostring(data.text or ""))
     end
+
+    if IsValid(questFrame) then WO.Quests.OpenLog() end
 end)
 
 -- Клавиша J — журнал квестов
