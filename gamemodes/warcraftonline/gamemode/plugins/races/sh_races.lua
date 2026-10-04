@@ -7,7 +7,7 @@
         name = "Человек",
         description = "...",
 
-        models = WO.Models.GetRace("human"), -- только реально смонтированные race/gender модели
+        models = WO.Models.GetRace("human"), -- явные race/gender пути, без citizen fallback
 
         genders = { "male", "female" },
         modelScale = 1,
@@ -63,6 +63,23 @@ end
 --- Список id рас.
 function WO.Races.GetIDs()
     return WO.Races.Registry:GetIDs()
+end
+
+--- Раса отмечена как особая и требует серверного допуска.
+function WO.Races.IsSpecial(raceId)
+    local race = WO.Races.Get(raceId)
+
+    return race ~= nil and race.special == true
+end
+
+--- Проверяет право создать персонажа выбранной расы; клиентская проверка только для UI.
+function WO.Races.CanCreate(raceId, ply)
+    local race = WO.Races.Get(raceId)
+
+    if not race then return false end
+    if race.special ~= true then return true end
+
+    return WO.Admin and isfunction(WO.Admin.IsAdmin) and WO.Admin.IsAdmin(ply) == true or false
 end
 
 --[[
@@ -131,7 +148,7 @@ function WO.Races.GetModels(raceId, gender)
     return (race.models and race.models[gender]) or {}
 end
 
---- Полы, для которых у расы есть хотя бы одна реально доступная модель.
+--- Полы, для которых у расы настроен хотя бы один явный путь модели.
 function WO.Races.GetAvailableGenders(raceId)
     local race = WO.Races.Get(raceId)
     local out = {}
@@ -147,7 +164,7 @@ function WO.Races.GetAvailableGenders(raceId)
     return out
 end
 
---- Проверяет, входит ли путь в список смонтированных моделей любой расы/пола.
+--- Проверяет, входит ли путь в явный race/gender allowlist.
 function WO.Races.IsPlayableModel(model)
     if not isstring(model) or model == "" then return false end
 

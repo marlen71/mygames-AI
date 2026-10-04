@@ -8,7 +8,9 @@ WO.WeaponSelector = WO.WeaponSelector or {}
 
 local MAX_VISIBLE_WEAPONS = 10
 local PENDING_SELECTION_TIMEOUT = 0.9
+local SELECTOR_VISIBLE_SECONDS = 0.85
 local pendingSelection
+local selectorVisibleUntil = 0
 
 local function GetWeaponClass(weapon)
     if not IsValid(weapon) or not isfunction(weapon.GetClass) then return nil end
@@ -93,8 +95,10 @@ function WO.WeaponSelector.GetWeapons(ply)
             end
         end
 
-        if serverActiveClass == pendingSelection.class or not pendingOwned or
-            now >= pendingSelection.expires then
+        if serverActiveClass == pendingSelection.class then
+            pendingSelection = nil
+            selectorVisibleUntil = 0
+        elseif not pendingOwned or now >= pendingSelection.expires then
             pendingSelection = nil
         end
     end
@@ -150,6 +154,25 @@ function WO.WeaponSelector.GetVisibleWeapons(ply)
     return visible
 end
 
+function WO.WeaponSelector.IsVisible(ply)
+    local now = isfunction(CurTime) and CurTime() or 0
+    if now >= selectorVisibleUntil then return false end
+
+    ply = ply or LocalPlayer()
+    if not IsValid(ply) or not ply:HasCharacter() then return false end
+
+    -- GetWeapons reconciles an optimistic selection with the server-active SWEP;
+    -- the selector is hidden on the same frame that confirms the switch.
+    local weapons = WO.WeaponSelector.GetWeapons(ply)
+    now = isfunction(CurTime) and CurTime() or now
+
+    return now < selectorVisibleUntil and #weapons > 0
+end
+
+function WO.WeaponSelector.Hide()
+    selectorVisibleUntil = 0
+end
+
 function WO.WeaponSelector.SelectClass(class)
     if not isstring(class) then return false end
 
@@ -164,10 +187,12 @@ function WO.WeaponSelector.SelectClass(class)
 
     if not found then return false end
 
+    local now = isfunction(CurTime) and CurTime() or 0
     pendingSelection = {
         class = class,
-        expires = (isfunction(CurTime) and CurTime() or 0) + PENDING_SELECTION_TIMEOUT,
+        expires = now + PENDING_SELECTION_TIMEOUT,
     }
+    selectorVisibleUntil = now + SELECTOR_VISIBLE_SECONDS
 
     WO.Net.SendToServer("Weapons.Select", class)
     return true
@@ -188,30 +213,6 @@ function WO.WeaponSelector.SelectSlot(slot)
     return false
 end
 
-function WO.WeaponSelector.Cycle(direction)
-    local weapons = WO.WeaponSelector.GetWeapons()
-    local count = #weapons
-
-    if count == 0 then return false end
-
-    local activeIndex
-
-    for index, entry in ipairs(weapons) do
-        if entry.active then
-            activeIndex = index
-            break
-        end
-    end
-
-    if not activeIndex then
-        activeIndex = direction and direction < 0 and 1 or count
-    end
-
-    local step = (tonumber(direction) or 1) < 0 and -1 or 1
-    local nextIndex = ((activeIndex - 1 + step) % count) + 1
-    return WO.WeaponSelector.SelectClass(weapons[nextIndex].class)
-end
-
 local function IsZoomModifierDown()
     if not input or not isfunction(input.IsKeyDown) then return false end
 
@@ -230,21 +231,39 @@ end
 
 hook.Add("PlayerBindPress", "wo_weapon_selector_bind", function(ply, bind, pressed)
     if ply ~= LocalPlayer() or not IsValid(ply) or not ply:HasCharacter() then return end
+
+    if bind == "invnext" or bind == "invprev" then
+        local menuOpen = WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen()
+        local uiFocused = HasKeyboardFocus() or
+            (gui and gui.IsGameUIVisible and gui.IsGameUIVisible()) or menuOpen
+
+        -- Always consume plain wheel binds, even over a focused UI; only Alt-wheel
+        -- in gameplay is left for the third-person camera's zoom hook.
+        if IsZoomModifierDown() and not uiFocused and WO.ThirdPerson and
+            isfunction(WO.ThirdPerson.IsEnabled) and WO.ThirdPerson.IsEnabled() then
+            return
+        end
+
+        return true
+    end
+
     if HasKeyboardFocus() or (gui and gui.IsGameUIVisible and gui.IsGameUIVisible()) then return end
     if WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() then return end
 
-    if bind == "invnext" or bind == "invprev" then
-        -- Alt + wheel remains a camera zoom gesture; plain wheel changes weapon.
-        if IsZoomModifierDown() then return end
-        if pressed then WO.WeaponSelector.Cycle(bind == "invprev" and -1 or 1) end
-        return true
-    end
+    local slotText = string.match(bind or "", "^slot(%d+)$")
+    local slot = slotText and tonumber(slotText) or nil
 
-    local digit = string.match(bind or "", "^slot([0-9])$")
-    local slot = digit and tonumber(digit) or nil
+    -- Source/GMod normally binds the physical 0 key to slot10; accept slot0
+    -- too for custom user binds, and map both to the tenth visible weapon.
+    if slot == 10 then slot = 0 end
 
-    if slot ~= nil then
+    if slot ~= nil and slot >= 0 and slot <= 9 then
         if pressed then WO.WeaponSelector.SelectSlot(slot) end
         return true
     end
+end)
+
+WO.Hook.Add("CharacterMenuOpening", "weapon_selector_hide", function()
+    WO.WeaponSelector.Hide()
+    pendingSelection = nil
 end)

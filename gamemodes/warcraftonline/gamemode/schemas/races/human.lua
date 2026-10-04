@@ -8,7 +8,7 @@ WO.Races.Register({
     name = WO.Lang:Get("race.human"),
     description = "Универсальная раса: сильные воины, мудрые маги и ловкие разбойники.",
 
-    -- Только локально доступные WoW-модели; гражданского fallback нет.
+    -- Явные пути WoW-моделей; не зависят от локального file.Exists.
     models = WO.Models.GetRace("human"),
 
     genders = { "male", "female" },
@@ -25,7 +25,7 @@ WO.Races.Register({
     modifiers = {},
 
     -- Доступные классы
-    classes = { "warrior", "mage", "rogue", "ranger" },
+    classes = { "warrior", "paladin", "priest", "mage", "warlock", "rogue", "ranger", "deathknight", "monk" },
 
     customization = {
         bodygroups = {},

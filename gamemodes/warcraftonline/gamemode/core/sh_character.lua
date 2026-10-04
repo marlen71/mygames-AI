@@ -165,6 +165,14 @@ function WO.Character.Validate(data, opts)
         return false, "invalid_race"
     end
 
+    if opts.strict == true then
+        local canCreateRace = WO.Races.CanCreate and WO.Races.CanCreate(race, opts.player)
+
+        if canCreateRace ~= true then
+            return false, "race_unavailable"
+        end
+    end
+
     -- Пол
     local gender = data.gender
     local genders = WO.Config.Genders or { "male", "female" }
@@ -207,10 +215,6 @@ function WO.Character.Validate(data, opts)
 
     if WO.Races.IsModelAllowed and not WO.Races.IsModelAllowed(race, gender, model) then
         return false, "invalid_model"
-    end
-
-    if WO.Models and WO.Models.Exists and not WO.Models.Exists(model) then
-        return false, "model_unavailable"
     end
 
     -- Кастомизация
@@ -298,8 +302,7 @@ function WO.Character.SanitizeLoaded(data)
     end
 
     if not isstring(data.model) or data.model == "" or
-        not WO.Races.IsModelAllowed(data.race, data.gender, data.model) or
-        (WO.Models and WO.Models.Exists and not WO.Models.Exists(data.model)) then
+        not WO.Races.IsModelAllowed(data.race, data.gender, data.model) then
         warnings[#warnings + 1] = "model_unavailable"
         return nil, warnings
     end

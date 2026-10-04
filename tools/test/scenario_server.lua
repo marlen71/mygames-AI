@@ -81,15 +81,108 @@ local serverUUID = WO.Util.UUID()
 LocalPlayer = savedLocalPlayer
 MOCK.Assert(WO.Util.IsUUID(serverUUID), "UUID создаётся на сервере без LocalPlayer")
 end
-MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы зарегистрированы: " ..
+MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() == 17, "все 17 рас зарегистрированы: " ..
     (WO.Races.GetIDs and #WO.Races.GetIDs() or 0))
-local concatenatedHumanModel = "models/mailer/character/human/male/humanmale00_99.mdl"
-MOCK.mountedFiles[concatenatedHumanModel] = true
-player_manager.AddValidModel("humanmale00_99", concatenatedHumanModel)
+local explicitHumanModel = "models/mailer/character/human/male/humanmale00_00.mdl"
+local discoveredHumanModel = "models/mailer/character/human/male/humanmale00_99.mdl"
+MOCK.mountedFiles[explicitHumanModel] = nil
+MOCK.mountedFiles[discoveredHumanModel] = true
+player_manager.AddValidModel("humanmale00_99", discoveredHumanModel)
 WO.Models.RefreshRaceLists()
-MOCK.Assert(table.HasValue(WO.Races.GetModels("human", "male"), concatenatedHumanModel),
-    "server refresh находит player_manager race/gender в слитой строке humanmale00_99")
-MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() >= 4, "классы зарегистрированы")
+local configuredHumanModels = WO.Races.GetModels("human", "male")
+MOCK.Assert(table.HasValue(configuredHumanModels, explicitHumanModel) and
+    not table.HasValue(configuredHumanModels, discoveredHumanModel),
+    "race allowlist берёт явный путь без file.Exists и игнорирует player_manager discovery")
+MOCK.mountedFiles[explicitHumanModel] = true
+MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() == 13,
+    "зарегистрированы базовые и девять новых классов: " ..
+        (WO.Classes.GetIDs and #WO.Classes.GetIDs() or 0))
+
+local expectedRaces = {
+    "human", "elf", "orc", "dwarf", "gnome", "undead", "tauren", "troll", "goblin",
+    "bloodelf", "dracthyr", "draenei", "pandaren", "worgen", "vulpera", "sethrak", "naga",
+}
+local expectedClasses = {
+    "warrior", "mage", "rogue", "ranger", "paladin", "priest", "druid", "shaman",
+    "warlock", "monk", "deathknight", "demonhunter", "evoker",
+}
+local specialRaces = { bloodelf = true, dracthyr = true, vulpera = true }
+local function HasCyrillic(values)
+    for _, value in ipairs(values or {}) do
+        for _, codepoint in utf8.codes(value) do
+            if (codepoint >= 0x0410 and codepoint <= 0x044F) or
+                codepoint == 0x0401 or codepoint == 0x0451 then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local allRaceSchemasValid = true
+for _, raceID in ipairs(expectedRaces) do
+    local race = WO.Races.Get(raceID)
+    local pools = WO.CharacterNames.Get(raceID)
+    local russianName = WO.Lang:Get("race." .. raceID)
+    local raceValid = race ~= nil and race.name == russianName and
+        string.find(russianName, "race.", 1, true) == nil and
+        (race.special == true) == (specialRaces[raceID] == true) and
+        #WO.Races.GetModels(raceID, "male") > 0 and
+        #WO.Races.GetModels(raceID, "female") > 0 and pools ~= nil and
+        #pools.givenNames.male >= 25 and #pools.givenNames.female >= 25 and
+        #pools.surnames >= 24 and HasCyrillic(pools.givenNames.male) and
+        HasCyrillic(pools.givenNames.female) and HasCyrillic(pools.surnames)
+
+    if race and istable(race.classes) then
+        for _, classID in ipairs(race.classes) do
+            if not WO.Classes.Get(classID) then raceValid = false end
+        end
+    end
+
+    allRaceSchemasValid = allRaceSchemasValid and raceValid
+end
+
+local allClassesRegistered = true
+for _, classID in ipairs(expectedClasses) do
+    local class = WO.Classes.Get(classID)
+    allClassesRegistered = allClassesRegistered and class ~= nil and
+        isstring(class.name) and class.name ~= ""
+end
+MOCK.Assert(allRaceSchemasValid and allClassesRegistered,
+    "у всех рас есть русское имя, модели обоих полов, классы и расширенные русские имена/фамилии")
+MOCK.Assert(#WO.Models.GetConfiguredModels("pandaren", "male") == 18 and
+    #WO.Models.GetConfiguredModels("pandaren", "female") == 20 and
+    table.HasValue(WO.Races.GetModels("pandaren", "male"),
+        "models/mailer/character/pandaren/male/pandarenmale05_02.mdl") and
+    table.HasValue(WO.Races.GetModels("pandaren", "female"),
+        "models/mailer/character/pandaren/female/pandarenfemale03_04.mdl"),
+    "статический Pandaren-каталог содержит все 18 male и 20 female подтверждённых вариантов")
+MOCK.Assert(WO.Races.IsSpecial("bloodelf") and WO.Races.IsSpecial("dracthyr") and
+    WO.Races.IsSpecial("vulpera") and not WO.Races.IsSpecial("naga"),
+    "только Blood Elf, Dracthyr и Vulpera отмечены особыми расами")
+local specialRaceData = {
+    name = "Аэлион", surname = "Светлый", age = 25, gender = "male",
+    race = "bloodelf", class = "mage",
+    model = WO.Races.GetModels("bloodelf", "male")[1], customization = {},
+}
+local nonAdminSpecial = MOCK.NewEntity("player")
+local adminSpecial = MOCK.NewEntity("player")
+adminSpecial.__admin = true
+local nonAdminSpecialValid, nonAdminSpecialReason = WO.Character.Validate(specialRaceData,
+    { strict = true, player = nonAdminSpecial })
+local adminSpecialValid = WO.Character.Validate(specialRaceData,
+    { strict = true, player = adminSpecial })
+MOCK.Assert(not nonAdminSpecialValid and nonAdminSpecialReason == "race_unavailable" and
+    adminSpecialValid == true and WO.Races.CanCreate("human", nonAdminSpecial),
+    "строгая race-валидация блокирует особые расы для игрока и пропускает администратора")
+local ordinarySlotPlayer = MOCK.NewEntity("player")
+local adminSlotPlayer = MOCK.NewEntity("player")
+adminSlotPlayer.__admin = true
+MOCK.Assert(WO.Character.GetMaxCharacters(ordinarySlotPlayer) == 2 and
+    WO.Character.GetMaxCharacters(adminSlotPlayer) == 5,
+    "серверный лимит слотов: 2 для обычного игрока и 5 для администратора")
+
 MOCK.Assert(WO.Items.GetAll and table.Count(WO.Items.GetAll()) >= 12,
     "предметы зарегистрированы: " .. (WO.Items.GetAll and table.Count(WO.Items.GetAll()) or 0))
 local allItemsAreOneCell = true
@@ -244,6 +337,12 @@ local arcaneHandsDef = WO.Items.Get("arcane_hands")
 local desiredWeapons = WO.Config.StartingWeaponClasses
 local mageDesired = WO.Loadout.GetDesiredClasses({ class = "mage" })
 local warriorDesired = WO.Loadout.GetDesiredClasses({ class = "warrior" })
+local grimoireClassesAreConfigured = true
+for _, classID in ipairs({ "mage", "priest", "druid", "shaman", "warlock", "evoker" }) do
+    local desired = WO.Loadout.GetDesiredClasses({ class = classID })
+    grimoireClassesAreConfigured = grimoireClassesAreConfigured and
+        #desired == 2 and desired[1] == "drc_unarmed" and desired[2] == "wo_magic_grimoire"
+end
 local mageStartingItems = WO.Classes.GetStartingItems("mage")
 local mageHasKnifeItem = false
 for _, entry in ipairs(mageStartingItems) do
@@ -273,7 +372,8 @@ for _, classId in ipairs(WO.Classes.GetIDs()) do
         if entry.class == "starter_knife" then anyClassStartsWithKnife = true end
     end
 end
-MOCK.Assert(#mageDesired == 2 and mageDesired[1] == "drc_unarmed" and
+MOCK.Assert(grimoireClassesAreConfigured and
+    #mageDesired == 2 and mageDesired[1] == "drc_unarmed" and
     mageDesired[2] == "wo_magic_grimoire" and
     #warriorDesired == 1 and warriorDesired[1] == "drc_unarmed" and
     not mageHasKnifeItem and not anyClassStartsWithKnife and
@@ -289,6 +389,31 @@ local badLoadedCharacter, badModelWarnings = WO.Character.SanitizeLoaded({
 })
 MOCK.Assert(badLoadedCharacter == nil and table.HasValue(badModelWarnings, "model_unavailable"),
     "сохранённая гражданская модель отклоняется без fallback")
+
+local explicitHumanModel = "models/mailer/character/human/male/humanmale00_00.mdl"
+MOCK.mountedFiles[explicitHumanModel] = nil
+local createAllowedWithoutFile, createValidated = WO.Character.Validate({
+    name = "Тест", surname = "Модели", age = 25,
+    race = "human", gender = "male", class = "warrior",
+    model = explicitHumanModel, customization = {},
+}, { strict = true })
+MOCK.Assert(createAllowedWithoutFile and createValidated.model == explicitHumanModel,
+    "создание разрешает точный race model path без file.Exists")
+local validUnmountedCharacter, unmountedWarnings = WO.Character.SanitizeLoaded({
+    id = "valid-unmounted-model", name = "Тест", surname = "Модели", age = 25,
+    race = "human", gender = "male", class = "warrior",
+    model = explicitHumanModel, customization = {},
+})
+MOCK.Assert(validUnmountedCharacter ~= nil and
+    not table.HasValue(unmountedWarnings, "model_unavailable"),
+    "сохранённый allowlisted путь не блокируется локальным file.Exists")
+local directModelPlayer = MOCK.NewEntity("player")
+directModelPlayer:SetCharacter(WO.Character.New(validUnmountedCharacter or {}))
+MOCK.Assert(validUnmountedCharacter ~= nil and
+    WO.Character.ApplyToPlayer(directModelPlayer) == true and
+    directModelPlayer:GetModel() == explicitHumanModel,
+    "сервер применяет точный race model path без обнаружения наличия и citizen fallback")
+MOCK.mountedFiles[explicitHumanModel] = true
 
 local invalidModelPlayer = MOCK.NewEntity("player")
 invalidModelPlayer:SetCharacter(WO.Character.New({
@@ -441,6 +566,35 @@ MOCK.Assert(ply:GetStamina() > 0,
     "персонаж входит в мир с полной выносливостью для стартового оружия")
 MOCK.Assert(#WO.Character.LoadList(ply) == 1, "повторный net-запрос не создал дубликат")
 
+local function MakeSlotTestPlayer(steamid, isAdmin)
+    local testPlayer = MOCK.NewEntity("player")
+    testPlayer.__steamid = steamid
+    testPlayer.__steamid64 = steamid .. "64"
+    testPlayer.__admin = isAdmin == true
+    testPlayer.__nick = isAdmin and "Администратор слотов" or "Игрок слотов"
+    return testPlayer
+end
+
+local slotData = table.Copy(createData)
+local ordinarySlotPlayer = MakeSlotTestPlayer("STEAM_0:1:10001", false)
+local regularSlotResults = {}
+for _ = 1, 3 do
+    local ok, result = WO.Character.Create(ordinarySlotPlayer, slotData)
+    regularSlotResults[#regularSlotResults + 1] = { ok = ok, result = result }
+end
+local slotAdminPlayer = MakeSlotTestPlayer("STEAM_0:1:10002", true)
+local adminSlotResults = {}
+for _ = 1, 6 do
+    local ok, result = WO.Character.Create(slotAdminPlayer, slotData)
+    adminSlotResults[#adminSlotResults + 1] = { ok = ok, result = result }
+end
+MOCK.Assert(regularSlotResults[1].ok and regularSlotResults[2].ok and
+    regularSlotResults[3].ok == false and regularSlotResults[3].result == "character_limit" and
+    adminSlotResults[1].ok and adminSlotResults[2].ok and adminSlotResults[3].ok and
+    adminSlotResults[4].ok and adminSlotResults[5].ok and
+    adminSlotResults[6].ok == false and adminSlotResults[6].result == "character_limit",
+    "Character.Create соблюдает пределы 2/5 даже при прямых серверных запросах")
+
 print("[scenario] create OK: " .. char:GetFullName() .. " lvl " .. char:GetLevel())
 
 -- Повторный вход: сервер должен открыть список сохранённых персонажей, а не создать дубликат.
@@ -573,33 +727,32 @@ local function AddSpellScroll(ply, spellId, targetRank)
 end
 
 MOCK.Assert(WO.Spells.PointsAvailable(mageCharacter) == 1 and
-    WO.Spells.LearnOrUpgrade(magePlayer, "healing_wave") == false and
-    WO.Spells.GetRank(mageCharacter, "healing_wave") == 0,
-    "сервер запрещает изучение заклинания без принадлежащего игроку свитка")
-local learningUID = AddSpellScroll(magePlayer, "healing_wave", 1)
-MOCK.Assert(learningUID and WO.Inventory.UseItem(magePlayer, learningUID) == true and
-    WO.Spells.GetRank(mageCharacter, "healing_wave") == 1 and
-    WO.Inventory.GetContainer(mageCharacter):CountItem("spell_scroll_healing_wave_learn") == 0 and
-    WO.Spells.Select(magePlayer, "healing_wave") == true,
-    "маг изучает заклинание расходуемым свитком, который удаляется после успеха")
-local noSpellPointsUID = AddSpellScroll(magePlayer, "firebolt", 1)
-local noSpellPoints, noSpellPointsReason = WO.Inventory.UseItem(magePlayer, noSpellPointsUID)
-MOCK.Assert(noSpellPoints == false and noSpellPointsReason == "no_points" and
-    WO.Spells.GetRank(mageCharacter, "firebolt") == 0 and
-    WO.Inventory.GetContainer(mageCharacter):CountItem("spell_scroll_firebolt_learn") == 1,
-    "сервер не расходует свиток, если у мага недостаточно доступных очков")
+    WO.Spells.GetRank(mageCharacter, "healing_wave") == 0 and
+    WO.Spells.CanCast(magePlayer, "healing_wave") == false,
+    "заклинание недоступно без соответствующего свитка в серверном инвентаре")
+local learningUID, learningClass = AddSpellScroll(magePlayer, "healing_wave", 1)
+local canCastHealing = WO.Spells.CanCast(magePlayer, "healing_wave")
+MOCK.Assert(learningUID and WO.Spells.GetRank(mageCharacter, "healing_wave") == 1 and
+    WO.Inventory.GetContainer(mageCharacter):CountItem(learningClass) == 1 and
+    canCastHealing == true and WO.Spells.Select(magePlayer, "healing_wave") == true,
+    "свиток изучения автоматически открывает магию, остаётся в инвентаре и даёт каст")
+local fireboltUID, fireboltClass = AddSpellScroll(magePlayer, "firebolt", 1)
+MOCK.Assert(fireboltUID and WO.Spells.GetRank(mageCharacter, "firebolt") == 1 and
+    WO.Inventory.GetContainer(mageCharacter):CountItem(fireboltClass) == 1,
+    "наличие свитка изучения синхронно открывает второе заклинание без его использования")
 MOCK.TakeOutbox()
-MOCK.NetDeliver({ name = "Spell.Learn", args = { "firebolt" } }, 8, magePlayer)
-MOCK.Assert(WO.Spells.GetRank(mageCharacter, "firebolt") == 0,
+MOCK.NetDeliver({ name = "Spell.Learn", args = { "air_burst" } }, 8, magePlayer)
+MOCK.Assert(WO.Spells.GetRank(mageCharacter, "air_burst") == 0,
     "legacy Spell.Learn packet не позволяет получить ранг без свитка")
 MOCK.TakeOutbox()
 WO.Spells.Sync(magePlayer)
 local spellSyncOutbox = MOCK.TakeOutbox()
 local spellPayloads = MOCK.FindInbox(spellSyncOutbox, "Spell.Sync")
 MOCK.Assert(#spellPayloads == 1 and spellPayloads[1].args[1].ranks.healing_wave == 1 and
+    spellPayloads[1].args[1].ranks.firebolt == 1 and
     spellPayloads[1].args[1].selected == "healing_wave" and
     spellPayloads[1].args[1].points == 0,
-    "spellbook синхронизируется собственным payload, не CharacterSync")
+    "spellbook передаёт ранги из инвентарных свитков собственным payload")
 WO.Hook.Run("CharacterSave", mageCharacter)
 local savedAbilityRows = WO.Database:Fetch(
     "SELECT data FROM wo_abilities WHERE owner_id = ? AND ability_id = ?",
@@ -607,10 +760,16 @@ local savedAbilityRows = WO.Database:Fetch(
 local savedBook = savedAbilityRows[1] and util.JSONToTable(savedAbilityRows[1].data or "")
 local reloadedMage = WO.Character.New({ id = mageCharacter.id, class = "mage", level = 1 })
 WO.Hook.Run("CharacterLoad", reloadedMage)
+local reloadedInventory = WO.Inventory.GetContainer(reloadedMage)
+for _, scrollClass in ipairs({ learningClass, fireboltClass }) do
+    local restoredScroll = WO.Items.CreateInstance(scrollClass, 1)
+    reloadedInventory:AddItem(restoredScroll)
+end
 MOCK.Assert(savedBook and savedBook.ranks.healing_wave == 1 and savedBook.selected == "healing_wave" and
     WO.Spells.GetRank(reloadedMage, "healing_wave") == 1 and
+    WO.Spells.GetRank(reloadedMage, "firebolt") == 1 and
     WO.Spells.GetSelected(reloadedMage) == "healing_wave",
-    "ранг и выбор заклинания сохраняются в plugin persistence и переживают reload персонажа")
+    "после reload ранги берутся из восстановленных предметов, а выбор сохраняется")
 
 local spellAlly = MOCK.NewEntity("player")
 spellAlly:SetCharacter(WO.Character.New({ id = "spell-ally-test", class = "warrior" }))
@@ -625,20 +784,40 @@ spellAlly:SetPos(Vector(5000, 0, 0))
 local selfHealed, selfTarget = WO.Spells.Apply(magePlayer, "healing_wave", spellAlly)
 MOCK.Assert(selfHealed == true and selfTarget == magePlayer and magePlayer:Health() > 30,
     "healing spell безопасно перенаправляется на владельца за пределами радиуса")
-local rankTwoScrollUID = AddSpellScroll(magePlayer, "firebolt", 2)
-local prematureRankTwo, prematureRankReason = WO.Inventory.UseItem(magePlayer, rankTwoScrollUID)
-MOCK.Assert(prematureRankTwo == false and prematureRankReason == "level" and
-    WO.Spells.GetRank(mageCharacter, "firebolt") == 0,
-    "уровневый свиток нельзя использовать раньше минимального уровня")
-mageCharacter.level = 2
-MOCK.Assert(WO.Inventory.UseItem(magePlayer, noSpellPointsUID) == true and
+local rankTwoScrollUID, rankTwoScrollClass = AddSpellScroll(magePlayer, "firebolt", 2)
+MOCK.Assert(rankTwoScrollUID and WO.Spells.GetRank(mageCharacter, "firebolt") == 2 and
+    WO.Inventory.GetContainer(mageCharacter):CountItem(rankTwoScrollClass) == 1,
+    "свиток ранга два сразу повышает магию в инвентаре без использования, траты или level gate")
+local rankThreeScrollUID, rankThreeScrollClass = AddSpellScroll(magePlayer, "firebolt", 3)
+MOCK.Assert(rankThreeScrollUID and WO.Spells.GetRank(mageCharacter, "firebolt") == 3 and
+    WO.Inventory.GetContainer(mageCharacter):CountItem(rankThreeScrollClass) == 1,
+    "свиток ранга три автоматически задаёт ранг без использования или требования уровня")
+MOCK.Assert(WO.Inventory.RemoveItem(magePlayer, rankThreeScrollUID, 1) == true and
+    WO.Spells.GetRank(mageCharacter, "firebolt") == 2,
+    "удаление старшего свитка пересчитывает ранг по оставшемуся инвентарю")
+MOCK.Assert(WO.Inventory.DropItem(magePlayer, rankTwoScrollUID, 1) == true and
     WO.Spells.GetRank(mageCharacter, "firebolt") == 1,
-    "покупка и использование свитка изучения открывается на нужном уровне")
-mageCharacter.level = 4
-local rankThreeScrollUID = AddSpellScroll(magePlayer, "firebolt", 3)
-MOCK.Assert(rankThreeScrollUID and WO.Inventory.UseItem(magePlayer, rankThreeScrollUID) == true and
-    WO.Spells.GetRank(mageCharacter, "firebolt") == 3,
-    "старый ранг заменяется более высоким свитком после проверки уровня и очков")
+    "сброс свитка немедленно отзывает его ранг из серверной книги")
+local droppedRankTwo
+for _, ent in ipairs(ents.GetAll()) do
+    if ent:GetClass() == "wo_item_world" and ent.ItemInstance and
+        ent.ItemInstance.uid == rankTwoScrollUID then
+        droppedRankTwo = ent
+        break
+    end
+end
+MOCK.Assert(IsValid(droppedRankTwo), "свиток улучшения создаёт физический предмет мира")
+if IsValid(droppedRankTwo) then
+    magePlayer:SetPos(droppedRankTwo:GetPos())
+    droppedRankTwo.PickupCooldown = 0
+    droppedRankTwo:Use(magePlayer, magePlayer)
+end
+MOCK.Assert(not IsValid(droppedRankTwo) and WO.Spells.GetRank(mageCharacter, "firebolt") == 2,
+    "подбор выпавшего свитка синхронизирует его ранг без использования предмета")
+MOCK.Assert(WO.Inventory.RemoveItem(magePlayer, learningUID, 1) == true and
+    WO.Spells.GetRank(mageCharacter, "healing_wave") == 0 and
+    WO.Spells.CanCast(magePlayer, "healing_wave") == false,
+    "сервер отзывает доступ к магии после ухода соответствующего свитка из инвентаря")
 end
 local spellEnemy = MOCK.NewEntity("npc")
 spellEnemy:SetHealth(200)
@@ -965,8 +1144,9 @@ local marshal = FindNPC("marshal_dughal")
 local marla = FindNPC("trader_marla")
 local hunter = FindNPC("hunter_dyrne")
 local mountVendor = FindNPC("mount_merchant")
+local malygos = FindNPC("malygos_scroll_vendor")
 
-MOCK.Assert(marshal and marla and hunter and mountVendor and
+MOCK.Assert(marshal and marla and hunter and mountVendor and malygos and
     #FindNPCs("marshal_dughal") == 1 and #FindNPCs("trader_marla") == 1 and
     #FindNPCs("hunter_dyrne") == 1 and #FindNPCs("mount_merchant") == 1,
     "маршал, торговец, отдельный охотник и торговец маунтами размещены по одному")
@@ -1034,7 +1214,7 @@ MOCK.Assert(suppliesQuest.status == "completed" and
     ply:GetCharacter().quests["boar_hunt"] == nil,
     "хлеб сдаётся независимо от обязательной охотничьей цепочки")
 
--- Торговец покупает низкоуровневый хлам, но не принимает хлеб обратно.
+-- Торговец покупает материалы и возвращает деньги за собственный ассортимент.
 ply:SetPos(marla:GetPos())
 marla:Use(ply, ply)
 MOCK.Assert(ChooseDialogueAction(ply, "next:work"), "торговец открывает узел работы")
@@ -1049,9 +1229,34 @@ local vendorMoneyBefore = WO.Currency.Get(ply)
 MOCK.NetDeliver({ name = "Vendor.Buy", args = { "trader_marla", "health_potion", 2 } }, 8, ply)
 MOCK.Assert(WO.Currency.Get(ply) == vendorMoneyBefore - 50,
     "покупка у торговца валидирует stock и списывает серверную цену")
-MOCK.Assert(WO.Vendors.GetSellPrice(marla.npcDef, "bread") == nil and
-    WO.Inventory.GiveItem(ply, "boar_tusk", 1) == true,
-    "торговец покупает только заданные низкоуровневые материалы, не обычный хлеб")
+local vendorActionOutbox = MOCK.TakeOutbox()
+local vendorActionResults = MOCK.FindInbox(vendorActionOutbox, "Vendor.ActionResult")
+MOCK.Assert(#vendorActionResults == 1 and vendorActionResults[1].args[1].success == true,
+    "сервер подтверждает завершение покупки торговцу, чтобы UI не ждал повторных нажатий")
+MOCK.NetDeliver({ name = "Vendor.Buy", args = { "trader_marla", "not_in_stock_item", 1 } }, 8, ply)
+local failedVendorResult = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.ActionResult")
+MOCK.Assert(#failedVendorResult == 1 and failedVendorResult[1].args[1].success == false and
+    failedVendorResult[1].args[1].reason == "not_in_stock",
+    "сервер немедленно возвращает причину отклонённой покупки вместо молчаливого отказа")
+local boughtPotionUID
+for uid, instance in pairs(WO.Inventory.GetContainer(ply:GetCharacter()):GetItems()) do
+    if instance.class == "health_potion" then boughtPotionUID = uid break end
+end
+local potionSellPrice = WO.Vendors.GetSellPrice(marla.npcDef, "health_potion")
+local potionAmountBeforeSale = WO.Inventory.GetContainer(ply:GetCharacter()):CountItem("health_potion")
+local moneyBeforePotionSale = WO.Currency.Get(ply)
+local potionSold = boughtPotionUID and
+    WO.Vendors.Sell(ply, "trader_marla", boughtPotionUID, 1) == true
+local potionAmountAfterSale = WO.Inventory.GetContainer(ply:GetCharacter()):CountItem("health_potion")
+local breadSellPrice = WO.Vendors.GetSellPrice(marla.npcDef, "bread")
+local tuskGiven = WO.Inventory.GiveItem(ply, "boar_tusk", 1)
+MOCK.Assert(boughtPotionUID and potionSellPrice and potionSold and
+    WO.Currency.Get(ply) == moneyBeforePotionSale + potionSellPrice and
+    potionAmountAfterSale == potionAmountBeforeSale - 1 and breadSellPrice ~= nil and tuskGiven == true,
+    "торговец принимает обратно предметы собственной витрины и корректно проводит продажу: " ..
+        tostring(boughtPotionUID) .. "/" .. tostring(potionSellPrice) .. "/" ..
+        tostring(potionSold) .. "/" .. tostring(potionAmountAfterSale) .. "/" .. tostring(breadSellPrice) ..
+        "/" .. tostring(tuskGiven))
 local tuskUID
 for uid, instance in pairs(WO.Inventory.GetContainer(ply:GetCharacter()):GetItems()) do
     if instance.class == "boar_tusk" then tuskUID = uid break end
@@ -1060,6 +1265,26 @@ local junkMoneyBefore = WO.Currency.Get(ply)
 MOCK.Assert(tuskUID and WO.Vendors.Sell(ply, "trader_marla", tuskUID, 1) == true and
     WO.Currency.Get(ply) > junkMoneyBefore,
     "низкоуровневый трофей продаётся за серверную цену торговцу")
+
+local oldScrollClass = WO.Spells.GetScrollClass("healing_wave", 1)
+MOCK.Assert(WO.Inventory.GiveItem(ply, oldScrollClass, 1) == true,
+    "старый свиток помещается в инвентарь для проверки перепродажи")
+local oldScrollUID
+for uid, instance in pairs(WO.Inventory.GetContainer(ply:GetCharacter()):GetItems()) do
+    if instance.class == oldScrollClass then oldScrollUID = uid break end
+end
+ply:SetPos(malygos:GetPos())
+MOCK.Assert(WO.Vendors.Open(ply, malygos.npcDef, malygos) == true,
+    "Малигос открывает серверную сессию для возврата свитка")
+local scrollSellPrice = WO.Vendors.GetSellPrice(malygos.npcDef, oldScrollClass)
+local moneyBeforeScrollSale = WO.Currency.Get(ply)
+MOCK.Assert(oldScrollUID and scrollSellPrice and
+    WO.Vendors.Sell(ply, "malygos_scroll_vendor", oldScrollUID, 1) == true and
+    WO.Currency.Get(ply) == moneyBeforeScrollSale + scrollSellPrice and
+    WO.Inventory.GetContainer(ply:GetCharacter()):CountItem(oldScrollClass) == 0,
+    "старые магические свитки отображаются и успешно продаются NPC-Малигосу")
+ply.wo_vendor = nil
+ply:SetPos(marla:GetPos())
 MOCK.AdvanceTime(5) -- separate test phases to respect the real dialogue rate limit
 
 -- Сохранённое старое active-состояние не обходит новый prerequisite волчьей цепочки.

@@ -548,13 +548,8 @@ function WO.Workshop.GetDiagnostics()
 end
 
 if WO.Models and WO.Models.RefreshRaceLists then
+    -- Rebuild from the explicit race catalog; no content scanning or polling.
     WO.Models.RefreshRaceLists()
-
-    -- Locally installed model registrations may become available shortly after
-    -- startup. Rebuild the validated lists briefly; UI opens can refresh on demand.
-    timer.Create("wo_workshop_race_model_refresh", 2, 15, function()
-        WO.Models.RefreshRaceLists()
-    end)
 end
 
 WO.Log("Workshop asset adapter loaded (" .. table.Count(WO.Workshop.Catalog) .. " catalog entries)")

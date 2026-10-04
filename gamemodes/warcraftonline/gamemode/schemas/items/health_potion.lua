@@ -8,7 +8,8 @@ WO.Items.Register({
     type = "consumable",
     category = "potion",
 
-    model = "models/props_junk/glassjug001a.mdl",
+    model = "models/healthvial.mdl",
+    iconText = "✚",
     weight = 1,
 
     size = { w = 1, h = 1 },

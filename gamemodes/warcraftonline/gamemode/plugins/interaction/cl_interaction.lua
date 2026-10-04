@@ -17,6 +17,42 @@ local function IsResourceEntity(ent)
     return class == "wo_item_world" or class == "wo_coin_pile"
 end
 
+-- Tiny props can be hard to hit with the eye trace. Let E target the nearest
+-- in-front resource in a short radius; the server still validates range,
+-- cooldown, entity state, inventory space, and pickup ownership independently.
+local function FindNearbyResource(ply)
+    if not ents or not isfunction(ents.FindInSphere) or not isfunction(ply.GetAimVector) then
+        return nil
+    end
+
+    local searchRadius = math.min(96, tonumber(WO.Config.InteractDistance) or 100)
+    local origin = ply:GetPos()
+    local eye = isfunction(ply.EyePos) and ply:EyePos() or origin
+    local aim = ply:GetAimVector()
+    local best, bestScore
+
+    for _, candidate in ipairs(ents.FindInSphere(origin, searchRadius)) do
+        if IsResourceEntity(candidate) and WO.Interaction.CanInteract(candidate, ply) then
+            local center = isfunction(candidate.WorldSpaceCenter) and candidate:WorldSpaceCenter() or
+                candidate:GetPos()
+            local offset = center - eye
+            local distance = offset:Length()
+            local facing = distance > 0 and offset:GetNormalized():Dot(aim) or 1
+
+            if distance <= searchRadius and facing >= 0.25 then
+                local score = distance - facing * 16
+
+                if not bestScore or score < bestScore then
+                    best = candidate
+                    bestScore = score
+                end
+            end
+        end
+    end
+
+    return best
+end
+
 --- Клиентские данные карточки извлекаются только из безопасных NW2/schema полей.
 function WO.Interaction.GetResourceHoverInfo(ent)
     if not IsResourceEntity(ent) then return nil end
@@ -68,6 +104,11 @@ function WO.Interaction.UpdateClientTarget()
     local ent = trace and trace.Entity
     local inRange = IsValid(ent) and
         ent:GetPos():Distance(ply:GetPos()) <= WO.Interaction.GetRange(ent)
+
+    if not (inRange and WO.Interaction.CanInteract(ent, ply)) then
+        ent = FindNearbyResource(ply)
+        inRange = IsValid(ent)
+    end
 
     if inRange and WO.Interaction.CanInteract(ent, ply) then
         currentEnt = ent

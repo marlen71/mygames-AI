@@ -89,12 +89,19 @@ function WO.Vendors.Open(ply, npcDef, ent)
         npcDef = npcDef,
     }
 
+    -- The sell column reads the client inventory cache. Send it before opening
+    -- the UI so the first render can list owned items immediately.
+    if WO.Inventory and isfunction(WO.Inventory.Sync) then
+        WO.Inventory.Sync(ply)
+    end
+
     WO.Net.Send("Vendor.Open", ply, {
         npcId = npcDef.id or "",
         npcName = npcDef.name or "",
     })
 
     SendSync(ply)
+    return true
 end
 
 --- Покупка товара (сервер валидирует всё).
@@ -127,7 +134,6 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
     local total = price * amount
 
     if not WO.Currency.CanAfford(ply, total) then
-        WO.Notify(ply, "error", WO.Lang:Get("vendor.not_enough_money"))
         return false, "not_enough_money"
     end
 
@@ -141,7 +147,6 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
         local purchased, reason = WO.Mounts.Purchase(ply, class, price)
 
         if not purchased then
-            WO.Notify(ply, "error", "Покупка маунта отклонена: " .. tostring(reason or "ошибка"))
             return false, reason or "mount_purchase_failed"
         end
 
@@ -154,7 +159,6 @@ function WO.Vendors.Buy(ply, npcId, class, amount)
     local given = WO.Inventory.GiveItem(ply, class, amount)
 
     if given == false then
-        WO.Notify(ply, "error", WO.Lang:Get("vendor.inventory_full"))
         return false, "inventory_full"
     end
 
@@ -183,6 +187,12 @@ function WO.Vendors.Sell(ply, npcId, uid, amount)
 
     if not instance then
         return false, "no_item"
+    end
+
+    amount = math.floor(tonumber(amount) or 0)
+
+    if amount < 1 then
+        return false, "invalid_amount"
     end
 
     if not WO.Items.IsInventoryAllowed(instance.class) then

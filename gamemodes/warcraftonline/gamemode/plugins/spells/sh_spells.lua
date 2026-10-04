@@ -1,7 +1,7 @@
 --[[
     Warcraft Online — общая часть книги заклинаний.
-    Данные живут в schemas/spells; прогрессия магии выдаётся consumable-свитками,
-    а обучение, выбор и применение повторно валидируются сервером.
+    Данные живут в schemas/spells; серверная прогрессия автоматически считается
+    по находящимся в инвентаре свиткам и повторно валидируется перед cast/select.
 ]]
 
 WO.Spells = WO.Spells or {}
@@ -83,14 +83,13 @@ function WO.Spells.BuildScrollCatalog()
                 ((tonumber(config.rankPriceMultiplier) or 1.5) +
                     (targetRank - 2) * (tonumber(config.rankPriceStep) or 0.5))
             local price = math.max(1, math.floor(spell.scrollPrice * priceMultiplier))
-            local requiredLevel = spell.requiredLevel + targetRank - 1
             local isLearning = targetRank == 1
             local label = isLearning and "Свиток: " .. spell.name or
                 "Свиток ранга " .. targetRank .. ": " .. spell.name
             local description = isLearning and
-                ("Используйте, чтобы изучить «" .. spell.name .. "». Требуемый уровень: " .. requiredLevel .. ".") or
-                ("Устанавливает ранг " .. targetRank .. " заклинания «" .. spell.name ..
-                    "», заменяя меньший ранг. Требуемый уровень: " .. requiredLevel .. ".")
+                ("Пока находится в инвентаре, автоматически открывает «" .. spell.name .. "».") or
+                ("Пока находится в инвентаре, автоматически устанавливает ранг " .. targetRank ..
+                    " заклинания «" .. spell.name .. "».")
 
             if not WO.Items.Get(class) then
                 WO.Items.Register({
@@ -104,20 +103,12 @@ function WO.Spells.BuildScrollCatalog()
                     maxStack = math.max(1, math.floor(tonumber(config.stackSize) or 20)),
                     rarity = targetRank >= 4 and "rare" or "uncommon",
                     description = description,
-                    requirements = { class = "mage", level = requiredLevel },
+                    requirements = { class = "mage" },
                     spellScroll = {
                         spellId = spellId,
                         targetRank = targetRank,
-                        requiredLevel = requiredLevel,
                     },
-                    consumeOnUse = true,
-                    useHandler = function(ply, instance)
-                        if not (WO.Spells and isfunction(WO.Spells.UseScroll)) then
-                            return false, "spell_system_unavailable"
-                        end
-
-                        return WO.Spells.UseScroll(ply, instance)
-                    end,
+                    iconText = "✦",
                     price = { buy = price, sell = math.max(1, math.floor(price * 0.4)) },
                 })
             end
@@ -159,8 +150,8 @@ WO.Net.Register("Spell.Sync", {
     end,
 })
 
--- Legacy packet is deliberately not sufficient to learn a spell. The server
--- rejects it unless a matching, server-owned scroll is used via Inventory.Use.
+-- Legacy packet is deliberately not sufficient to grant a spell. The server
+-- rejects direct learning; possession of the matching server-side scroll is passive.
 WO.Net.Register("Spell.Learn", {
     direction = "toserver",
     rate = { max = 4, window = 5 },
@@ -174,9 +165,8 @@ WO.Net.Register("Spell.Learn", {
         return true
     end,
     handler = function(ply)
-        -- Compatibility packet only: progress is never granted without consuming
-        -- the matching server-owned scroll from the player's inventory.
-        if SERVER then WO.Notify(ply, "error", "Для изучения используйте соответствующий свиток.") end
+        -- Compatibility packet only: inventory changes passively update spell ranks.
+        if SERVER then WO.Notify(ply, "error", "Ранг задаётся свитком, который находится в инвентаре.") end
     end,
 })
 

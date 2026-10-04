@@ -1,8 +1,17 @@
--- Earth, sky, and ancestral names for tauren.
+-- Earth, sky, and ancestral names for tauren with Russian-language choices.
 WO.CharacterNames.Register("tauren", {
     givenNames = {
-        male = { "Kaima", "Tahu", "Anoki", "Makoa", "Ahan", "Turok", "Atohi", "Wakan", "Chaska", "Hakan", "Pahana", "Otaki" },
-        female = { "Samara", "Naira", "Maka", "Taya", "Noka", "Aponi", "Tala", "Kiona", "Ayita", "Winona", "Kanti", "Ayasha" },
+        male = {
+            "Kaima", "Tahu", "Anoki", "Makoa", "Ahan", "Turok", "Atohi", "Wakan", "Chaska", "Hakan", "Pahana", "Otaki",
+            "Кайма", "Таху", "Аноки", "Макоа", "Ахан", "Турок", "Атохи", "Вакан", "Часка", "Хакан", "Пахана", "Отаки", "Танок", "Камак", "Орота", "Тайхо", "Макаи", "Вахан", "Нокара", "Чайтан", "Тарок", "Каноха", "Арутан", "Ветрокрыл",
+        },
+        female = {
+            "Samara", "Naira", "Maka", "Taya", "Noka", "Aponi", "Tala", "Kiona", "Ayita", "Winona", "Kanti", "Ayasha",
+            "Самара", "Найра", "Мака", "Тая", "Нока", "Апони", "Тала", "Киона", "Айита", "Винона", "Канти", "Аяша", "Майя", "Найока", "Сахара", "Талия", "Касима", "Акина", "Каника", "Омана", "Вайна", "Таная", "Лунара", "Зоряна",
+        },
     },
-    surnames = { "Thunderhoof", "Sunwalker", "Skyhorn", "Earthcaller", "Dawnstrider", "Riverwind", "Stormhide", "Farwalker", "Plainsong", "Redcloud", "Tallgrass", "Windhoof" },
+    surnames = {
+        "Thunderhoof", "Sunwalker", "Skyhorn", "Earthcaller", "Dawnstrider", "Riverwind", "Stormhide", "Farwalker", "Plainsong", "Redcloud", "Tallgrass", "Windhoof",
+        "Громовое Копыто", "Солнечный Странник", "Небесный Рог", "Зов Земли", "Путник Зари", "Речной Ветер", "Штормовая Шкура", "Дальний Путь", "Песнь Степей", "Красное Облако", "Высокая Трава", "Ветрокопыт", "Седой Бизон", "Тихая Река", "Олений Рог", "Степной Дозор", "Сильное Копыто", "Облачный След", "Пыльная Тропа", "Звёздный Табун", "Дух Равнины", "Каменная Грива",
+    },
 })

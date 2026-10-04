@@ -161,6 +161,31 @@ end
 -- Создание персонажа
 ---------------------------------------------------------------------------
 
+--- Возвращает серверный лимит с учётом статуса администратора.
+-- GetExtraCharacterSlots — нейтральная точка расширения; сейчас возвращает 0.
+function WO.Character.GetMaxCharacters(ply)
+    local limit = tonumber(WO.Config.MaxCharacters) or 2
+    local isAdmin = WO.Admin and isfunction(WO.Admin.IsAdmin) and WO.Admin.IsAdmin(ply)
+
+    if isAdmin then
+        limit = tonumber(WO.Config.AdminMaxCharacters) or 5
+    end
+
+    local getExtraSlots = WO.Config.GetExtraCharacterSlots
+
+    if isfunction(getExtraSlots) then
+        local ok, extraSlots = pcall(getExtraSlots, ply, limit)
+
+        if ok then
+            limit = limit + math.max(0, tonumber(extraSlots) or 0)
+        else
+            WO.Warn("GetExtraCharacterSlots failed: " .. tostring(extraSlots))
+        end
+    end
+
+    return math.max(1, math.floor(limit))
+end
+
 --[[
     Создаёт нового персонажа. Все данные проходят серверную валидацию.
 
@@ -172,17 +197,10 @@ function WO.Character.Create(ply, data)
     if not IsValid(ply) then return false, "invalid_player" end
 
     local steamid = ply:SteamID()
-    local maxChars = WO.Config.MaxCharacters or 5
-
-    -- Ограничение количества персонажей
-    local count = tonumber(WO.Database:FetchValue("SELECT COUNT(*) FROM wo_characters WHERE steamid = ?", steamid)) or 0
-
-    if count >= maxChars then
-        return false, "character_limit"
-    end
+    local maxChars = WO.Character.GetMaxCharacters(ply)
 
     -- Строгая валидация (клиенту не доверяем)
-    local valid, result = WO.Character.Validate(data, { strict = true })
+    local valid, result = WO.Character.Validate(data, { strict = true, player = ply })
 
     if not valid then
         WO.Warn("Character creation rejected for " .. ply:Nick() .. ": " .. tostring(result))
@@ -212,10 +230,25 @@ function WO.Character.Create(ply, data)
         lastPlayed = WO.Util.Time(),
     })
 
-    -- Сохраняем в БД
+    -- Сохраняем в БД. Лимит повторно проверяется внутри транзакции,
+    -- чтобы параллельные запросы не могли обойти ограничение слотов.
     local row = CharacterToRow(char)
+    local limitReached = false
 
     local saved = WO.Database:Transaction(function()
+        local count = tonumber(WO.Database:FetchValue(
+            "SELECT COUNT(*) FROM wo_characters WHERE steamid = ?", steamid
+        ))
+
+        if count == nil then
+            error("character count query failed")
+        end
+
+        if count >= maxChars then
+            limitReached = true
+            return
+        end
+
         if not WO.Database:Insert("wo_characters", row) then
             error("insert failed")
         end
@@ -223,6 +256,10 @@ function WO.Character.Create(ply, data)
         -- Плагины создают свои данные (инвентарь, экипировка и т.д.)
         WO.Hook.Run("CharacterCreate", char)
     end)
+
+    if limitReached then
+        return false, "character_limit"
+    end
 
     if not saved then
         return false, "database_error"
@@ -283,9 +320,8 @@ function WO.Character.Load(ply, charId)
 
     local char = RowToCharacter(rows[1])
 
-    -- Валидируем сохранённые данные до привязки к игроку. Модель не подменяется
-    -- гражданской: если её локальный файл отсутствует, выбор безопасно отклоняется,
-    -- чтобы администратор восстановил модель или пересоздал персонажа.
+    -- Валидируем сохранённые данные по allowlist рас/пола; наличие модели в
+    -- локальном файловом реестре не блокирует выбранный точный путь.
     local clean, warnings = WO.Character.SanitizeLoaded(char)
 
     for _, warning in ipairs(warnings) do
@@ -521,17 +557,15 @@ function WO.Character.ApplyToPlayer(ply)
     end
 
     if not isstring(char.model) or char.model == "" or
-        not WO.Races.IsModelAllowed(char.race, char.gender, char.model) or
-        not WO.Models.Exists(char.model) or
-        (util.IsValidModel and not util.IsValidModel(char.model)) then
-        WO.Warn("ApplyToPlayer rejected unavailable race model for character " .. tostring(char.id))
+        not WO.Races.IsModelAllowed(char.race, char.gender, char.model) then
+        WO.Warn("ApplyToPlayer rejected model outside race/gender catalog for character " .. tostring(char.id))
         ply:SetNW2Bool("wo_char_active", false)
         ply:SetNW2String("wo_character_id", "")
         WO.Character.EnterLimbo(ply)
         return false
     end
 
-    -- Only the server-validated, mounted race model can be applied.
+    -- Apply the exact server-allowlisted race path; never substitute a citizen model.
     ply:SetModel(char.model)
 
     -- Кастомизация: skin, bodygroups, color

@@ -23,13 +23,20 @@ local function GetDesired(char)
 
     add(configured.hands)
 
-    local isMage = char and char.class == "mage"
+    local usesGrimoire = false
 
-    if isMage then
+    for _, classID in ipairs(configured.grimoireClasses or { "mage" }) do
+        if char and char.class == classID then
+            usesGrimoire = true
+            break
+        end
+    end
+
+    if usesGrimoire then
         add(configured.mage)
     end
 
-    local primary = isMage and configured.mage or configured.hands
+    local primary = usesGrimoire and configured.mage or configured.hands
 
     return desired, primary
 end

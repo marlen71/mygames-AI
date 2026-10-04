@@ -1,8 +1,17 @@
--- Rhythmic tribal names for trolls; apostrophes are allowed by name validation.
+-- Rhythmic tribal troll names with expanded Russian-language variants.
 WO.CharacterNames.Register("troll", {
     givenNames = {
-        male = { "Zekani", "Zul'khan", "Jal'rok", "Rok'jin", "Zandor", "Taz'jin", "Kraz'zul", "Jek'ro", "Vaz'kala", "Mal'jin", "Razzik", "Jin'to" },
-        female = { "Zal'kiri", "Jala", "Vez'ra", "Taz'aya", "Kal'jin", "Zun'ari", "Rika", "Vol'kara", "Sha'zi", "Jaz'ka", "Miza", "Zhari" },
+        male = {
+            "Zekani", "Zul'khan", "Jal'rok", "Rok'jin", "Zandor", "Taz'jin", "Kraz'zul", "Jek'ro", "Vaz'kala", "Mal'jin", "Razzik", "Jin'to",
+            "Зекани", "Зул'хан", "Джал'рок", "Рок'джин", "Зандор", "Таз'джин", "Краз'зул", "Джек'ро", "Ваз'кала", "Мал'джин", "Раззик", "Джин'то", "Зан'кари", "Тар'зул", "Мок'дара", "Ран'джи", "Кал'рок", "Вол'джак", "Даз'кан", "Зир'то", "Драк'ша", "Ган'рок", "Мал'зари", "Шак'ти",
+        },
+        female = {
+            "Zal'kiri", "Jala", "Vez'ra", "Taz'aya", "Kal'jin", "Zun'ari", "Rika", "Vol'kara", "Sha'zi", "Jaz'ka", "Miza", "Zhari",
+            "Зал'кири", "Джала", "Вез'ра", "Таз'ая", "Кал'джин", "Зун'ари", "Рика", "Вол'кара", "Ша'зи", "Джаз'ка", "Миза", "Жари", "Зара'кэ", "Дра'са", "Мал'кана", "Ве'зари", "Тала'джи", "Ша'дара", "Кали'ша", "Зул'мина", "Ло'кари", "Ва'тала", "Джи'ра", "Рок'сана",
+        },
     },
-    surnames = { "Darkspear", "Bloodfang", "Mosswalker", "Shadowstalker", "Junglethorn", "Voodoobrew", "Hexwhisper", "Rootsplitter", "Skullkeeper", "Bramblefang", "Venomhide", "Nightreed" },
+    surnames = {
+        "Darkspear", "Bloodfang", "Mosswalker", "Shadowstalker", "Junglethorn", "Voodoobrew", "Hexwhisper", "Rootsplitter", "Skullkeeper", "Bramblefang", "Venomhide", "Nightreed",
+        "Тёмное Копьё", "Кровавый Клык", "Моховой След", "Теневой Охотник", "Колючка Джунглей", "Зельевар", "Шёпот Проклятий", "Корнеруб", "Страж Черепов", "Колючий Клык", "Ядовитая Шкура", "Ночной Тростник", "Сломанный Идол", "Дух Болота", "Ритуальный Клык", "Тихая Змея", "Пепельный Тотем", "Танец Лиан", "Острозуб", "Туманная Тропа", "Проклятый Клык", "Голос Духов",
+    },
 })

@@ -94,7 +94,7 @@ WO.Net.Register("Dialogue.Finish", {
 
 WO.Net.Register("Dialogue.Choose", {
     direction = "toserver",
-    rate = { max = 8, window = 5 },
+    rate = { max = 12, window = 1 },
     write = function(dialogueId, nodeId, optionIndex)
         net.WriteString(dialogueId or "")
         net.WriteString(nodeId or "")
@@ -119,7 +119,7 @@ WO.Net.Register("Dialogue.Choose", {
 
 WO.Net.Register("Dialogue.Close", {
     direction = "toserver",
-    rate = { max = 5, window = 5 },
+    rate = { max = 8, window = 1 },
     handler = function(ply)
         if SERVER then
             WO.Dialogue.OnClose(ply)

@@ -17,6 +17,9 @@ WO.Lang.Register("en", {
     ["ui.save"] = "Save",
     ["ui.yes"] = "Yes",
     ["ui.no"] = "No",
+    ["ui.pending"] = "Please wait…",
+    ["ui.button_error"] = "The action failed. Please try again.",
+    ["ui.request_timeout"] = "The server did not respond in time. Please try again.",
 
     -----------------------------------------------------------------------
     -- Character
@@ -39,9 +42,10 @@ WO.Lang.Register("en", {
     ["character.rotate_left"] = "Rotate Left",
     ["character.rotate_right"] = "Rotate Right",
     ["character.rotate_hint"] = "Drag the model or use the rotation buttons",
-    ["character.model_preview_unavailable"] = "3D preview unavailable. Check that this model file is installed locally.",
-    ["character.no_models_available"] = "No local model paths are available for this race and gender.",
-    ["character.model_unavailable"] = "This model is not available on the server. Choose another locally available race model.",
+    ["character.no_models_available"] = "No character model paths are configured for this race.",
+    ["character.model_invalid"] = "The selected model is not listed for this race.",
+    ["character.race_unavailable"] = "The selected race is unavailable.",
+    ["character.limit_reached"] = "You have reached your character limit.",
 
     ["character.step.race"] = "Race",
     ["character.step.gender"] = "Gender",
@@ -87,7 +91,7 @@ WO.Lang.Register("en", {
     ["settings.auto_collect_off"] = "Auto-collect: OFF",
     ["settings.auto_collect_hint"] = "When enabled, the server automatically collects nearby quest, rare, and valuable items, plus coins. Ordinary items are ignored unless an active quest needs them.",
     ["settings.auto_collect_status"] = "Syncing this setting with the server…",
-    ["weapon.selector_title"] = "WEAPONS · 1–0 / wheel",
+    ["weapon.selector_title"] = "WEAPONS · KEYS 1–0",
     ["menu.players"] = "Players on Server",
     ["menu.server_players"] = "Players",
     ["menu.no_players"] = "The player list is empty",
@@ -233,6 +237,16 @@ WO.Lang.Register("en", {
     ["race.tauren"] = "Tauren",
     ["race.troll"] = "Troll",
     ["race.goblin"] = "Goblin",
+    ["race.bloodelf"] = "Blood Elf",
+    ["race.dracthyr"] = "Dracthyr",
+    ["race.draenei"] = "Draenei",
+    ["race.pandaren"] = "Pandaren",
+    ["race.worgen"] = "Worgen",
+    ["race.vulpera"] = "Vulpera",
+    ["race.sethrak"] = "Sethrak",
+    ["race.naga"] = "Naga",
+    ["race.special"] = "Special race",
+    ["race.unavailable"] = "This race is currently unavailable.",
 
     -----------------------------------------------------------------------
     -- Progress
@@ -272,8 +286,11 @@ WO.Lang.Register("en", {
     ["quest.in_progress"] = "Quest already in progress",
     ["quest.already_completed"] = "Quest already completed",
     ["quest.not_available"] = "Quest unavailable",
+    ["quest.action_failed"] = "Quest action failed: %s",
+    ["quest.request_timeout"] = "The server did not respond to the quest action. Please try again.",
     ["quest.no_quests"] = "I have no quests for you",
     ["dialogue.title"] = "Dialogue",
+    ["dialogue.request_timeout"] = "No response received. Choose the option again.",
     ["vendor.title"] = "Trade",
     ["vendor.buy"] = "Buy",
     ["vendor.sell"] = "Sell",
@@ -282,6 +299,8 @@ WO.Lang.Register("en", {
     ["vendor.no_items"] = "Nothing to sell",
     ["vendor.not_enough_money"] = "Not enough coins",
     ["vendor.inventory_full"] = "Inventory is full",
+    ["vendor.action_failed"] = "Vendor action failed: %s",
+    ["vendor.request_timeout"] = "The vendor did not respond in time. Please try again.",
     ["currency.coins"] = "coins",
     ["npc.interact"] = "[E] Interact",
 })

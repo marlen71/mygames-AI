@@ -1,8 +1,17 @@
--- Clan and battlefield names for orcs.
+-- Clan and battlefield names for orcs, expanded with Russian variants.
 WO.CharacterNames.Register("orc", {
     givenNames = {
-        male = { "Durok", "Gromak", "Drak", "Mokar", "Gorash", "Karg", "Thok", "Nazg", "Kragh", "Ormak", "Varok", "Drog" },
-        female = { "Draka", "Korga", "Morga", "Urga", "Drazga", "Thraka", "Shagra", "Vorga", "Groma", "Zura", "Brakka", "Mokra" },
+        male = {
+            "Durok", "Gromak", "Drak", "Mokar", "Gorash", "Karg", "Thok", "Nazg", "Kragh", "Ormak", "Varok", "Drog",
+            "Дурок", "Громак", "Драк", "Мокар", "Гораш", "Карг", "Ток", "Назг", "Краг", "Ормак", "Варок", "Дрог", "Боргаш", "Кровар", "Моргрим", "Таргул", "Зурок", "Рагнар", "Шакар", "Горн", "Круш", "Воргат", "Роктар", "Загрим",
+        },
+        female = {
+            "Draka", "Korga", "Morga", "Urga", "Drazga", "Thraka", "Shagra", "Vorga", "Groma", "Zura", "Brakka", "Mokra",
+            "Драка", "Корга", "Морга", "Урга", "Дразга", "Трака", "Шагра", "Ворга", "Грома", "Зура", "Бракка", "Мокра", "Крова", "Рагна", "Зарка", "Горна", "Урса", "Шакти", "Торгала", "Варга", "Граза", "Дурга", "Скарра", "Моргата",
+        },
     },
-    surnames = { "Ironjaw", "Redtusk", "Ashbreaker", "Bloodfang", "Stonecleaver", "Warhowl", "Doomcaller", "Skullcrusher", "Blackflame", "Bonegnasher", "Thornaxe", "Stormroar" },
+    surnames = {
+        "Ironjaw", "Redtusk", "Ashbreaker", "Bloodfang", "Stonecleaver", "Warhowl", "Doomcaller", "Skullcrusher", "Blackflame", "Bonegnasher", "Thornaxe", "Stormroar",
+        "Железная Челюсть", "Красный Бивень", "Пеплолом", "Кровавый Клык", "Камнеруб", "Боевой Рёв", "Вестник Гибели", "Костолом", "Чёрное Пламя", "Костегрыз", "Шипастый Топор", "Громовой Рёв", "Разрушитель", "Кровавый Молот", "Сломанный Щит", "Гневный Клинок", "Серый Волк", "Пепельный Клык", "Разоритель", "Крушитель Черепов", "Дымная Буря", "Рубака",
+    },
 })

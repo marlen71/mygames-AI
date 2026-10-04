@@ -234,7 +234,7 @@ concommand.Add("wo_info", function(ply)
     end
 end)
 
--- wo_models [race] [gender] — каталог локально доступных моделей персонажей
+-- wo_models [race] [gender] — явный каталог путей моделей персонажей
 concommand.Add("wo_models", function(ply, _, args)
     if not CheckAdmin(ply, "debug") then return end
 
@@ -251,14 +251,10 @@ concommand.Add("wo_models", function(ply, _, args)
         end
     else
         for _, id in ipairs(WO.Races.GetIDs()) do
-            local localMale = WO.Models.GetLocalPlayerModels(id, "male")
-            local localFemale = WO.Models.GetLocalPlayerModels(id, "female")
             local raceModels = WO.Models.GetRace(id)
 
-            Reply(ply, ("%s: player_manager male=%d female=%d | всего male=%d female=%d"):format(
-                id, #localMale, #localFemale,
-                #raceModels.male,
-                #raceModels.female
+            Reply(ply, ("%s: каталог male=%d female=%d"):format(
+                id, #raceModels.male, #raceModels.female
             ))
         end
     end

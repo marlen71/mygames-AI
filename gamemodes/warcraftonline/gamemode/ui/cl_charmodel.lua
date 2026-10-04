@@ -32,18 +32,6 @@ end
 
 local PREVIEW_RETRY_INTERVAL = 0.75
 
-local function IsModelMounted(modelPath)
-    if not isstring(modelPath) or modelPath == "" then return false end
-
-    -- DModelPanel uses the local model cache directly. No Workshop registry or
-    -- package lookup is required; the character picker/server validate eligibility.
-    if util and isfunction(util.IsValidModel) then
-        return util.IsValidModel(modelPath) == true
-    end
-
-    return WO.Models and WO.Models.Exists and WO.Models.Exists(modelPath) == true or false
-end
-
 local function SchedulePreviewRetry(self)
     self.woModelAvailable = false
     self.nextModelRetry = CurTime() + PREVIEW_RETRY_INTERVAL
@@ -62,11 +50,8 @@ function MODEL:ClearPreviewModel()
 end
 
 function MODEL:TrySetPreviewModel(modelPath)
-    if not IsModelMounted(modelPath) then
-        SchedulePreviewRetry(self)
-        return false
-    end
-
+    -- Attempt the configured path directly. util.IsValidModel/file.Exists can
+    -- report false for mounted addon content even when DModelPanel can render it.
     if IsValid(self.Entity) then
         self.Entity:Remove()
     end
@@ -120,14 +105,6 @@ function MODEL:SetPreviewModel(modelPath)
 end
 
 function MODEL:PaintOver(w, h)
-    if not IsValid(self.Entity) then
-        draw.RoundedBox(WO.UI.Metrics.radius, 0, 0, w, h, WO.UI.Colors.panelDark)
-        WO.UI.DrawTextFit(WO.Lang:Get("character.model_preview_unavailable"), "WO.Body",
-            w / 2, h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER,
-            w - 32, h - 24)
-        return
-    end
-
     surface.SetDrawColor(WO.UI.Colors.borderLight)
     surface.DrawOutlinedRect(0, 0, w, h, 1)
 end
@@ -271,8 +248,9 @@ function WO.UI.CreateCharacterModel(parent, modelPath)
 
     if isfunction(panel.SetPreviewModel) then
         panel:SetPreviewModel(modelPath)
-    elseif isstring(modelPath) and modelPath ~= "" and IsModelMounted(modelPath) then
-        panel:SetModel(modelPath)
+    elseif isstring(modelPath) and modelPath ~= "" then
+        -- Keep direct model paths working for compatible DModelPanel subclasses.
+        pcall(panel.SetModel, panel, modelPath)
     end
 
     return panel

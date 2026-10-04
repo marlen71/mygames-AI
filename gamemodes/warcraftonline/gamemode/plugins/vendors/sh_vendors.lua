@@ -44,7 +44,8 @@ function WO.Vendors.GetSellPrice(npcDef, class)
 
     if not def or not def.price or def.noSell == true or def.bound == true then return nil end
 
-    local allowed = npcDef and npcDef.vendor and npcDef.vendor.buybackClasses
+    local vendor = npcDef and npcDef.vendor
+    local allowed = vendor and vendor.buybackClasses
 
     if istable(allowed) then
         local accepted = false
@@ -53,6 +54,18 @@ function WO.Vendors.GetSellPrice(npcDef, class)
             if allowedClass == class then
                 accepted = true
                 break
+            end
+        end
+
+        -- A merchant should also buy back items that belong to its own stock;
+        -- explicit buyback classes continue to permit quest/loot materials and
+        -- scroll vendors can list all generated ranks separately.
+        if not accepted then
+            for _, entry in ipairs(vendor.stock or {}) do
+                if entry.class == class then
+                    accepted = true
+                    break
+                end
             end
         end
 
@@ -97,7 +110,7 @@ WO.Net.Register("Vendor.Open", {
 
 WO.Net.Register("Vendor.Buy", {
     direction = "toserver",
-    rate = { max = 6, window = 5 },
+    rate = { max = 12, window = 1 },
     write = function(npcId, class, amount)
         net.WriteString(npcId or "")
         net.WriteString(class or "")
@@ -115,13 +128,20 @@ WO.Net.Register("Vendor.Buy", {
         return true
     end,
     handler = function(ply, npcId, class, amount)
-        WO.Vendors.Buy(ply, npcId, class, math.floor(amount))
+        local success, reason = WO.Vendors.Buy(ply, npcId, class, math.floor(amount))
+
+        WO.Net.Send("Vendor.ActionResult", ply, {
+            action = "buy",
+            npcId = npcId,
+            success = success == true,
+            reason = reason,
+        })
     end,
 })
 
 WO.Net.Register("Vendor.Sell", {
     direction = "toserver",
-    rate = { max = 6, window = 5 },
+    rate = { max = 12, window = 1 },
     write = function(npcId, uid, amount)
         net.WriteString(npcId or "")
         net.WriteString(uid or "")
@@ -139,7 +159,14 @@ WO.Net.Register("Vendor.Sell", {
         return true
     end,
     handler = function(ply, npcId, uid, amount)
-        WO.Vendors.Sell(ply, npcId, uid, math.floor(amount))
+        local success, reason = WO.Vendors.Sell(ply, npcId, uid, math.floor(amount))
+
+        WO.Net.Send("Vendor.ActionResult", ply, {
+            action = "sell",
+            npcId = npcId,
+            success = success == true,
+            reason = reason,
+        })
     end,
 })
 
@@ -153,5 +180,18 @@ WO.Net.Register("Vendor.Sync", {
     end,
     handler = function(_, data)
         WO.Hook.Run("VendorSynced", data)
+    end,
+})
+
+WO.Net.Register("Vendor.ActionResult", {
+    direction = "toclient",
+    write = function(data)
+        net.WriteTable(data)
+    end,
+    read = function()
+        return net.ReadTable()
+    end,
+    handler = function(_, data)
+        WO.Hook.Run("VendorActionResult", data)
     end,
 })

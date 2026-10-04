@@ -243,7 +243,14 @@ local function RunAction(ply, action)
         local session = GetSession(ply)
 
         if session and WO.Vendors and WO.Vendors.Open then
-            WO.Vendors.Open(ply, session.npcDef, session.ent)
+            local opened = WO.Vendors.Open(ply, session.npcDef, session.ent)
+
+            if opened then
+                ClearSession(ply)
+                WO.Net.Send("Dialogue.Finish", ply)
+            elseif SessionValid(ply) then
+                SendNode(ply, session.dialogueId, session.nodeId)
+            end
         end
 
         return
@@ -260,18 +267,28 @@ end
 
 --- Выбор варианта ответа (клиент прислал ТОЛЬКО индекс).
 function WO.Dialogue.OnChoose(ply, dialogueId, nodeId, optionIndex)
-    if not SessionValid(ply) then return end
+    if not SessionValid(ply) then
+        WO.Net.Send("Dialogue.Finish", ply)
+        return false, "invalid_session"
+    end
 
     local session = GetSession(ply)
 
-    if session.dialogueId ~= dialogueId or session.nodeId ~= nodeId then return end
+    if session.dialogueId ~= dialogueId or session.nodeId ~= nodeId then
+        SendNode(ply, session.dialogueId, session.nodeId)
+        return false, "stale_node"
+    end
 
     local option = (session.options or {})[math.floor(optionIndex)]
 
-    if not option then return end
+    if not option then
+        SendNode(ply, session.dialogueId, session.nodeId)
+        return false, "invalid_option"
+    end
 
     -- Действие выбирает СЕРВЕР из схемы — клиент прислал только индекс
     RunAction(ply, option.action)
+    return true
 end
 
 --- Закрытие диалога клиентом.

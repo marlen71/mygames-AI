@@ -146,12 +146,9 @@ local function PreviewUpdate(modelPanel)
             and modelPanel:SetPreviewModel(draft.model) == true
 
         if not isfunction(modelPanel.SetPreviewModel) then
-            changed = WO.Models.Exists(draft.model)
-
-            if changed then
-                modelPanel:SetModel(draft.model)
-                modelPanel.currentModel = draft.model
-            end
+            local ok = pcall(modelPanel.SetModel, modelPanel, draft.model)
+            changed = ok
+            modelPanel.currentModel = draft.model
         end
     elseif not draft.model and isfunction(modelPanel.ClearPreviewModel) then
         modelPanel:ClearPreviewModel()
@@ -194,9 +191,8 @@ local function ValidateStep(step)
         end
     elseif step == 6 then
         if not draft.model or
-            not WO.Races.IsModelAllowed(draft.race, draft.gender, draft.model) or
-            not WO.Models.Exists(draft.model) then
-            return false, "character.model_unavailable"
+            not WO.Races.IsModelAllowed(draft.race, draft.gender, draft.model) then
+            return false, "character.model_invalid"
         end
     elseif step == 7 and not draft.class then
         return false, "character.class"
@@ -213,7 +209,7 @@ end
 
 local stepBuilders = {}
 
--- Шаг 1: раса. Показываем только локально доступные модели расы и пола.
+-- Шаг 1: раса. Показываем расы с явно настроенными путями моделей.
 stepBuilders[1] = function(parent, modelPanel)
     local scroll = WO.UI.Scroll(parent)
 
@@ -229,7 +225,13 @@ stepBuilders[1] = function(parent, modelPanel)
         if race and #WO.Races.GetAvailableGenders(raceId) > 0 then
             visibleRaces = visibleRaces + 1
 
-            local button = WO.UI.Button(scroll, race.name, function()
+            local buttonText = race.name
+
+            if race.special then
+                buttonText = buttonText .. " · " .. WO.Lang:Get("race.special")
+            end
+
+            local button = WO.UI.Button(scroll, buttonText, function()
                 draft.race = raceId
                 draft.class = nil
 
@@ -271,7 +273,7 @@ stepBuilders[1] = function(parent, modelPanel)
     end
 end
 
--- Шаг 2: только полы, для которых сервер/клиент нашли установленные модели.
+-- Шаг 2: полы, для которых путь модели явно описан в каталоге расы.
 stepBuilders[2] = function(parent, modelPanel)
     local buttons = {}
 
@@ -769,7 +771,7 @@ function WO.CharacterUI.OpenCreate()
             WO.UI.Metrics.radius)
     end
 
-    -- Если локальной модели пока нет — показываем понятный placeholder, не citizen.
+    -- Preview получает выбранный race model path напрямую; citizen fallback отсутствует.
     local modelPanel = WO.UI.CreateCharacterModel(createFrame)
     modelPanel.spin = true
     WO.CharacterUI.PreviewModel = modelPanel

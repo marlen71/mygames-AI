@@ -1476,6 +1476,7 @@ local function NewPanel(class)
         p.SetCamPos = function(tt, value) tt.__camPos = value end
         p.GetCamPos = function(tt) return tt.__camPos end
         p.SetModel = function(tt, modelPath)
+            tt.__lastSetModelPath = modelPath
             if IsValid(tt.Entity) then tt.Entity:Remove() end
             tt.Entity = nil
             if not util.IsValidModel(modelPath) then return end

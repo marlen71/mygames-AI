@@ -1,8 +1,17 @@
--- Playful tinkering names for gnomes.
+-- Playful tinkering names for gnomes, expanded with Russian variants.
 WO.CharacterNames.Register("gnome", {
     givenNames = {
-        male = { "Nix", "Cogwin", "Tink", "Bixby", "Wizzle", "Gimbal", "Fizzle", "Bristle", "Mekka", "Rumple", "Pask", "Jubbin" },
-        female = { "Tilly", "Pippa", "Dyna", "Rikkit", "Moxie", "Fidget", "Nella", "Wrenna", "Bubbles", "Sprocket", "Rivetta", "Zippy" },
+        male = {
+            "Nix", "Cogwin", "Tink", "Bixby", "Wizzle", "Gimbal", "Fizzle", "Bristle", "Mekka", "Rumple", "Pask", "Jubbin",
+            "Никс", "Когвин", "Тик", "Биксби", "Виззл", "Джимбл", "Физзл", "Бристл", "Мекка", "Румпель", "Паск", "Джуббин", "Гимлет", "Винтик", "Шестер", "Болтик", "Пружин", "Механик", "Искрик", "Клёп", "Труббин", "Фырчик", "Бронзик", "Зубчик",
+        },
+        female = {
+            "Tilly", "Pippa", "Dyna", "Rikkit", "Moxie", "Fidget", "Nella", "Wrenna", "Bubbles", "Sprocket", "Rivetta", "Zippy",
+            "Тилли", "Пиппа", "Дина", "Риккит", "Мокси", "Фиджет", "Нелла", "Ренна", "Пузырька", "Шестерёнка", "Риветта", "Зиппи", "Латунка", "Искорка", "Кнопка", "Заводинка", "Микстрина", "Болти", "Клёпка", "Бимба", "Трещотка", "Свистелла", "Пружинка", "Искрёнка",
+        },
     },
-    surnames = { "Cogspanner", "Geargrind", "Sparkwhistle", "Coppercog", "Clocktick", "Gearwhisk", "Brassbutton", "Ratchetbolt", "Pistonwick", "Quickwire", "Rivetclank", "Tinkerwell" },
+    surnames = {
+        "Cogspanner", "Geargrind", "Sparkwhistle", "Coppercog", "Clocktick", "Gearwhisk", "Brassbutton", "Ratchetbolt", "Pistonwick", "Quickwire", "Rivetclank", "Tinkerwell",
+        "Шестерёнкин", "Зубчатов", "Искросвист", "Меднозуб", "Часовтиков", "Латунный Болт", "Трещоткин", "Поршневик", "Быстрый Провод", "Клёпкогром", "Мастеровой", "Винтовёрт", "Заводной", "Искроверт", "Гайковёрт", "Бронзоболт", "Медная Шестерня", "Пружинников", "Тихий Механизм", "Шустрошпунт", "Паяльников",
+    },
 })

@@ -61,11 +61,43 @@ function BUTTON:Init()
     self.hovered = false
     self.accent = false
     self.font = "WO.Body"
+    self.woBusy = false
+    self.woDispatching = false
+
+    -- Explicit input setup keeps the custom control clickable after parent frames
+    -- rebuild/dock their children, instead of relying on DButton defaults.
+    if isfunction(self.SetMouseInputEnabled) then self:SetMouseInputEnabled(true) end
+    if isfunction(self.SetKeyboardInputEnabled) then self:SetKeyboardInputEnabled(true) end
+    if isfunction(self.SetCursor) then self:SetCursor("hand") end
 end
 
 function BUTTON:SetDisplayText(text)
     self.woText = tostring(text or "")
     self:SetText("")
+end
+
+function BUTTON:SetBusy(busy, pendingText)
+    busy = busy == true
+
+    if busy then
+        if not self.woBusy then
+            self.woTextBeforeBusy = self.woText or ""
+            self.woEnabledBeforeBusy = not isfunction(self.IsEnabled) or self:IsEnabled()
+        end
+
+        self.woBusy = true
+        self:SetDisplayText(pendingText or "…")
+        self:SetEnabled(false)
+        return
+    end
+
+    if not self.woBusy then return end
+
+    self.woBusy = false
+    self:SetDisplayText(self.woTextBeforeBusy or "")
+    self.woTextBeforeBusy = nil
+    self:SetEnabled(self.woEnabledBeforeBusy ~= false)
+    self.woEnabledBeforeBusy = nil
 end
 
 function BUTTON:OnCursorEntered()
@@ -80,10 +112,42 @@ function BUTTON:OnCursorExited()
     self.hovered = false
 end
 
-function BUTTON:DoClick()
-    if WO.Sound and WO.Sound.PlayLocal then
-        WO.Sound.PlayLocal("ui_click")
+local function PlayButtonSound(soundId)
+    if WO.Sound and isfunction(WO.Sound.PlayLocal) then
+        pcall(WO.Sound.PlayLocal, soundId)
     end
+end
+
+local function DispatchButtonClick(button, callback)
+    if not IsValid(button) or button.woDispatching or
+        (isfunction(button.IsEnabled) and not button:IsEnabled()) then
+        return false
+    end
+
+    button.woDispatching = true
+    PlayButtonSound("ui_click")
+
+    local ok, result = pcall(callback, button)
+
+    if IsValid(button) then
+        button.woDispatching = false
+    end
+
+    if not ok then
+        WO.Error("WO_Button click failed: " .. tostring(result))
+
+        if WO.Notify and isfunction(WO.Notify.Show) then
+            WO.Notify.Show("error", WO.Lang:Get("ui.button_error"))
+        end
+
+        return false
+    end
+
+    return result
+end
+
+function BUTTON:DoClick()
+    PlayButtonSound("ui_click")
 end
 
 function BUTTON:Paint(w, h)
@@ -368,11 +432,7 @@ function WO.UI.Button(parent, text, onClick)
 
     if isfunction(onClick) then
         button.DoClick = function()
-            if WO.Sound and WO.Sound.PlayLocal then
-                WO.Sound.PlayLocal("ui_click")
-            end
-
-            onClick(button)
+            return DispatchButtonClick(button, onClick)
         end
     end
 

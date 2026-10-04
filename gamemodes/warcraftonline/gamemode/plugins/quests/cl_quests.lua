@@ -52,6 +52,42 @@ end
 ---------------------------------------------------------------------------
 
 local questFrame = nil
+local questRequests = {}
+local questRequestSerial = 0
+
+local function QuestRequestKey(action, questId)
+    return tostring(action) .. "\0" .. tostring(questId)
+end
+
+local function RequestQuestAction(action, questId, button, send)
+    local key = QuestRequestKey(action, questId)
+    if questRequests[key] then return false end
+
+    questRequestSerial = questRequestSerial + 1
+    local token = questRequestSerial
+    questRequests[key] = token
+
+    if IsValid(button) and isfunction(button.SetBusy) then
+        button:SetBusy(true, WO.Lang:Get("ui.pending"))
+    elseif IsValid(button) then
+        button:SetEnabled(false)
+    end
+
+    send()
+
+    timer.Simple(3, function()
+        if questRequests[key] ~= token then return end
+
+        questRequests[key] = nil
+        WO.Notify.Show("error", WO.Lang:Get("quest.request_timeout"))
+
+        if IsValid(questFrame) then
+            WO.Quests.OpenLog()
+        end
+    end)
+
+    return true
+end
 
 local function CloseLog()
     if IsValid(questFrame) then
@@ -157,22 +193,33 @@ function WO.Quests.OpenLog()
                 buttonsRow:SetTall(28)
                 buttonsRow:SetPaintBackground(false)
 
-                local trackBtn = WO.UI.Button(buttonsRow,
+                local trackBtn
+                trackBtn = WO.UI.Button(buttonsRow,
                     state.tracked ~= false and WO.Lang:Get("quest.untrack") or WO.Lang:Get("quest.track"),
                     function()
-                        WO.Net.SendToServer("Quest.Track", questId, state.tracked == false)
+                        RequestQuestAction("track", questId, trackBtn, function()
+                            WO.Net.SendToServer("Quest.Track", questId, state.tracked == false)
+                        end)
                     end)
 
                 trackBtn:Dock(LEFT)
                 trackBtn:SetWide(140)
+                if questRequests[QuestRequestKey("track", questId)] then
+                    trackBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
+                end
 
-                local abandonBtn = WO.UI.Button(buttonsRow, WO.Lang:Get("quest.abandon"), function()
-                    WO.Net.SendToServer("Quest.Abandon", questId)
-                    CloseLog()
+                local abandonBtn
+                abandonBtn = WO.UI.Button(buttonsRow, WO.Lang:Get("quest.abandon"), function()
+                    RequestQuestAction("abandon", questId, abandonBtn, function()
+                        WO.Net.SendToServer("Quest.Abandon", questId)
+                    end)
                 end)
 
                 abandonBtn:Dock(RIGHT)
                 abandonBtn:SetWide(120)
+                if questRequests[QuestRequestKey("abandon", questId)] then
+                    abandonBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
+                end
             end
         end
     end
@@ -185,6 +232,24 @@ function WO.Quests.OpenLog()
         empty:SetTall(24)
     end
 end
+
+WO.Hook.Add("QuestActionResult", "quest_ui_action_result", function(data)
+    if not istable(data) or not data.action or not data.questId then return end
+
+    local key = QuestRequestKey(data.action, data.questId)
+    if not questRequests[key] then return end
+
+    questRequests[key] = nil
+
+    if data.success ~= true then
+        WO.Notify.Show("error", WO.Lang:Get("quest.action_failed",
+            tostring(data.reason or "unknown")))
+    end
+
+    if IsValid(questFrame) then
+        WO.Quests.OpenLog()
+    end
+end)
 
 ---------------------------------------------------------------------------
 -- События

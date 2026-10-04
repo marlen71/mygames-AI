@@ -17,6 +17,9 @@ WO.Lang.Register("ru", {
     ["ui.save"] = "Сохранить",
     ["ui.yes"] = "Да",
     ["ui.no"] = "Нет",
+    ["ui.pending"] = "Подождите…",
+    ["ui.button_error"] = "Не удалось выполнить действие. Попробуйте ещё раз.",
+    ["ui.request_timeout"] = "Сервер не ответил вовремя. Попробуйте ещё раз.",
 
     -----------------------------------------------------------------------
     -- Персонаж
@@ -39,9 +42,10 @@ WO.Lang.Register("ru", {
     ["character.rotate_left"] = "Повернуть влево",
     ["character.rotate_right"] = "Повернуть вправо",
     ["character.rotate_hint"] = "Потяните мышью или используйте кнопки поворота",
-    ["character.model_preview_unavailable"] = "3D-превью недоступно. Проверьте, что файл модели установлен локально.",
-    ["character.no_models_available"] = "Для этой расы и пола не найдено локально доступных моделей.",
-    ["character.model_unavailable"] = "Эта модель недоступна на сервере. Выберите другую локально доступную модель расы.",
+    ["character.no_models_available"] = "Для этой расы не настроены пути моделей персонажей.",
+    ["character.model_invalid"] = "Выбранная модель не входит в каталог этой расы.",
+    ["character.race_unavailable"] = "Выбранная раса недоступна.",
+    ["character.limit_reached"] = "Достигнут лимит персонажей.",
 
     ["character.step.race"] = "Раса",
     ["character.step.gender"] = "Пол",
@@ -91,7 +95,7 @@ WO.Lang.Register("ru", {
     ["settings.auto_collect_off"] = "Автосбор: ВЫКЛ",
     ["settings.auto_collect_hint"] = "При включении сервер автоматически подбирает рядом квестовые, редкие и ценные предметы, а также монеты. Обычные предметы без активной цели квеста не подбираются.",
     ["settings.auto_collect_status"] = "Настройка синхронизируется с сервером…",
-    ["weapon.selector_title"] = "ОРУЖИЕ · 1–0 / колёсико",
+    ["weapon.selector_title"] = "ОРУЖИЕ · КЛАВИШИ 1–0",
     ["menu.players"] = "Игроки на сервере",
     ["menu.server_players"] = "Игроков",
     ["menu.no_players"] = "Список игроков пуст",
@@ -237,6 +241,16 @@ WO.Lang.Register("ru", {
     ["race.tauren"] = "Таурен",
     ["race.troll"] = "Тролль",
     ["race.goblin"] = "Гоблин",
+    ["race.bloodelf"] = "Кровавый эльф",
+    ["race.dracthyr"] = "Драктир",
+    ["race.draenei"] = "Дреней",
+    ["race.pandaren"] = "Пандарен",
+    ["race.worgen"] = "Ворген",
+    ["race.vulpera"] = "Вульпера",
+    ["race.sethrak"] = "Сетрак",
+    ["race.naga"] = "Нага",
+    ["race.special"] = "Особая раса",
+    ["race.unavailable"] = "Эта раса сейчас недоступна.",
 
     -----------------------------------------------------------------------
     -- Прогресс
@@ -276,8 +290,11 @@ WO.Lang.Register("ru", {
     ["quest.in_progress"] = "Задание уже выполняется",
     ["quest.already_completed"] = "Задание уже выполнено",
     ["quest.not_available"] = "Задание недоступно",
+    ["quest.action_failed"] = "Не удалось выполнить действие с заданием: %s",
+    ["quest.request_timeout"] = "Сервер не ответил на действие с заданием. Попробуйте ещё раз.",
     ["quest.no_quests"] = "У меня пока нет заданий",
     ["dialogue.title"] = "Диалог",
+    ["dialogue.request_timeout"] = "Ответ не получен. Нажмите вариант ещё раз.",
     ["vendor.title"] = "Торговля",
     ["vendor.buy"] = "Покупка",
     ["vendor.sell"] = "Продажа",
@@ -286,6 +303,8 @@ WO.Lang.Register("ru", {
     ["vendor.no_items"] = "Нет предметов для продажи",
     ["vendor.not_enough_money"] = "Недостаточно монет",
     ["vendor.inventory_full"] = "Инвентарь полон",
+    ["vendor.action_failed"] = "Операция у торговца не выполнена: %s",
+    ["vendor.request_timeout"] = "Торговец не ответил вовремя. Попробуйте ещё раз.",
     ["currency.coins"] = "монет",
     ["npc.interact"] = "[E] Взаимодействовать",
 })

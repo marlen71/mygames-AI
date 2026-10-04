@@ -130,9 +130,22 @@ WO.Net.Register("Quest.Sync", {
     end,
 })
 
+WO.Net.Register("Quest.ActionResult", {
+    direction = "toclient",
+    write = function(data)
+        net.WriteTable(data)
+    end,
+    read = function()
+        return net.ReadTable()
+    end,
+    handler = function(_, data)
+        WO.Hook.Run("QuestActionResult", data)
+    end,
+})
+
 WO.Net.Register("Quest.Accept", {
     direction = "toserver",
-    rate = { max = 5, window = 5 },
+    rate = { max = 10, window = 1 },
     write = function(questId)
         net.WriteString(questId or "")
     end,
@@ -146,13 +159,20 @@ WO.Net.Register("Quest.Accept", {
         return true
     end,
     handler = function(ply, questId)
-        WO.Quests.Accept(ply, questId)
+        local success, reason = WO.Quests.Accept(ply, questId)
+
+        WO.Net.Send("Quest.ActionResult", ply, {
+            action = "accept",
+            questId = questId,
+            success = success == true,
+            reason = reason,
+        })
     end,
 })
 
 WO.Net.Register("Quest.Abandon", {
     direction = "toserver",
-    rate = { max = 3, window = 5 },
+    rate = { max = 8, window = 1 },
     write = function(questId)
         net.WriteString(questId or "")
     end,
@@ -166,13 +186,20 @@ WO.Net.Register("Quest.Abandon", {
         return true
     end,
     handler = function(ply, questId)
-        WO.Quests.Abandon(ply, questId)
+        local success, reason = WO.Quests.Abandon(ply, questId)
+
+        WO.Net.Send("Quest.ActionResult", ply, {
+            action = "abandon",
+            questId = questId,
+            success = success == true,
+            reason = reason,
+        })
     end,
 })
 
 WO.Net.Register("Quest.Track", {
     direction = "toserver",
-    rate = { max = 8, window = 5 },
+    rate = { max = 12, window = 1 },
     write = function(questId, tracked)
         net.WriteString(questId or "")
         net.WriteBool(tracked == true)
@@ -180,14 +207,22 @@ WO.Net.Register("Quest.Track", {
     read = function()
         return net.ReadString(), net.ReadBool()
     end,
-    validate = function(ply, questId)
+    validate = function(ply, questId, tracked)
         if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
         if not isstring(questId) or questId == "" then return false, "invalid_id" end
+        if not isbool(tracked) then return false, "invalid_state" end
 
         return true
     end,
     handler = function(ply, questId, tracked)
-        WO.Quests.Track(ply, questId, tracked)
+        local success, reason = WO.Quests.Track(ply, questId, tracked)
+
+        WO.Net.Send("Quest.ActionResult", ply, {
+            action = "track",
+            questId = questId,
+            success = success == true,
+            reason = reason,
+        })
     end,
 })
 

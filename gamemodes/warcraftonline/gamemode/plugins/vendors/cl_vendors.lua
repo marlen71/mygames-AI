@@ -4,8 +4,46 @@
 
 local vendorFrame = nil
 local vendorData = nil
+local vendorActionPending = false
+local vendorActionToken = 0
+local vendorButtons = {}
+
+local function SetVendorActionPending(pending)
+    vendorActionPending = pending == true
+
+    for _, button in ipairs(vendorButtons) do
+        if IsValid(button) and isfunction(button.SetBusy) then
+            button:SetBusy(vendorActionPending, WO.Lang:Get("ui.pending"))
+        elseif IsValid(button) then
+            button:SetEnabled(not vendorActionPending)
+        end
+    end
+end
+
+local function BeginVendorAction(send)
+    if vendorActionPending then return false end
+
+    SetVendorActionPending(true)
+    vendorActionToken = vendorActionToken + 1
+    local token = vendorActionToken
+
+    send()
+
+    timer.Simple(3, function()
+        if vendorActionPending and vendorActionToken == token then
+            SetVendorActionPending(false)
+            WO.Notify.Show("error", WO.Lang:Get("vendor.request_timeout"))
+        end
+    end)
+
+    return true
+end
 
 local function CloseVendor()
+    vendorActionToken = vendorActionToken + 1
+    SetVendorActionPending(false)
+    vendorButtons = {}
+
     if IsValid(vendorFrame) then
         vendorFrame:Remove()
         vendorFrame = nil
@@ -22,11 +60,37 @@ local function RefreshSync(data)
     WO.Hook.Run("VendorUIRefresh", data)
 end
 
+WO.Hook.Add("VendorActionResult", "vendor_ui_action_result", function(data)
+    if not istable(data) or not vendorActionPending then return end
+    if vendorData and data.npcId and data.npcId ~= vendorData.npcId then return end
+
+    SetVendorActionPending(false)
+
+    if data.success ~= true then
+        local reason = tostring(data.reason or "unknown")
+        local message
+
+        if reason == "not_enough_money" then
+            message = WO.Lang:Get("vendor.not_enough_money")
+        elseif reason == "inventory_full" or reason == "no_space" then
+            message = WO.Lang:Get("vendor.inventory_full")
+        else
+            message = WO.Lang:Get("vendor.action_failed", reason)
+        end
+
+        WO.Notify.Show("error", message)
+    end
+
+    if IsValid(vendorFrame) then
+        WO.Hook.Run("VendorUIRefresh", vendorData)
+    end
+end)
+
 --- Открывает окно торговца.
 function WO.Vendors.OpenUI(data)
     CloseVendor()
 
-    vendorData = nil
+    vendorData = istable(data) and data or nil
 
     local sw, sh = ScrW(), ScrH()
     local w, h = math.min(860, sw * 0.7), math.min(560, sh * 0.75)
@@ -73,6 +137,7 @@ function WO.Vendors.OpenUI(data)
     sellScroll:SetSize(w * 0.44, h - 150)
 
     local function Rebuild()
+        vendorButtons = {}
         buyScroll:Clear()
         sellScroll:Clear()
 
@@ -102,22 +167,23 @@ function WO.Vendors.OpenUI(data)
             label:DockMargin(8, 10, 8, 0)
 
             local buyBtn = WO.UI.Button(row, WO.Lang:Get("vendor.buy_one"), function()
-                WO.Net.SendToServer("Vendor.Buy", current.npcId or "", entry.class, 1)
+                BeginVendorAction(function()
+                    WO.Net.SendToServer("Vendor.Buy", current.npcId or "", entry.class, 1)
+                end)
             end)
 
             buyBtn:Dock(RIGHT)
             buyBtn:SetWide(96)
-        end
+            vendorButtons[#vendorButtons + 1] = buyBtn
 
-        -- Инвентарь для продажи
-        local char = WO.Character.GetLocal()
-        local states = {}
-
-        if char and char.inventory and char.inventory.items then
-            for uid, instance in pairs(char.inventory.items) do
-                states[#states + 1] = instance
+            if vendorActionPending then
+                buyBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
             end
         end
+
+        -- Inventory.Sync has its own client cache; Character.GetLocal() does
+        -- not contain the server's private inventory container.
+        local states = (WO.Inventory.ClientData and WO.Inventory.ClientData.items) or {}
 
         local sellableCount = 0
         local sellVendor = { vendor = {
@@ -148,11 +214,18 @@ function WO.Vendors.OpenUI(data)
             label:DockMargin(8, 10, 8, 0)
 
             local sellBtn = WO.UI.Button(row, WO.Lang:Get("vendor.sell_one"), function()
-                WO.Net.SendToServer("Vendor.Sell", current.npcId or "", instance.uid, 1)
+                BeginVendorAction(function()
+                    WO.Net.SendToServer("Vendor.Sell", current.npcId or "", instance.uid, 1)
+                end)
             end)
 
             sellBtn:Dock(RIGHT)
             sellBtn:SetWide(96)
+            vendorButtons[#vendorButtons + 1] = sellBtn
+
+            if vendorActionPending then
+                sellBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
+            end
             end
         end
 
@@ -185,6 +258,15 @@ end)
 WO.Hook.Add("VendorSynced", "vendor_ui", function(data)
     RefreshSync(data)
 end)
+
+local function RefreshVendorInventory()
+    if IsValid(vendorFrame) then
+        WO.Hook.Run("VendorUIRefresh", vendorData)
+    end
+end
+
+WO.Hook.Add("InventoryChanged", "vendor_inventory_refresh", RefreshVendorInventory)
+WO.Hook.Add("InventorySynced", "vendor_inventory_refresh", RefreshVendorInventory)
 
 -- Автозакрытие: смерть/выход из персонажа
 hook.Add("Think", "wo_vendor_autoclose", function()

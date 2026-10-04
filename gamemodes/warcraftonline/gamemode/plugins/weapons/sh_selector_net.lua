@@ -6,7 +6,7 @@
 
 WO.Net.Register("Weapons.Select", {
     direction = "toserver",
-    rate = { max = 6, window = 1 },
+    rate = { max = 12, window = 1 },
     write = function(class)
         net.WriteString(class or "")
     end,

@@ -5,7 +5,7 @@
         WO.NPCs.Register({
             id = "marshal_dughal",
             name = "Маршал Дугхал",
-            model = WO.Models.GetRace("human").male[1], -- смонтированная модель; без citizen fallback
+            model = WO.Models.GetRace("human").male[1], -- явный race path; без citizen fallback
             type = "questgiver",            -- questgiver | vendor | talker
             spawns = { { pos = Vector(200, 0, 16), ang = Angle(0, 180, 0) } },
             dialogue = "marshal_intro",     -- id диалога

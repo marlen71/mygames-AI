@@ -20,7 +20,6 @@ end
 local function RefreshBookProgress(data)
     if not IsValid(bookFrame) then return end
 
-    local book = CurrentBook()
     local char = WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()
     data = istable(data) and data or (WO.Leveling and WO.Leveling.ClientData) or {}
     local level = math.max(1, tonumber(data.level) or tonumber(book.level) or
@@ -29,8 +28,7 @@ local function RefreshBookProgress(data)
     local experience = math.max(0, tonumber(data.experience) or tonumber(char and char.experience) or 0)
 
     if IsValid(bookFrame.pointsLabel) then
-        bookFrame.pointsLabel:SetDisplayText("Очки заклинаний: " .. tostring(book.points or 0) ..
-            "    Уровень: " .. tostring(level))
+        bookFrame.pointsLabel:SetDisplayText("Ранги задаются свитками в инвентаре    Уровень: " .. tostring(level))
     end
 
     if IsValid(bookFrame.xpLabel) then
@@ -92,10 +90,7 @@ local function RebuildBook()
 
             if rank < spell.maxRank then
                 local targetRank = rank + 1
-                local requiredLevel = (spell.requiredLevel or 1) + targetRank - 1
-                local status = (book.level or 1) < requiredLevel and
-                    ("Нужен ур. " .. requiredLevel) or (rank == 0 and "Свиток изучения" or
-                    ("Свиток ранга " .. targetRank))
+                local status = rank == 0 and "Свиток изучения" or ("Свиток ранга " .. targetRank)
                 local scrollLabel = WO.UI.Label(row, status, "WO.Small", WO.UI.Colors.warn)
                 scrollLabel:SetPos(455, 48)
                 scrollLabel:SetSize(130, 26)

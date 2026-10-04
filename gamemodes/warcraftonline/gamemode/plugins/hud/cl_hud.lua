@@ -9,6 +9,7 @@ local playerPortrait
 local playerPortraitKey
 local targetPortrait
 local targetPortraitModel
+local targetPortraitNextRetry = 0
 local hudCanvas
 local hudCanvasSize = { w = 0, h = 0 }
 local hudDrawErrors = {}
@@ -191,7 +192,7 @@ end
 ---------------------------------------------------------------------------
 
 local function GetTargetPortrait(modelPath, x, y, size)
-    if not isstring(modelPath) or modelPath == "" or not file.Exists(modelPath, "GAME") then
+    if not isstring(modelPath) or modelPath == "" then
         if IsValid(targetPortrait) then
             targetPortrait:SetVisible(false)
         end
@@ -229,9 +230,11 @@ local function GetTargetPortrait(modelPath, x, y, size)
         end
     end
 
-    if targetPortraitModel ~= modelPath then
+    if targetPortraitModel ~= modelPath or
+        (not IsValid(targetPortrait.Entity) and CurTime() >= targetPortraitNextRetry) then
         targetPortrait:SetModel(modelPath)
         targetPortraitModel = modelPath
+        targetPortraitNextRetry = CurTime() + 1
     end
 
     targetPortrait:SetPos(x, y)
@@ -652,6 +655,7 @@ function WO.HUD.DrawWeaponSelector()
 
     local ply = LocalPlayer()
     if not IsValid(ply) or not ply:HasCharacter() then return end
+    if WO.WeaponSelector.IsVisible and not WO.WeaponSelector.IsVisible(ply) then return end
 
     local weapons = WO.WeaponSelector.GetVisibleWeapons(ply)
     if #weapons == 0 then return end

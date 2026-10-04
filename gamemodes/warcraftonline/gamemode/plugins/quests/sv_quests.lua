@@ -237,17 +237,18 @@ end
 
 --- Включает/выключает отслеживание в HUD.
 function WO.Quests.Track(ply, questId, tracked)
-    if not IsValid(ply) or not ply:HasCharacter() then return end
+    if not IsValid(ply) or not ply:HasCharacter() then return false, "invalid_player" end
 
     local char = ply:GetCharacter()
     local state = WO.Quests.GetState(char, questId)
 
-    if not state then return end
+    if not state or state.status ~= "active" then return false, "not_active" end
 
     state.tracked = tracked == true
 
     WO.SaveQueue.MarkDirty(char)
     Sync(ply)
+    return true
 end
 
 ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 
 WO.Classes.Register({
     id = "ranger",
-    name = "Стрелок",
+    name = "Охотник",
     description = "Охотник и следопыт. Владеет дальним боем и лёгкой бронёй.",
 
     stats = {

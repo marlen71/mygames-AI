@@ -47,7 +47,7 @@ hook.Add("PlayerBindPress", "wo_thirdperson_zoom", function(ply, bind, pressed)
 
     if not WO.ThirdPerson.IsEnabled() then return end
 
-    -- Plain wheel is reserved for the custom weapon selector. Hold Alt to zoom.
+    -- Plain wheel never changes weapons. Hold Alt to zoom the third-person camera.
     local leftAlt = rawget(_G, "KEY_LALT")
     local rightAlt = rawget(_G, "KEY_RALT")
     local altDown = input and input.IsKeyDown and

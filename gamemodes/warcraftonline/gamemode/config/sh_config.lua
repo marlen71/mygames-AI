@@ -16,7 +16,12 @@ WO.Config.DebugTracebackOnError = false
 -- Персонажи
 ---------------------------------------------------------------------------
 
-WO.Config.MaxCharacters = 5          -- Максимум персонажей на игрока
+WO.Config.MaxCharacters = 2          -- Лимит персонажей обычного игрока
+WO.Config.AdminMaxCharacters = 5     -- Лимит персонажей администратора
+-- Зарезервированная точка расширения для будущих бонусных слотов; сейчас бонус равен нулю.
+WO.Config.GetExtraCharacterSlots = WO.Config.GetExtraCharacterSlots or function()
+    return 0
+end
 WO.Config.NameMinLength = 2
 WO.Config.NameMaxLength = 24
 WO.Config.AgeMin = 16
@@ -77,6 +82,6 @@ WO.Config.RespawnTime = 5           -- Время до респавна (сек)
 ---------------------------------------------------------------------------
 
 WO.Config.InteractDistance = 100    -- Дистанция взаимодействия (E)
-WO.Config.ItemPickupCooldown = 1    -- Кулдаун подбора предмета (сек)
+WO.Config.ItemPickupCooldown = 0.25 -- Короткий кулдаун, синхронизированный клиенту (сек)
 WO.Config.WorldItemsPersist = false -- Сохранять ли физические предметы между рестартами
 WO.Config.WorldItemLifetime = 600   -- Время жизни брошенного предмета (сек), 0 = вечно

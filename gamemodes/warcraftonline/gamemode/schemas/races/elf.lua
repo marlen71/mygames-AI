@@ -8,7 +8,7 @@ WO.Races.Register({
     name = WO.Lang:Get("race.elf"),
     description = "Грациозные существа, мастера магии и стрельбы. Слабее в ближнем бою.",
 
-    -- Только локально доступные модели ночных эльфов из config/sh_models.lua.
+    -- Явные пути ночных эльфов из config/sh_models.lua.
     models = WO.Models.GetRace("elf"),
 
     genders = { "male", "female" },
@@ -24,7 +24,7 @@ WO.Races.Register({
 
     modifiers = {},
 
-    classes = { "mage", "rogue", "ranger" },
+    classes = { "warrior", "ranger", "rogue", "priest", "druid", "mage", "monk", "deathknight", "demonhunter" },
 
     customization = {
         bodygroups = {},

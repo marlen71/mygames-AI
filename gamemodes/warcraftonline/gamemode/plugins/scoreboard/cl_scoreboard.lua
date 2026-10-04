@@ -38,7 +38,7 @@ end
 
 local function PreviewModelPath(char)
     if char and isstring(char.model) and char.model ~= "" and
-        WO.Models and WO.Models.Exists and WO.Models.Exists(char.model) then
+        WO.Races and WO.Races.IsPlayableModel and WO.Races.IsPlayableModel(char.model) then
         return char.model
     end
 

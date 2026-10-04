@@ -52,7 +52,14 @@ end
 
 WO.Hook.Add("CharacterCreateResult", "core_cl_character", function(success, reason)
     if not success then
-        ShowNotify("error", WO.Lang:Get("character.create_failed") .. ": " .. tostring(reason))
+        local reasonKeys = {
+            race_unavailable = "character.race_unavailable",
+            character_limit = "character.limit_reached",
+        }
+        local reasonKey = reasonKeys[reason]
+        local detail = reasonKey and WO.Lang:Get(reasonKey) or tostring(reason)
+
+        ShowNotify("error", WO.Lang:Get("character.create_failed") .. ": " .. detail)
     end
 end)
 

@@ -30,6 +30,8 @@ function WO.Dialogue.OpenUI(data)
     dialogueFrame:SetDraggable(true)
     dialogueFrame:MakePopup()
 
+    dialogueFrame.actionPending = false
+    dialogueFrame.actionButtons = {}
     dialogueFrame.Paint = function(_, pw, ph)
         WO.UI.DrawPanelOutlined(0, 0, pw, ph, WO.UI.Colors.bg, WO.UI.Colors.accent)
         WO.UI.DrawTitleBar(0, 0, pw, 38, data.npcName ~= "" and data.npcName or WO.Lang:Get("dialogue.title"))
@@ -56,14 +58,40 @@ function WO.Dialogue.OpenUI(data)
     scroll:SetSize(w - 48, h - 180)
 
     for index, option in ipairs(data.options or {}) do
-        local button = WO.UI.Button(scroll, (index) .. ". " .. (option.text or "..."), function()
-            WO.Net.SendToServer("Dialogue.Choose", data.dialogueId, data.nodeId, index)
-            CloseDialogue()
+        local optionIndex = index
+        local button
+        button = WO.UI.Button(scroll, (index) .. ". " .. (option.text or "..."), function()
+            local activeFrame = dialogueFrame
+
+            if not IsValid(activeFrame) or activeFrame.actionPending then return end
+
+            activeFrame.actionPending = true
+
+            for _, actionButton in ipairs(activeFrame.actionButtons or {}) do
+                if IsValid(actionButton) then
+                    actionButton:SetBusy(true, WO.Lang:Get("ui.pending"))
+                end
+            end
+
+            WO.Net.SendToServer("Dialogue.Choose", data.dialogueId, data.nodeId, optionIndex)
+
+            timer.Simple(2.5, function()
+                if IsValid(activeFrame) and dialogueFrame == activeFrame and activeFrame.actionPending then
+                    activeFrame.actionPending = false
+
+                    for _, actionButton in ipairs(activeFrame.actionButtons or {}) do
+                        if IsValid(actionButton) then actionButton:SetBusy(false) end
+                    end
+
+                    WO.Notify.Show("error", WO.Lang:Get("dialogue.request_timeout"))
+                end
+            end)
         end)
 
         button:Dock(TOP)
         button:DockMargin(0, 0, 0, 6)
         button:SetTall(34)
+        dialogueFrame.actionButtons[#dialogueFrame.actionButtons + 1] = button
     end
 end
 

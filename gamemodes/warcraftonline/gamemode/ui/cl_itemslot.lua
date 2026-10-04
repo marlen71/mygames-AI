@@ -316,11 +316,69 @@ end
 
 local SLOT = {}
 
+local FALLBACK_ICONS = {
+    magic = "✦",
+    potion = "✚",
+    food = "●",
+    weapon = "⚔",
+    sword = "⚔",
+    dagger = "⚔",
+    axe = "⚔",
+    staff = "✦",
+    shield = "◈",
+    mount = "♞",
+    utility = "⚙",
+    material = "◆",
+    junk = "◇",
+    leather = "◈",
+    misc = "◇",
+}
+
+local function LoadIconMaterial(path)
+    if not isstring(path) or path == "" or not isfunction(Material) then return nil end
+
+    local ok, mat = pcall(Material, path)
+
+    if not ok or not mat or (isfunction(mat.IsError) and mat:IsError()) then
+        return nil
+    end
+
+    return mat
+end
+
+local function GetFallbackIcon(def)
+    if isstring(def.iconText) and def.iconText ~= "" then
+        return def.iconText
+    end
+
+    return FALLBACK_ICONS[def.category] or FALLBACK_ICONS[def.type] or "◇"
+end
+
+local function ModelPanelHasRequestedModel(panel, modelPath)
+    local ent = IsValid(panel) and panel.Entity or nil
+
+    if not IsValid(ent) then return false end
+
+    if isfunction(ent.GetModel) then
+        local ok, actualModel = pcall(ent.GetModel, ent)
+
+        if ok and isstring(actualModel) and actualModel ~= "" and
+            string.lower(actualModel) ~= string.lower(modelPath) then
+            return false
+        end
+    end
+
+    return true
+end
+
 AccessorFunc(SLOT, "item", "Item")
 AccessorFunc(SLOT, "slotSize", "SlotSize")
 
 function SLOT:Init()
     self.item = nil
+    self.itemIcon = nil
+    self.itemIconMaterial = nil
+    self.itemModelPath = nil
     self:SetSize(WO.UI.Metrics.slotSize, WO.UI.Metrics.slotSize)
     self.slotColor = WO.UI.Colors.panelLight
 end
@@ -382,22 +440,24 @@ function SLOT:Paint(w, h)
         surface.DrawRect(3, h - 6, (w - 6) * frac, 3)
     end
 
-    -- Иконка предмета (материал или модель)
+    -- Иконка предмета (материал, модель или гарантированный текстовый fallback).
     if item and def then
-        if isstring(def.icon) and def.icon ~= "" then
-            local mat = Material(def.icon)
+        local drewIcon = false
+        local mat = rawget(self, "itemIconMaterial")
 
-            if mat and not mat:IsError() then
-                surface.SetMaterial(mat)
-                surface.SetDrawColor(255, 255, 255)
-                surface.DrawTexturedRect(4, 4, w - 8, h - 8)
-            end
-        elseif self.itemIcon then
-            -- DModelPanel иконка
+        if mat then
+            surface.SetMaterial(mat)
+            surface.SetDrawColor(255, 255, 255)
+            surface.DrawTexturedRect(4, 4, w - 8, h - 8)
+            drewIcon = true
+        elseif ModelPanelHasRequestedModel(self.itemIcon, self.itemModelPath) then
             self.itemIcon:SetPos(2, 2)
             self.itemIcon:SetSize(w - 4, h - 4)
-        elseif isstring(def.iconText) and def.iconText ~= "" then
-            WO.UI.DrawTextFit(def.iconText, "WO.Subtitle", w / 2, h / 2,
+            drewIcon = true
+        end
+
+        if not drewIcon then
+            WO.UI.DrawTextFit(GetFallbackIcon(def), "WO.Subtitle", w / 2, h / 2,
                 rarityColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 8, h - 8)
         end
     end
@@ -406,33 +466,53 @@ end
 function SLOT:UpdateIcon()
     if IsValid(self.itemIcon) then
         self.itemIcon:Remove()
-        self.itemIcon = nil
     end
+
+    self.itemIcon = nil
+    self.itemIconMaterial = nil
+    self.itemModelPath = nil
 
     local item = self.item
     local def = item and WO.Items.Get(item.class)
 
     if not item or not def then return end
 
-    if (not isstring(def.icon) or def.icon == "") and isstring(def.model) then
-        self.itemIcon = vgui.Create("DModelPanel", self)
-        self.itemIcon:SetModel(def.model)
-        self.itemIcon:SetMouseInputEnabled(false)
+    self.itemIconMaterial = LoadIconMaterial(def.icon)
 
-        local ent = self.itemIcon.Entity
+    if rawget(self, "itemIconMaterial") then return end
+    if not isstring(def.model) or def.model == "" then return end
 
-        if IsValid(ent) then
-            local mins, maxs = ent:GetModelBounds()
-            local size = (maxs - mins):Length()
+    local panel = vgui.Create("DModelPanel", self)
 
-            self.itemIcon:SetFOV(30 + size * 0.35)
-            self.itemIcon:SetLookAt((mins + maxs) / 2)
-            self.itemIcon:SetCamPos((mins + maxs) / 2 + Vector(size * 0.6, size * 0.35, size * 0.25))
-        end
+    if not IsValid(panel) then return end
 
-        self.itemIcon.LayoutEntity = function(_, ent)
-            ent:SetAngles(Angle(15, SysTime() * 25 % 360, 0))
-        end
+    panel:SetMouseInputEnabled(false)
+    local ok = pcall(panel.SetModel, panel, def.model)
+
+    if not ok or not ModelPanelHasRequestedModel(panel, def.model) then
+        panel:Remove()
+        return
+    end
+
+    self.itemIcon = panel
+    self.itemModelPath = def.model
+
+    local ent = panel.Entity
+    local mins, maxs = ent:GetModelBounds()
+    local size = math.max((maxs - mins):Length(), 1)
+    local center = Vector((mins.x + maxs.x) * 0.5, (mins.y + maxs.y) * 0.5,
+        (mins.z + maxs.z) * 0.5)
+    local fov = 30
+
+    -- Fit a sphere around the model. The previous camera sat inside small props
+    -- (health vials in particular), making a valid model look completely blank.
+    local distance = math.max(size * 2.1, 20)
+    panel:SetFOV(fov)
+    panel:SetLookAt(center)
+    panel:SetCamPos(center + Vector(distance * 0.64, distance * 0.64, distance * 0.42))
+
+    panel.LayoutEntity = function(_, modelEnt)
+        modelEnt:SetAngles(Angle(15, SysTime() * 25 % 360, 0))
     end
 end
 

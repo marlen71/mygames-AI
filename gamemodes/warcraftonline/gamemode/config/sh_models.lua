@@ -1,12 +1,11 @@
 --[[
-    Warcraft Online — каталог локально доступных моделей персонажей Mailer.
+    Warcraft Online — явный каталог моделей персонажей Mailer.
 
-    Список берётся из проверенных model paths в каталоге ниже и из GMod's
-    player_manager.AllValidModels(). Никакие Workshop API, Workshop ID или
-    Workshop discovery-плагины для регистрации/превью персонажей не требуются:
-    путь добавляется только если сам .mdl доступен в локальной виртуальной ФС.
+    Превью и allowlist рас используют только пути из каталога ниже: без
+    file.Exists/util.IsValidModel, player_manager-сканирования и Workshop
+    discovery. Путь передаётся DModelPanel / Player:SetModel напрямую.
 
-    GMod-гражданские модели намеренно не используются как fallback.
+    Гражданские модели намеренно не используются как fallback.
     Схемы рас используют: models = WO.Models.GetRace("human") и т.д.
 
     Обозначения в шаблонах:
@@ -21,9 +20,9 @@ WO.Models = WO.Models or {}
 --[[ Каталог: race id -> gender -> описания моделей.                          ]]
 --[[----------------------------------------------------------------------------
 
-    Пути Mailer сохранены как обычные модельные пути. В рантайме ничего не
-    скачивается и не запрашивается у Workshop: локальное наличие проверяется
-    отдельно через file.Exists/util.IsValidModel.
+    Пути Mailer передаются как обычные модельные пути без проверки локального
+    наличия: смонтированный контент может быть доступен DModelPanel даже если
+    file.Exists/util.IsValidModel не распознаёт его.
 ------------------------------------------------------------------------------]]
 
 WO.Models.Catalog = {
@@ -99,30 +98,149 @@ WO.Models.Catalog = {
             },
         },
     },
+    goblin = {
+        label = "Гоблин (WoW Goblin)",
+        male = {
+            base = "models/mailer/character/goblin/male/goblinmale00_00.mdl",
+            anim = "models/mailer/character/goblin/male/goblinmale_anim.mdl",
+        },
+        female = {
+            base = "models/mailer/character/goblin/female/goblinfemale00_00.mdl",
+            anim = "models/mailer/character/goblin/female/goblinfemale_anim.mdl",
+        },
+    },
+    tauren = {
+        label = "Таурен (WoW Tauren)",
+        male = {
+            base = "models/mailer/character/tauren/male/taurenmale00_00.mdl",
+            anim = "models/mailer/character/tauren/male/taurenmale_anim.mdl",
+        },
+        female = {
+            base = "models/mailer/character/tauren/female/taurenfemale00_00.mdl",
+            anim = "models/mailer/character/tauren/female/taurenfemale_anim.mdl",
+        },
+    },
+    troll = {
+        label = "Тролль (WoW Troll)",
+        male = {
+            base = "models/mailer/character/troll/male/trollmale00_00.mdl",
+            anim = "models/mailer/character/troll/male/trollmale_anim.mdl",
+        },
+        female = {
+            base = "models/mailer/character/troll/female/trollfemale00_00.mdl",
+            anim = "models/mailer/character/troll/female/trollfemale_anim.mdl",
+        },
+    },
+    undead = {
+        label = "Нежить (WoW Scourge)",
+        male = {
+            base = "models/mailer/character/scourge/male/scourgemale00_00.mdl",
+            anim = "models/mailer/character/scourge/male/scourgemale_anim.mdl",
+        },
+        female = {
+            base = "models/mailer/character/scourge/female/scourgefemale00_00.mdl",
+            anim = "models/mailer/character/scourge/female/scourgefemale_anim.mdl",
+        },
+    },
+    dwarf = {
+        label = "Дворф",
+        male = {
+            base = "models/mailer/wow/character/dwarf/male/dwarfmale_00_00_hd.mdl",
+        },
+        female = {
+            base = "models/mailer/wow/character/dwarf/female/dwarffemale_00_00_hd.mdl",
+        },
+    },
+    bloodelf = {
+        label = "Кровавый эльф",
+        special = true,
+        male = {
+            base = "models/mailer/wow/character/bloodelf/male/bloodelfmale_00_00_hd.mdl",
+        },
+        female = {
+            base = "models/mailer/wow/character/bloodelf/female/bloodelffemale_00_00_hd.mdl",
+        },
+    },
+    dracthyr = {
+        label = "Драктир",
+        special = true,
+        male = {
+            base = "models/mailer/wow/character/dracthyr/dracthyrdragon_00_00_hd_l.mdl",
+            paths = { "models/mailer/wow/character/dracthyr/dracthyrdragon_00_00_c_l.mdl" },
+        },
+        female = {
+            base = "models/mailer/wow/character/dracthyr/dracthyrdragon_00_00_hd_l.mdl",
+            paths = { "models/mailer/wow/character/dracthyr/dracthyrdragon_00_00_c_l.mdl" },
+        },
+    },
+    draenei = {
+        label = "Дреней",
+        male = {
+            base = "models/mailer/wow/character/draenei/male/draeneimale_00_00_hd.mdl",
+        },
+        female = {
+            base = "models/mailer/wow/character/draenei/female/draeneifemale_00_00_hd.mdl",
+        },
+    },
+    pandaren = {
+        label = "Пандарен",
+        male = {
+            base = "models/mailer/character/pandaren/male/pandarenmale00_00.mdl",
+            variants = {
+                { fmt = "models/mailer/character/pandaren/male/pandarenmale%02d_%02d.mdl", ranges = { 0, 5, 0, 2 } },
+            },
+        },
+        female = {
+            base = "models/mailer/character/pandaren/female/pandarenfemale00_00.mdl",
+            variants = {
+                { fmt = "models/mailer/character/pandaren/female/pandarenfemale%02d_%02d.mdl", ranges = { 0, 3, 0, 4 } },
+            },
+        },
+    },
+    worgen = {
+        label = "Ворген",
+        male = {
+            base = "models/mailer/character/worgen/male/worgenmale00_00.mdl",
+        },
+        female = {
+            base = "models/mailer/character/worgen/female/worgenfemale00_00.mdl",
+        },
+    },
+    vulpera = {
+        label = "Вульпера",
+        special = true,
+        male = {
+            base = "models/mailer/wow_characters/wowanim_vulpera_male.mdl",
+        },
+        female = {
+            base = "models/mailer/wow_characters/wowanim_vulpera_female.mdl",
+        },
+    },
+    sethrak = {
+        label = "Сетрак",
+        male = {
+            base = "models/mailer/wow_characters/wowanim_sethrak.mdl",
+        },
+        female = {
+            base = "models/mailer/wow_characters/wowanim_sethrak.mdl",
+        },
+    },
+    naga = {
+        label = "Нага",
+        male = {
+            base = "models/mailer/wow_characters/wowanim_naga_male.mdl",
+        },
+        female = {
+            base = "models/mailer/wow_characters/wowanim_naga_female.mdl",
+        },
+    },
 }
-
--- Names used only to match race/gender identifiers already present in the local
--- player_manager registry. This does not initiate Workshop downloads or queries.
-WO.Models.LocalSearchTerms = {
-    human = { "human" },
-    elf = { "night elf", "nightelf", "night_elf" },
-    orc = { "orc" },
-    dwarf = { "dwarf" },
-    gnome = { "gnome" },
-    undead = { "undead", "scourge", "forsaken" },
-    tauren = { "tauren" },
-    troll = { "troll" },
-    goblin = { "goblin" },
-}
-
--- Compatibility alias for integrations that read the older search-term name.
-WO.Models.PlayerSearchTerms = WO.Models.LocalSearchTerms
 
 ---------------------------------------------------------------------------
 -- API
 ---------------------------------------------------------------------------
 
---- Checks the local GMod virtual filesystem; no Workshop lookup is performed.
+--- Optional diagnostics only; this result never gates character selection or preview.
 function WO.Models.Exists(path)
     if not isstring(path) or path == "" then return false end
 
@@ -157,7 +275,7 @@ function WO.Models.ExpandVariant(variant)
     return out
 end
 
---- Configured Mailer model paths that are present locally, base model first.
+--- Explicitly configured Mailer model paths, base model first; no disk or registry scan.
 function WO.Models.GetConfiguredModels(raceId, gender)
     local out, seen = {}, {}
     local entry = WO.Models.Catalog[raceId] and WO.Models.Catalog[raceId][gender]
@@ -165,13 +283,17 @@ function WO.Models.GetConfiguredModels(raceId, gender)
     if not entry then return out end
 
     local function add(path)
-        if isstring(path) and not seen[path] and WO.Models.Exists(path) then
+        if isstring(path) and path ~= "" and not seen[path] then
             seen[path] = true
             out[#out + 1] = path
         end
     end
 
     add(entry.base)
+
+    for _, path in ipairs(entry.paths or {}) do
+        add(path)
+    end
 
     for _, variant in ipairs(entry.variants or {}) do
         for _, path in ipairs(WO.Models.ExpandVariant(variant)) do
@@ -182,83 +304,23 @@ function WO.Models.GetConfiguredModels(raceId, gender)
     return out
 end
 
-local function ContainsAny(text, terms)
-    if not istable(terms) or #terms == 0 then return false end
-
-    text = string.lower(tostring(text or ""))
-
-    for _, term in ipairs(terms) do
-        local value = string.lower(tostring(term or ""))
-
-        if value ~= "" and string.find(text, value, 1, true) then
-            return true
-        end
-    end
-
-    return false
+--- Deprecated compatibility API. Race choices are deliberately not discovered.
+function WO.Models.GetLocalPlayerModels()
+    return {}
 end
 
---- Match race/gender names in the local player_manager list.
-function WO.Models.GetLocalPlayerModels(raceId, gender)
-    local out, seen = {}, {}
-
-    if not player_manager or not isfunction(player_manager.AllValidModels) then
-        return out
-    end
-
-    local ok, models = pcall(player_manager.AllValidModels)
-
-    if not ok or not istable(models) then return out end
-
-    local raceTerms = WO.Models.LocalSearchTerms[raceId] or {}
-    local genderTerms = gender == "female" and { "female", "woman", "fem" } or { "male", "man" }
-    local excludedTerms = gender == "female" and {} or { "female", "woman", "fem" }
-
-    for name, path in pairs(models) do
-        local identity = tostring(name or "") .. " " .. tostring(path or "")
-
-        if isstring(path) and ContainsAny(identity, raceTerms) and
-            ContainsAny(identity, genderTerms) and not ContainsAny(identity, excludedTerms) and
-            not seen[path] and WO.Models.Exists(path) then
-            seen[path] = true
-            out[#out + 1] = path
-        end
-    end
-
-    table.sort(out)
-
-    return out
-end
-
---- Locally available race/gender models, without generic/civilian substitution.
+--- The race allowlist comes only from explicit paths in the data-driven catalog.
 function WO.Models.GetRace(raceId)
     local result = {}
 
     for _, gender in ipairs({ "male", "female" }) do
-        local list, seen = {}, {}
-
-        local function append(path)
-            if isstring(path) and not seen[path] and WO.Models.Exists(path) then
-                seen[path] = true
-                list[#list + 1] = path
-            end
-        end
-
-        for _, path in ipairs(WO.Models.GetConfiguredModels(raceId, gender)) do
-            append(path)
-        end
-
-        for _, path in ipairs(WO.Models.GetLocalPlayerModels(raceId, gender)) do
-            append(path)
-        end
-
-        result[gender] = list
+        result[gender] = WO.Models.GetConfiguredModels(raceId, gender)
     end
 
     return result
 end
 
---- Refresh race model lists after locally available models are registered.
+--- Rebuild race model allowlists from the static catalog after schema/config updates.
 function WO.Models.RefreshRaceLists()
     if not (WO.Races and WO.Races.GetAll) then return false end
 
@@ -274,34 +336,27 @@ end
 function WO.Models.GetAnim(raceId, gender)
     local entry = WO.Models.Catalog[raceId] and WO.Models.Catalog[raceId][gender]
 
-    if entry and WO.Models.Exists(entry.anim) then
-        return entry.anim
-    end
-
-    return nil
+    return entry and entry.anim or nil
 end
 
---- Diagnostics for `wo_models` (all paths are already local).
+--- Diagnostics for `wo_models`; local presence never affects character model choices.
 function WO.Models.DebugDump(raceId, gender)
     local lines = {}
     local entry = WO.Models.Catalog[raceId] and WO.Models.Catalog[raceId][gender]
+    local configured = WO.Models.GetConfiguredModels(raceId, gender)
 
-    lines[#lines + 1] = ("Локальные модели %s / %s:"):format(tostring(raceId), tostring(gender))
+    lines[#lines + 1] = ("Настроенные модели %s / %s:"):format(tostring(raceId), tostring(gender))
 
     if entry then
-        lines[#lines + 1] = ("  базовая: %s [%s]"):format(entry.base,
-            WO.Models.Exists(entry.base) and "есть" or "нет")
-        lines[#lines + 1] = ("  анимации: %s [%s]"):format(entry.anim or "-",
-            (entry.anim and WO.Models.Exists(entry.anim)) and "есть" or "нет")
+        lines[#lines + 1] = ("  базовая: %s"):format(entry.base)
+        lines[#lines + 1] = ("  анимации: %s"):format(entry.anim or "-")
     else
-        lines[#lines + 1] = "  статический путь не задан; проверяется только local player_manager"
+        lines[#lines + 1] = "  пути для этой расы/пола не заданы в каталоге"
     end
 
-    local configured = WO.Models.GetConfiguredModels(raceId, gender)
-    local discovered = WO.Models.GetLocalPlayerModels(raceId, gender)
-    lines[#lines + 1] = ("  каталог=%d, player_manager=%d"):format(#configured, #discovered)
+    lines[#lines + 1] = ("  записей в каталоге=%d; локальный статус не ограничивает выбор"):format(#configured)
 
-    for _, path in ipairs(WO.Models.GetRace(raceId)[gender] or {}) do
+    for _, path in ipairs(configured) do
         lines[#lines + 1] = ("    %s"):format(path)
     end
 

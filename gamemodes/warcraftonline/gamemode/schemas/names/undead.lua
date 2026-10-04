@@ -1,8 +1,17 @@
--- Somber names of the Forsaken and other undead.
+-- Somber Forsaken names, expanded with Russian-language given names and surnames.
 WO.CharacterNames.Register("undead", {
     givenNames = {
-        male = { "Varyn", "Mordren", "Silas", "Corvin", "Dastan", "Joran", "Malven", "Odran", "Riven", "Soren", "Theron", "Valric" },
-        female = { "Morva", "Mirelle", "Velka", "Rivena", "Delyra", "Elsin", "Anara", "Tamsin", "Nyx", "Sarra", "Elvina", "Vaela" },
+        male = {
+            "Varyn", "Mordren", "Silas", "Corvin", "Dastan", "Joran", "Malven", "Odran", "Riven", "Soren", "Theron", "Valric",
+            "Варин", "Мордрэн", "Сайлас", "Корвин", "Дастан", "Йоран", "Мальвен", "Одран", "Ривен", "Сорен", "Терон", "Вальрик", "Андрей", "Борис", "Владлен", "Горан", "Еремей", "Захар", "Исидор", "Кассиан", "Лазарь", "Мирон", "Назар", "Ратмир", "Святослав",
+        },
+        female = {
+            "Morva", "Mirelle", "Velka", "Rivena", "Delyra", "Elsin", "Anara", "Tamsin", "Nyx", "Sarra", "Elvina", "Vaela",
+            "Морва", "Мирелла", "Велька", "Ривена", "Делира", "Эльсин", "Анара", "Тамсин", "Никса", "Сарра", "Эльвина", "Ваэла", "Аглая", "Василиса", "Гелла", "Дарина", "Есения", "Злата", "Инга", "Кира", "Лада", "Милора", "Ника", "Рада", "Серафима", "Таисия",
+        },
     },
-    surnames = { "Gravewhisper", "Ashenveil", "Duskborne", "Hollowmere", "Rotwood", "Blackthorn", "Gloomgrave", "Paleheart", "Nightmourn", "Boneweaver", "Wraithbrook", "Deathwhisper" },
+    surnames = {
+        "Gravewhisper", "Ashenveil", "Duskborne", "Hollowmere", "Rotwood", "Blackthorn", "Gloomgrave", "Paleheart", "Nightmourn", "Boneweaver", "Wraithbrook", "Deathwhisper",
+        "Могильный Шёпот", "Пепельная Вуаль", "Рождённый Сумраком", "Пустошь", "Гнилолесье", "Чёрный Терновник", "Мрачная Могила", "Бледное Сердце", "Ночная Скорбь", "Костеплёт", "Призрачный Ручей", "Шёпот Смерти", "Седая Кость", "Последний Вздох", "Прахов", "Тихий Скиталец", "Холодный Пепел", "Сломанная Печать", "Пустой Взгляд", "Тёмный Курган", "Забытый", "Прахолесье",
+    },
 })

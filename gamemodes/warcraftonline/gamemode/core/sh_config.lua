@@ -3,7 +3,8 @@
     Сами значения лежат в config/*.lua; здесь — общий каркас.
 
     Пример в config/sh_config.lua:
-        WO.Config.MaxCharacters = 5
+        WO.Config.MaxCharacters = 2
+        WO.Config.AdminMaxCharacters = 5
 ]]
 
 WO.Config = WO.Config or {}

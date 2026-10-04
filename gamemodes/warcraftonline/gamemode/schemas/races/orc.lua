@@ -8,7 +8,7 @@ WO.Races.Register({
     name = WO.Lang:Get("race.orc"),
     description = "Воинственная раса с огромной силой. Магия даётся тяжело.",
 
-    -- Только локально доступные WoW-модели; гражданского fallback нет.
+    -- Явные пути WoW-моделей; не зависят от локального file.Exists.
     models = WO.Models.GetRace("orc"),
 
     genders = { "male", "female" },
@@ -24,7 +24,7 @@ WO.Races.Register({
 
     modifiers = {},
 
-    classes = { "warrior", "rogue" },
+    classes = { "warrior", "rogue", "ranger", "shaman", "warlock", "mage", "deathknight", "monk" },
 
     customization = {
         bodygroups = {},

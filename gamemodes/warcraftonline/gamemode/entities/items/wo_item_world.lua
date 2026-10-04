@@ -30,6 +30,15 @@ ENT.AdminSpawnable = false
 
 ENT.AutomaticFrameAdvance = true
 
+local DEFAULT_ITEM_MODEL = "models/props_junk/PopCan01a.mdl"
+
+local function RebuildItemPhysics(ent)
+    ent:PhysicsInit(SOLID_VPHYSICS)
+    ent:SetMoveType(MOVETYPE_VPHYSICS)
+    ent:SetSolid(SOLID_VPHYSICS)
+    return ent:GetPhysicsObject()
+end
+
 ---------------------------------------------------------------------------
 -- Interaction-интерфейс
 ---------------------------------------------------------------------------
@@ -42,8 +51,15 @@ function ENT:CanInteract(ply)
         return false
     end
 
-    -- Кулдаун подбора (после выбрасывания)
-    if self.PickupCooldown and CurTime() < self.PickupCooldown then
+    -- Кулдаун синхронизирован клиенту, чтобы подсказка и E не предлагали
+    -- подбор, который сервер ещё отклонит.
+    local pickupAt = self.PickupCooldown
+
+    if CLIENT and isfunction(self.GetNW2Float) then
+        pickupAt = self:GetNW2Float("wo_item_pickup_at", 0)
+    end
+
+    if pickupAt and CurTime() < pickupAt then
         return false
     end
 
@@ -84,7 +100,7 @@ end
 ---------------------------------------------------------------------------
 
 function ENT:Initialize()
-    self:SetModel("models/props_junk/PopCan01a.mdl")
+    self:SetModel(DEFAULT_ITEM_MODEL)
 
     if SERVER then
         self:PhysicsInit(SOLID_VPHYSICS)
@@ -116,36 +132,43 @@ end
 function ENT:SetItem(instance)
     if not istable(instance) then return false end
 
+    local def = WO.Items.Get(instance.class)
+
+    if not def then return false end
+
     self.ItemInstance = instance
     self.ItemUID = instance.uid
 
-    local def = WO.Items.Get(instance.class)
+    local modelPath = isstring(def.model) and def.model ~= "" and def.model or DEFAULT_ITEM_MODEL
+    self:SetModel(modelPath)
 
-    if def then
-        if isstring(def.model) and def.model ~= "" then
-            self:SetModel(def.model)
+    -- NW2: имя/класс — для UI клиента (instance data НЕ сетьуется!)
+    self:SetNW2String("wo_item_class", instance.class)
+    self:SetNW2String("wo_item_name", def.name or instance.class)
+    self:SetNW2Int("wo_item_amount", instance.amount or 1)
+
+    if SERVER then
+        local phys = RebuildItemPhysics(self)
+
+        -- Invalid/physics-less content must not turn a dropped item into an
+        -- unpickable entity. Keep the requested model when it has physics;
+        -- otherwise use a known base-game model for the world representation.
+        if not IsValid(phys) and modelPath ~= DEFAULT_ITEM_MODEL then
+            modelPath = DEFAULT_ITEM_MODEL
+            self:SetModel(modelPath)
+            phys = RebuildItemPhysics(self)
         end
 
-        -- NW2: имя/класс — для UI клиента (instance data НЕ сетьуется!)
-        self:SetNW2String("wo_item_class", instance.class)
-        self:SetNW2String("wo_item_name", def.name or instance.class)
-        self:SetNW2Int("wo_item_amount", instance.amount or 1)
-
-        if SERVER then
-            self:PhysicsInit(SOLID_VPHYSICS)
-            self:SetMoveType(MOVETYPE_VPHYSICS)
-            self:SetSolid(SOLID_VPHYSICS)
-
-            local phys = self:GetPhysicsObject()
-
-            if IsValid(phys) then
-                phys:Wake()
-            end
+        if IsValid(phys) then
+            phys:Wake()
         end
     end
 
-    -- Кулдаун подбора
-    self.PickupCooldown = CurTime() + (WO.Config.ItemPickupCooldown or 1)
+    self.PickupCooldown = CurTime() + math.max(0, tonumber(WO.Config.ItemPickupCooldown) or 0)
+
+    if isfunction(self.SetNW2Float) then
+        self:SetNW2Float("wo_item_pickup_at", self.PickupCooldown)
+    end
 
     return true
 end
@@ -166,6 +189,16 @@ function ENT:ApplyThrow(velocity)
             phys:SetVelocity(velocity or vector_origin)
             phys:AddAngleVelocity(VectorRand() * 180)
         end
+    end
+end
+
+---------------------------------------------------------------------------
+-- Client rendering
+---------------------------------------------------------------------------
+
+if CLIENT then
+    function ENT:Draw()
+        self:DrawModel()
     end
 end
 

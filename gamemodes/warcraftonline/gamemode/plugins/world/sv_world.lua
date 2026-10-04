@@ -450,6 +450,7 @@ function WO.World.PickupItem(ply, ent)
     ent:Remove()
 
     WO.SaveQueue.MarkDirty(char)
+    WO.Hook.Run("InventoryChanged", char)
     WO.Hook.Run("ItemPickedUp", char, instance)
 
     local itemName = (def and def.name) or instance.class

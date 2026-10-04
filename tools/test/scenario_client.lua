@@ -56,14 +56,17 @@ MOCK.Assert(hudShouldDraw and isfunction(hudShouldDraw.wo_hud_hide) and
     hudShouldDraw.wo_hud_hide("CHudScoreboard") == nil and
     hudDrawTargetID and hudDrawTargetID.wo_hud_hide_targetid() == nil,
     "стандартный HUD и target ID не скрываются в лимбо до синхронизации персонажа")
-MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() >= 4, "расы видны на клиенте")
+MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() == 17, "все расы видны на клиенте")
 MOCK.Assert(WO.Models ~= nil and WO.Models.GetRace ~= nil, "каталог моделей виден на клиенте")
-local themedNameRaces = { "dwarf", "elf", "gnome", "goblin", "human", "orc", "tauren", "troll", "undead" }
+local themedNameRaces = {
+    "dwarf", "elf", "gnome", "goblin", "human", "orc", "tauren", "troll", "undead",
+    "bloodelf", "dracthyr", "draenei", "pandaren", "worgen", "vulpera", "sethrak", "naga",
+}
 local allNamePoolsValid = WO.CharacterNames and WO.CharacterNames.Generate ~= nil
 for _, raceID in ipairs(themedNameRaces) do
     local pools = WO.CharacterNames and WO.CharacterNames.Get(raceID)
     allNamePoolsValid = allNamePoolsValid and pools ~= nil and
-        #pools.givenNames.male >= 8 and #pools.givenNames.female >= 8 and #pools.surnames >= 8
+        #pools.givenNames.male >= 25 and #pools.givenNames.female >= 25 and #pools.surnames >= 24
 
     if pools then
         for _, pool in ipairs({ pools.givenNames.male, pools.givenNames.female, pools.surnames }) do
@@ -73,12 +76,35 @@ for _, raceID in ipairs(themedNameRaces) do
         end
     end
 end
-MOCK.Assert(allNamePoolsValid, "все девять рас имеют проверенные тематические имена и фамилии")
+MOCK.Assert(allNamePoolsValid, "все 17 рас имеют расширенные имена и фамилии, включая кириллические варианты")
+local configuredHumanModel = "models/mailer/character/human/male/humanmale00_00.mdl"
+local discoveredHumanModel = "models/mailer/character/human/male/humanmale00_99.mdl"
+MOCK.mountedFiles[configuredHumanModel] = nil
+MOCK.mountedFiles[discoveredHumanModel] = true
 WO.Models.RefreshRaceLists()
 local refreshedHumanModels = WO.Races.GetModels("human", "male")
-MOCK.Assert(table.HasValue(refreshedHumanModels,
-    "models/mailer/character/human/male/humanmale00_99.mdl"),
-    "refresh обнаруживает слитый player_manager идентификатор humanmale00_99")
+MOCK.Assert(table.HasValue(refreshedHumanModels, configuredHumanModel) and
+    not table.HasValue(refreshedHumanModels, discoveredHumanModel),
+    "race UI использует явный путь без file.Exists и не сканирует player_manager")
+MOCK.mountedFiles[configuredHumanModel] = true
+local configuredPlayableRaces = {
+    "human", "elf", "orc", "dwarf", "gnome", "undead", "tauren", "troll", "goblin",
+    "bloodelf", "dracthyr", "draenei", "pandaren", "worgen", "vulpera", "sethrak", "naga",
+}
+local everyConfiguredRaceHasBothModels = true
+for _, raceId in ipairs(configuredPlayableRaces) do
+    for _, gender in ipairs({ "male", "female" }) do
+        local paths = WO.Races.GetModels(raceId, gender)
+        everyConfiguredRaceHasBothModels = everyConfiguredRaceHasBothModels and
+            #paths > 0 and string.sub(paths[1] or "", 1, 14) == "models/mailer/"
+    end
+end
+MOCK.Assert(everyConfiguredRaceHasBothModels and
+    table.HasValue(WO.Races.GetModels("pandaren", "male"),
+        "models/mailer/character/pandaren/male/pandarenmale05_02.mdl") and
+    table.HasValue(WO.Races.GetModels("pandaren", "female"),
+        "models/mailer/character/pandaren/female/pandarenfemale03_04.mdl"),
+    "явный каталог показывает пути всех рас и подтверждённые варианты Pandaren без локального fallback")
 
 local unlistedModelPath = "models/mailer/character/test/unlisted_preview.mdl"
 MOCK.mountedFiles[unlistedModelPath] = true
@@ -102,13 +128,21 @@ MOCK.Assert(not WO.Races.IsPlayableModel(unlistedModelPath) and
 
 local delayedModelPath = "models/mailer/character/test/delayed_mount.mdl"
 local delayedPreview = WO.UI.CreateCharacterModel(nil, delayedModelPath)
-MOCK.Assert(not IsValid(delayedPreview.Entity) and delayedPreview.requestedModel == delayedModelPath,
-    "отсутствующая при первом запросе модель остаётся ожидающей повторной проверки")
+MOCK.Assert(not IsValid(delayedPreview.Entity) and delayedPreview.requestedModel == delayedModelPath and
+    delayedPreview.__lastSetModelPath == delayedModelPath,
+    "превью сразу передаёт заданный путь DModelPanel без предварительной проверки наличия")
 MOCK.mountedFiles[delayedModelPath] = true
 delayedPreview.nextModelRetry = CurTime() - 1
 delayedPreview:Think()
 MOCK.Assert(IsValid(delayedPreview.Entity) and delayedPreview.currentModel == delayedModelPath,
     "общее preview повторно загружает модель после монтирования контента")
+MOCK.drawnTextValues = {}
+local unmountedPreviewPath = "models/mailer/character/test/not_mounted.mdl"
+local unavailablePreview = WO.UI.CreateCharacterModel(nil, unmountedPreviewPath)
+unavailablePreview:PaintOver(120, 180)
+MOCK.Assert(unavailablePreview.__lastSetModelPath == unmountedPreviewPath and
+    #MOCK.drawnTextValues == 0,
+    "3D-превью передаёт точный путь напрямую и не рисует блокирующее сообщение")
 
 MOCK.Assert(WO.Config.StartingWeaponClasses.hands == "drc_unarmed" and
     WO.Config.StartingWeaponClasses.knife == "tfa_cso_coldsteelblade" and
@@ -148,6 +182,19 @@ end
 MOCK.Assert(PaintedOccurrences(oneTextButton) == 1 and
     PaintedOccurrences(oneTextLabel) == 1,
     "кастомные кнопка и метка рисуют видимый текст ровно один раз")
+
+local buttonActionCount = 0
+local responsiveButton = WO.UI.Button(nil, "Проверить", function()
+    buttonActionCount = buttonActionCount + 1
+end)
+responsiveButton:DoClick()
+responsiveButton:SetBusy(true, WO.Lang:Get("ui.pending"))
+responsiveButton:DoClick() -- disabled buttons never dispatch a second request
+MOCK.Assert(buttonActionCount == 1 and responsiveButton:IsEnabled() == false,
+    "общая WO-кнопка сразу вызывает действие и блокирует повторный запрос в ожидании")
+responsiveButton:SetBusy(false)
+MOCK.Assert(responsiveButton:IsEnabled() and responsiveButton.woText == "Проверить",
+    "WO-кнопка возвращает текст и доступность после завершения запроса")
 
 print("[scenario] client load OK")
 
@@ -238,6 +285,12 @@ exitButton:DoClick()
 MOCK.Assert(MOCK.consoleCommands[#MOCK.consoleCommands][1] == "disconnect",
     "кнопка выхода вызывает disconnect")
 
+-- Exit closes the entire menu; reacquire a live create button instead of
+-- dispatching a click to a stale child panel.
+WO.CharacterUI.OpenMainMenu()
+createButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.create"))
+MOCK.Assert(createButton ~= nil and IsValid(createButton),
+    "главное меню повторно открывается перед действием создания")
 createButton:DoClick()
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "create", "кнопка создания открывает мастер")
 MOCK.Assert(WO.CharacterUI.OpenCreate ~= nil, "OpenCreate доступна")
@@ -265,6 +318,16 @@ local function ClickWizardNext()
     MOCK.Assert(nextButton ~= nil, "у шага мастера есть кнопка Далее")
     nextButton:DoClick()
 end
+
+local specialRace = WO.Races.Get("bloodelf")
+local specialRaceLabel = specialRace.name .. " · " .. WO.Lang:Get("race.special")
+local specialRaceButton = MOCK.FindPanelByText(specialRaceLabel)
+MOCK.Assert(specialRaceButton ~= nil and specialRaceButton:IsEnabled(),
+    "особая раса помечена ровно нейтральной меткой без клиентского admin gate")
+specialRaceButton:DoClick()
+MOCK.Assert(WO.CharacterUI.PreviewModel.requestedModel == specialRace.models.male[1] and
+    WO.CharacterUI.PreviewModel.__lastSetModelPath == specialRace.models.male[1],
+    "особая раса передаёт точный путь в preview, а создание отдельно защищает сервер")
 
 local selectedRace = WO.Races.Get("human")
 MOCK.Assert(selectedRace and #WO.Races.GetAvailableGenders("human") > 0,
@@ -463,17 +526,17 @@ local selectorClasses = {}
 for _, entry in ipairs(selectorWeapons) do selectorClasses[entry.class] = true end
 MOCK.Assert(#selectorWeapons == 2 and selectorClasses.drc_unarmed and
     selectorClasses.tfa_cso_coldsteelblade and
-    isfunction(WO.HUD.DrawWeaponSelector),
-    "собственный селектор перечисляет только выданные игроку SWEP")
+    isfunction(WO.HUD.DrawWeaponSelector) and
+    WO.WeaponSelector.IsVisible(localWeaponPlayer) == false,
+    "селектор содержит только выданные SWEP и скрыт до нажатия клавиши")
 local weaponBind = hook.GetTable().PlayerBindPress.wo_weapon_selector_bind
 MOCK.TakeOutbox()
 MOCK.Assert(isfunction(weaponBind) and weaponBind(localWeaponPlayer, "invnext", true) == true,
-    "колёсико мыши перехватывается пользовательским селектором оружия")
-local selectedWeaponOutbox = MOCK.TakeOutbox()
-local selectedWeaponMessages = MOCK.FindInbox(selectedWeaponOutbox, "Weapons.Select")
-MOCK.Assert(#selectedWeaponMessages == 1 and
-    selectedWeaponMessages[1].args[1] == "tfa_cso_coldsteelblade",
-    "селектор запрашивает у сервера выбор только оружия из локального списка")
+    "обычное колесо мыши блокируется для смены оружия")
+local scrollSelectionOutbox = MOCK.TakeOutbox()
+MOCK.Assert(#MOCK.FindInbox(scrollSelectionOutbox, "Weapons.Select") == 0 and
+    localWeaponPlayer:GetActiveWeapon():GetClass() == "drc_unarmed",
+    "колёсико больше не отправляет запрос и не меняет активное оружие")
 
 -- More than six and more than ten SWEPs must still expose the complete numeric
 -- window; the tenth standard slot is bound to key 0.
@@ -493,6 +556,8 @@ end
 MOCK.Assert(numericWindowValid,
     "селектор показывает десять SWEP одновременно и подписывает десятый клавишей 0")
 
+local lastSelectedWeapon
+
 for _, key in ipairs(expectedKeys) do
     MOCK.AdvanceTime(1) -- let the previous optimistic selection expire
     local visible = WO.WeaponSelector.GetVisibleWeapons(localWeaponPlayer)
@@ -503,13 +568,26 @@ for _, key in ipairs(expectedKeys) do
     end
 
     MOCK.TakeOutbox()
-    local bind = "slot" .. tostring(key)
+    local bind = "slot" .. tostring(key == 0 and 10 or key)
     MOCK.Assert(expected ~= nil and weaponBind(localWeaponPlayer, bind, true) == true,
         "keyboard slot bind is consumed for key " .. tostring(key))
     local slotMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Weapons.Select")
     MOCK.Assert(#slotMessages == 1 and slotMessages[1].args[1] == expected,
         "keyboard key " .. tostring(key) .. " selects its visible owned SWEP")
+    lastSelectedWeapon = expected
 end
+
+MOCK.Assert(WO.WeaponSelector.IsVisible(localWeaponPlayer),
+    "числовой выбор временно показывает selector, пока сервер не подтвердил смену")
+localWeaponPlayer:SelectWeapon(lastSelectedWeapon) -- simulate authoritative server selection
+MOCK.Assert(not WO.WeaponSelector.IsVisible(localWeaponPlayer),
+    "selector исчезает сразу после подтверждения выбранного оружия сервером")
+MOCK.Assert(weaponBind(localWeaponPlayer, "slot1", true) == true and
+    WO.WeaponSelector.IsVisible(localWeaponPlayer),
+    "следующий выбор цифрой снова кратковременно показывает selector")
+MOCK.AdvanceTime(1)
+MOCK.Assert(not WO.WeaponSelector.IsVisible(localWeaponPlayer),
+    "selector автоматически скрывается, если подтверждение сервера не пришло")
 
 local aimWeapon = MOCK.NewEntity("weapon")
 aimWeapon.__weaponClass = "wo_test_melee"
@@ -654,6 +732,21 @@ MOCK.Assert(not hudShowsMoney, "валюта не отображается в Wo
 LocalPlayer():SetNW2Bool("wo_inmenu", false)
 
 local hoverNPC = MOCK.NewEntity("npc")
+local unmountedTargetModel = "models/mailer/wow_characters/target_preview_test.mdl"
+MOCK.mountedFiles[unmountedTargetModel] = nil
+hoverNPC:SetModel(unmountedTargetModel)
+LocalPlayer():SetNW2Entity("wo_target", hoverNPC)
+WO.HUD.DrawTargetFrame()
+local targetPreviewUsedConfiguredPath = false
+for _, panel in ipairs(MOCK.createdPanels) do
+    if rawget(panel, "__lastSetModelPath") == unmountedTargetModel then
+        targetPreviewUsedConfiguredPath = true
+        break
+    end
+end
+MOCK.Assert(targetPreviewUsedConfiguredPath,
+    "HUD target portrait attempts its model path directly without file.Exists gating")
+LocalPlayer():SetNW2Entity("wo_target", nil)
 hoverNPC:SetNW2String("wo_npc_id", "black_wolf")
 hoverNPC:SetNW2String("wo_name", "Волк")
 hoverNPC:SetNW2Int("wo_level", 4)
@@ -747,8 +840,17 @@ MOCK.Assert(not WO.Interaction.CanInteract(merchantNPC, LocalPlayer()),
 local hoverItem = ents.Create("wo_item_world")
 hoverItem:SetPos(LocalPlayer():GetPos() + Vector(25, 0, 0))
 local hoverInstance = WO.Items.CreateInstance("wolf_pelt", 2)
-MOCK.Assert(hoverItem:SetItem(hoverInstance), "world resource exposes safe hover NW2 data")
+MOCK.Assert(hoverItem:SetItem(hoverInstance) and isfunction(hoverItem.Draw) and
+    hoverItem:CanInteract(LocalPlayer()) == false,
+    "world resource exposes safe hover data, Draw, and the replicated short pickup cooldown")
+local modelLessWorldItem = ents.Create("wo_item_world")
+local modelLessInstance = WO.Items.CreateInstance("starter_knife", 1)
+MOCK.Assert(modelLessWorldItem:SetItem(modelLessInstance) and
+    modelLessWorldItem:GetModel() == "models/props_junk/PopCan01a.mdl",
+    "предмет мира без model definition получает видимую базовую модель")
 MOCK.AdvanceTime(1.1)
+MOCK.Assert(hoverItem:CanInteract(LocalPlayer()) == true,
+    "E становится доступной клиенту сразу после короткого серверного кулдауна")
 local savedEyeTrace = LocalPlayer().__methods.GetEyeTrace
 LocalPlayer().__methods.GetEyeTrace = function()
     return { Entity = hoverItem, Hit = true, HitPos = hoverItem:GetPos() }
@@ -776,6 +878,24 @@ hook.GetTable().PreDrawHalos.wo_resource_hover_halo()
 MOCK.Assert(MOCK.lastHalo and MOCK.lastHalo.entities[1] == hoverItem and
     table.concat(MOCK.drawnTextValues, " "):find("Волчья шкура", 1, true) ~= nil,
     "ресурс получает лёгкий halo и плавную карточку при наведении")
+local assistedItem = ents.Create("wo_item_world")
+assistedItem:SetPos(LocalPlayer():GetPos() + Vector(0, 48, 0))
+MOCK.Assert(assistedItem:SetItem(WO.Items.CreateInstance("wolf_fang", 1)),
+    "проверка E-assist создаёт малую цель добычи перед игроком")
+MOCK.AdvanceTime(0.3)
+LocalPlayer().__methods.GetEyeTrace = function()
+    return { Entity = nil, Hit = true, HitPos = LocalPlayer():GetPos() + Vector(0, 60, 0) }
+end
+WO.Interaction.UpdateClientTarget()
+MOCK.Assert(WO.Interaction.GetHoveredResourceInfo() and
+    WO.Interaction.GetHoveredResourceInfo().entity == assistedItem,
+    "близкая добыча в направлении взгляда выбирается даже без попадания eye trace")
+MOCK.TakeOutbox()
+MOCK.Assert(interactionBind(LocalPlayer(), "+use", true) == true,
+    "E отправляет серверный запрос для ближайшей мелкой добычи без прямого попадания")
+local assistedRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Interact.Request")
+MOCK.Assert(#assistedRequest == 1 and assistedRequest[1].args[1] == assistedItem:EntIndex(),
+    "ассистированный подбор передаёт серверу только индекс физической сущности")
 LocalPlayer().__methods.GetEyeTrace = savedEyeTrace
 MOCK.frameTime = nil
 MOCK.Assert(WO.Net.Messages["Stats.Sync"] ~= nil, "Stats.Sync зарегистрирован в клиентском realm")
@@ -804,6 +924,29 @@ MOCK.Assert(WO.Inventory.ClientData.items[1].amount == 2 and
     WO.Inventory.ClientData.items[1].durability == 80,
     "Inventory.Delta сохраняет порядок полей предмета")
 
+local potionDef = WO.Items.Get("health_potion")
+local originalPotionModel = potionDef.model
+MOCK.mountedFiles[originalPotionModel] = true
+local potionSlot = WO.UI.ItemSlot(nil)
+potionSlot:SetItem({ class = "health_potion", uid = "potion-icon-test", amount = 1 })
+MOCK.Assert(IsValid(potionSlot.itemIcon) and IsValid(potionSlot.itemIcon.Entity) and
+    potionSlot.itemIcon:GetCamPos() ~= nil,
+    "зелье здоровья получает DModelPanel с рассчитанной камерой для малого пропа")
+potionDef.model = "models/missing/health_potion.mdl"
+potionSlot:SetItem({ class = "health_potion", uid = "potion-fallback-test", amount = 1 })
+MOCK.drawnTextValues = {}
+potionSlot:Paint(64, 64)
+MOCK.Assert(not IsValid(potionSlot.itemIcon) and
+    table.concat(MOCK.drawnTextValues, " "):find("✚", 1, true) ~= nil,
+    "при недоступной модели зелье всё равно показывает читаемую fallback-иконку")
+potionDef.model = originalPotionModel
+local modelLessSlot = WO.UI.ItemSlot(nil)
+modelLessSlot:SetItem({ class = "starter_knife", uid = "knife-icon-test", amount = 1 })
+MOCK.drawnTextValues = {}
+modelLessSlot:Paint(64, 64)
+MOCK.Assert(table.concat(MOCK.drawnTextValues, " "):find("Н", 1, true) ~= nil,
+    "предметы без 3D-модели отображают заданный iconText")
+
 local panelsBeforeInventory = #MOCK.createdPanels
 WO.InventoryUI.Open()
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeInventory, "окно инвентаря создаёт панели")
@@ -827,9 +970,10 @@ end
 MOCK.Assert(inventoryPanelCount >= 2, "инвентарь и экипировка — отдельные панели")
 MOCK.Assert(WO.InventoryUI.IsOpen(), "окно инвентаря сообщает открытое состояние")
 local itemSlotPanel
-for _, panel in ipairs(MOCK.createdPanels) do
-    if rawget(panel, "__class") == "WO_ItemSlot" and
-        rawget(panel, "__removed") ~= true and isfunction(panel.OnContextMenu) then
+for index = #MOCK.createdPanels, 1, -1 do
+    local panel = MOCK.createdPanels[index]
+    if rawget(panel, "__class") == "WO_ItemSlot" and rawget(panel, "item") ~= nil and
+        rawget(panel, "__removed") ~= true and isfunction(rawget(panel, "OnContextMenu")) then
         itemSlotPanel = panel
         break
     end
@@ -905,6 +1049,25 @@ for _, line in ipairs(refreshedTracker) do
 end
 MOCK.Assert(trackerHasBoars, "HUD-трекер сразу отражает новое состояние задания")
 
+local untrackButton = MOCK.FindPanelByText(WO.Lang:Get("quest.untrack"))
+MOCK.Assert(untrackButton ~= nil, "в журнале есть доступная кнопка отслеживания")
+MOCK.TakeOutbox()
+untrackButton:DoClick()
+local trackRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Quest.Track")
+MOCK.Assert(#trackRequest == 1 and untrackButton:IsEnabled() == false and
+    rawget(untrackButton, "__removed") ~= true,
+    "одно нажатие сразу отправляет Quest.Track, блокирует дубли и не закрывает журнал")
+local trackedQuestId = trackRequest[1].args[1]
+MOCK.NetDeliver({ name = "Quest.Sync", args = { {
+    [trackedQuestId] = { status = "active", progress = { [1] = 1 }, tracked = false },
+} } }, 8, nil)
+MOCK.NetDeliver({ name = "Quest.ActionResult", args = { {
+    action = "track", questId = trackedQuestId, success = true,
+} } }, 8, nil)
+local retrackButton = MOCK.FindPanelByText(WO.Lang:Get("quest.track"))
+MOCK.Assert(retrackButton ~= nil and retrackButton:IsEnabled(),
+    "серверный ответ завершает запрос и возвращает кнопку в рабочее состояние")
+
 -- События квестов (уведомления)
 MOCK.NetDeliver({ name = "Quest.Event", args = { { type = "accepted", questId = "q", name = "Тест" } } }, 8, nil)
 MOCK.NetDeliver({ name = "Quest.Event", args = { { type = "completed", questId = "q", name = "Тест",
@@ -951,6 +1114,14 @@ MOCK.NetDeliver({ name = "Dialogue.Open", args = { {
 } } }, 8, nil)
 
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeDlg, "окно диалога создано")
+local dialogueOption = MOCK.FindPanelByText("1. Пока")
+MOCK.Assert(dialogueOption ~= nil, "вариант диалога представлен доступной кнопкой")
+MOCK.TakeOutbox()
+dialogueOption:DoClick()
+local dialogueChoose = MOCK.FindInbox(MOCK.TakeOutbox(), "Dialogue.Choose")
+MOCK.Assert(#dialogueChoose == 1 and dialogueOption:IsEnabled() == false and
+    rawget(dialogueOption, "__removed") ~= true,
+    "кнопка диалога отправляет один запрос и ждёт ответа вместо преждевременного закрытия")
 
 MOCK.NetDeliver({ name = "Dialogue.Finish", args = {} }, 8, nil)
 
@@ -964,6 +1135,36 @@ MOCK.NetDeliver({ name = "Vendor.Sync", args = { {
 } } }, 8, nil)
 
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeVendor, "окно торговли создано")
+local vendorBuyButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.buy_one"))
+MOCK.Assert(vendorBuyButton ~= nil and vendorBuyButton:IsEnabled(),
+    "витрина создаёт активную кнопку покупки")
+MOCK.TakeOutbox()
+vendorBuyButton:DoClick()
+local buyRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.Buy")
+MOCK.Assert(#buyRequest == 1 and vendorBuyButton:IsEnabled() == false,
+    "кнопка магазина немедленно отправляет покупку и блокирует повторный клик до ответа")
+MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
+    action = "buy", npcId = "trader_marla", success = false, reason = "not_enough_money",
+} } }, 8, nil)
+local retryBuyButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.buy_one"))
+MOCK.Assert(retryBuyButton ~= nil and retryBuyButton:IsEnabled(),
+    "ответ магазина разблокирует покупку и позволяет повторить её без закрытия окна")
+local vendorSellButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.sell_one"))
+MOCK.Assert(vendorSellButton ~= nil and vendorSellButton:IsEnabled(),
+    "витрина продаж строится из Inventory.ClientData, а не отсутствующего Character.inventory")
+MOCK.TakeOutbox()
+vendorSellButton:DoClick()
+local sellRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Vendor.Sell")
+MOCK.Assert(#sellRequest == 1 and sellRequest[1].args[1] == "trader_marla" and
+    sellRequest[1].args[2] == "test-item-uid" and sellRequest[1].args[3] == 1 and
+    vendorSellButton:IsEnabled() == false,
+    "кнопка продажи сразу отправляет UID серверу и блокирует повторную транзакцию")
+MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
+    action = "sell", npcId = "trader_marla", success = false, reason = "cannot_sell",
+} } }, 8, nil)
+local retrySellButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.sell_one"))
+MOCK.Assert(retrySellButton ~= nil and retrySellButton:IsEnabled(),
+    "ответ сервера разблокирует продажу без закрытия окна")
 
 print("[scenario] quest/dialogue/vendor UI OK")
 
