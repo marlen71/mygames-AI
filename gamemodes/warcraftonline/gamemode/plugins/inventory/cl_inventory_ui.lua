@@ -76,7 +76,7 @@ local function OpenItemMenu(_, item)
 
     local menu = DermaMenu()
 
-    if def.equipment or def.consumable then
+    if def.equipment or def.consumable or isfunction(def.useHandler) then
         local actionKey = def.equipment and "inventory.equip" or "inventory.use"
         menu:AddOption(WO.Lang:Get(actionKey), function()
             WO.Net.SendToServer("Inventory.Use", item.uid)

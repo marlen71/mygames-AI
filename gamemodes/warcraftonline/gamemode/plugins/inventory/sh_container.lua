@@ -74,6 +74,8 @@ local function MarkGrid(self, instance)
 end
 
 local function UnmarkGrid(self, instance)
+    if not instance or not tonumber(instance.x) or not tonumber(instance.y) then return end
+
     local w, h = ItemSize(instance)
 
     for dy = 0, h - 1 do
@@ -102,6 +104,9 @@ end
 ]]
 function CONTAINER:CanFit(instance, x, y)
     if not istable(instance) then return false end
+
+    x, y = tonumber(x), tonumber(y)
+    if not x or not y then return false end
 
     local w, h = ItemSize(instance)
 
@@ -132,7 +137,7 @@ end
     @param instance table
     @return number|nil x, number|nil y
 ]]
-function CONTAINER:FindSpace(instance)
+local function FindSpaceWithoutRepair(self, instance)
     if not istable(instance) then return nil end
 
     local w, h = ItemSize(instance)
@@ -146,6 +151,64 @@ function CONTAINER:FindSpace(instance)
     end
 
     return nil
+end
+
+--- Восстанавливает bitmap-сетку из авторитетного списка предметов.
+-- Сетка — кэш; загруженное/устаревшее поле не должно делать пустые слоты занятыми.
+function CONTAINER:RebuildGrid()
+    local entries = {}
+
+    for uid, instance in pairs(self.items or {}) do
+        if istable(instance) and instance.uid == uid then
+            entries[#entries + 1] = instance
+        end
+    end
+
+    table.sort(entries, function(a, b)
+        local ay, by = tonumber(a.y) or math.huge, tonumber(b.y) or math.huge
+        if ay ~= by then return ay < by end
+
+        local ax, bx = tonumber(a.x) or math.huge, tonumber(b.x) or math.huge
+        if ax ~= bx then return ax < bx end
+
+        return tostring(a.uid) < tostring(b.uid)
+    end)
+
+    self.grid = {}
+    self.count = 0
+
+    for _, instance in ipairs(entries) do
+        self.count = self.count + 1
+
+        local x, y = tonumber(instance.x), tonumber(instance.y)
+
+        if x and y and self:CanFit(instance, x, y) then
+            instance.x, instance.y = x, y
+            MarkGrid(self, instance)
+        else
+            local nextX, nextY = FindSpaceWithoutRepair(self, instance)
+
+            if nextX and nextY then
+                instance.x, instance.y = nextX, nextY
+                MarkGrid(self, instance)
+            else
+                -- Не теряем предмет, если контейнер реально переполнен; оставляем
+                -- его в данных с пустыми координатами для последующего recovery.
+                instance.x, instance.y = nil, nil
+            end
+        end
+    end
+
+    return self.count
+end
+
+--[[
+    Ищет свободное место для предмета. Перед поиском исправляет устаревшую
+    сетку, которая могла остаться после загрузки/старого сохранения.
+]]
+function CONTAINER:FindSpace(instance)
+    self:RebuildGrid()
+    return FindSpaceWithoutRepair(self, instance)
 end
 
 --[[
@@ -177,6 +240,8 @@ function CONTAINER:AddItem(instance, x, y)
     if self.items[instance.uid] then
         return false, "already_exists"
     end
+
+    self:RebuildGrid()
 
     if x == nil or y == nil then
         local fx, fy = self:FindSpace(instance)
@@ -210,6 +275,8 @@ end
     @return table|nil instance
 ]]
 function CONTAINER:RemoveItem(uid)
+    self:RebuildGrid()
+
     local instance = self.items[uid]
 
     if not instance then return nil end
@@ -234,6 +301,8 @@ end
     @return boolean success, string|nil reason
 ]]
 function CONTAINER:MoveItem(uid, x, y)
+    self:RebuildGrid()
+
     local instance = self.items[uid]
 
     if not instance then
@@ -456,6 +525,8 @@ end
     Сериализует контейнер для сохранения (только чистые данные).
 ]]
 function CONTAINER:Serialize()
+    self:RebuildGrid()
+
     local items = {}
 
     for _, instance in pairs(self.items) do

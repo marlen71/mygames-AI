@@ -22,7 +22,6 @@ local HIDE = {
     CHudBattery = true,
     CHudAmmo = true,
     CHudSecondaryAmmo = true,
-    CHudWeaponSelection = true,
     CHudCrosshair = true,
     CHudScoreboard = true,
     CHudDamageIndicator = true,
@@ -256,15 +255,25 @@ function WO.HUD.DrawTargetFrame()
     WO.UI.DrawPanelOutlined(x, y, w, h, WO.UI.Colors.panel, WO.UI.Colors.border)
 
     local name
-    local level = 1
+    local detail
     local hp, maxHp
+    local showHealth = true
 
     if target:IsPlayer() then
-        name = target:GetNW2String("wo_name", target:Nick())
-        level = target:GetNW2Int("wo_level", 1)
+        local identity = WO.Social and WO.Social.GetVisibleIdentity and
+            WO.Social.GetVisibleIdentity(target) or { known = false, name = "Неизвестный", race = "" }
+        name = identity.name or "Неизвестный"
+
+        if identity.known then
+            detail = WO.Lang:Get("character.level") .. " " .. (identity.level or 1) ..
+                " · " .. (identity.class or "") .. " · " .. (identity.race or "")
+        else
+            detail = identity.race or ""
+            showHealth = false
+        end
     else
         name = target:GetNW2String("wo_name", target.PrintName or target:GetClass())
-        level = target:GetNW2Int("wo_level", 1)
+        detail = WO.Lang:Get("character.level") .. " " .. target:GetNW2Int("wo_level", 1)
     end
 
     hp = math.max(0, target:Health())
@@ -273,11 +282,188 @@ function WO.HUD.DrawTargetFrame()
 
     WO.UI.DrawTextFit(name, "WO.HUDName", detailsX, y + 14, WO.UI.Colors.text,
         TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, detailsWidth, 24)
-    WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level, "WO.Tiny",
-        detailsX, y + 37, WO.UI.Colors.textDim,
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, detailsWidth, 16)
-    WO.UI.DrawBar(detailsX, y + 61, detailsWidth, 17, hp / maxHp,
-        WO.UI.Colors.health, WO.UI.Colors.healthBg, hp .. " / " .. maxHp)
+    WO.UI.DrawTextFit(detail or "", "WO.Tiny", detailsX, y + 37,
+        WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, detailsWidth, 16)
+
+    if showHealth then
+        WO.UI.DrawBar(detailsX, y + 61, detailsWidth, 17, hp / maxHp,
+            WO.UI.Colors.health, WO.UI.Colors.healthBg, hp .. " / " .. maxHp)
+    end
+end
+
+---------------------------------------------------------------------------
+-- Имя игрока, NPC-инспектор, числа урона и пользовательский прицел
+---------------------------------------------------------------------------
+
+local damageNumbers = {}
+
+local function DrawOutlinedText(text, font, x, y, color, alignX, alignY)
+    if draw.SimpleTextOutlined then
+        draw.SimpleTextOutlined(text, font, x, y, color, alignX, alignY,
+            1, Color(8, 10, 14, 230))
+    else
+        draw.SimpleText(text, font, x, y, color, alignX, alignY)
+    end
+end
+
+function WO.HUD.DrawPlayerNameplates()
+    local localPlayer = LocalPlayer()
+    if not IsValid(localPlayer) then return end
+
+    for _, target in ipairs(player.GetAll()) do
+        if IsValid(target) and target ~= localPlayer and
+            target:GetNW2Bool("wo_char_active", false) then
+            local distance = localPlayer:GetPos():Distance(target:GetPos())
+
+            if distance <= 1800 then
+                local identity = WO.Social and WO.Social.GetVisibleIdentity and
+                    WO.Social.GetVisibleIdentity(target) or {
+                        known = false,
+                        name = "Неизвестный",
+                        race = "Неизвестная раса",
+                    }
+                local head = target:GetPos() + Vector(0, 0, 82)
+                local screen = head:ToScreen()
+
+                if screen.visible then
+                    local x = screen.x
+                    local y = screen.y - (identity.known and 34 or 22)
+                    local line
+
+                    if identity.known then
+                        line = "ур. " .. (identity.level or 1) .. "  ·  " ..
+                            (identity.class or "") .. "  ·  " .. (identity.race or "")
+                    else
+                        line = identity.race or "Неизвестная раса"
+                    end
+
+                    draw.RoundedBox(4, x - 122, y - 4, 244, identity.known and 42 or 27,
+                        Color(9, 13, 20, 190))
+                    DrawOutlinedText(identity.name or "Неизвестный", "WO.Small", x, y,
+                        identity.known and WO.UI.Colors.text or WO.UI.Colors.textDim,
+                        TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+                    DrawOutlinedText(line, "WO.Tiny", x, y + 17,
+                        WO.UI.Colors.accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+                end
+            end
+        end
+    end
+end
+
+function WO.HUD.DrawHoverNPC()
+    local ply = LocalPlayer()
+    if not IsValid(ply) or not isfunction(ply.GetEyeTrace) then return end
+
+    local trace = ply:GetEyeTrace()
+    local target = trace and trace.Entity
+
+    if not IsValid(target) or target:GetNW2String("wo_npc_id", "") == "" then return end
+
+    local name = target:GetNW2String("wo_name", target.PrintName or target:GetClass())
+    local level = math.max(1, target:GetNW2Int("wo_level", 1))
+    local maxHealth = math.max(1, isfunction(target.GetMaxHealth) and target:GetMaxHealth() or 1)
+    local health = math.Clamp(isfunction(target.Health) and target:Health() or 0, 0, maxHealth)
+    local center = isfunction(target.WorldSpaceCenter) and target:WorldSpaceCenter() or target:GetPos()
+    local screen = (center + Vector(0, 0, 38)):ToScreen()
+
+    if not screen.visible then return end
+
+    local width, height = 248, 66
+    local x = math.Clamp(screen.x - width / 2, 8, ScrW() - width - 8)
+    local y = math.Clamp(screen.y - height - 8, 8, ScrH() - height - 8)
+
+    WO.UI.DrawPanelOutlined(x, y, width, height, Color(10, 14, 22, 228),
+        WO.UI.Colors.accentDark)
+    WO.UI.DrawTextFit(name, "WO.Small", x + 10, y + 7, WO.UI.Colors.text,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, width - 20, 20)
+    WO.UI.DrawTextFit("Уровень " .. level, "WO.Tiny", x + 10, y + 27,
+        WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 85, 15)
+    WO.UI.DrawBar(x + 98, y + 31, width - 110, 14, health / maxHealth,
+        WO.UI.Colors.health, WO.UI.Colors.healthBg, health .. " / " .. maxHealth)
+end
+
+function WO.HUD.DrawDamageNumbers()
+    local now = CurTime()
+
+    for index = #damageNumbers, 1, -1 do
+        local entry = damageNumbers[index]
+        local age = now - entry.started
+
+        if age >= 1.45 then
+            table.remove(damageNumbers, index)
+        else
+            local screen = entry.position:ToScreen()
+
+            if screen.visible then
+                local alpha = math.floor(255 * math.Clamp(1 - age / 1.45, 0, 1))
+                local rise = age * 38
+                local text = (entry.critical and "CRIT  " or "") .. "-" ..
+                    tostring(math.floor(entry.amount + 0.5))
+                local color = entry.critical and Color(255, 208, 92, alpha) or
+                    Color(255, 118, 91, alpha)
+
+                DrawOutlinedText(text, entry.critical and "WO.Subtitle" or "WO.Body",
+                    screen.x, screen.y - rise, color, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            end
+        end
+    end
+end
+
+function WO.HUD.AddDamageNumber(data)
+    if not istable(data) or not isvector(data.position) then return end
+
+    damageNumbers[#damageNumbers + 1] = {
+        position = data.position,
+        amount = math.max(0, tonumber(data.amount) or 0),
+        critical = data.critical == true,
+        started = CurTime(),
+    }
+
+    if #damageNumbers > 32 then table.remove(damageNumbers, 1) end
+end
+
+function WO.HUD.DrawCrosshair()
+    local cx, cy = ScrW() / 2, ScrH() / 2
+    local color = Color(240, 202, 115, 235)
+    local ply = LocalPlayer()
+
+    if IsValid(ply) and isfunction(ply.GetEyeTrace) then
+        local trace = ply:GetEyeTrace()
+        local target = trace and trace.Entity
+
+        if IsValid(target) and target:GetNW2String("wo_npc_id", "") ~= "" then
+            color = Color(241, 112, 91, 245)
+        elseif IsValid(target) and target:IsPlayer() then
+            local identity = WO.Social and WO.Social.GetVisibleIdentity and
+                WO.Social.GetVisibleIdentity(target)
+            color = identity and identity.known and Color(128, 222, 164, 245) or
+                Color(205, 211, 224, 235)
+        end
+    end
+
+    surface.SetDrawColor(7, 9, 14, 230)
+    local gold = color
+
+    -- Four bracketed arms leave the center open, with an inner diamond and dot.
+    local segments = {
+        { -11, -5, -11, -11 }, { -11, -11, -5, -11 },
+        { 5, -11, 11, -11 }, { 11, -11, 11, -5 },
+        { 11, 5, 11, 11 }, { 11, 11, 5, 11 },
+        { -5, 11, -11, 11 }, { -11, 11, -11, 5 },
+        { -4, 0, 0, -4 }, { 0, -4, 4, 0 },
+        { 4, 0, 0, 4 }, { 0, 4, -4, 0 },
+    }
+
+    surface.SetDrawColor(7, 9, 14, 235)
+    for _, line in ipairs(segments) do
+        surface.DrawLine(cx + line[1], cy + line[2], cx + line[3], cy + line[4])
+    end
+    surface.SetDrawColor(gold)
+    for _, line in ipairs(segments) do
+        surface.DrawLine(cx + line[1], cy + line[2], cx + line[3], cy + line[4])
+    end
+    surface.SetDrawColor(gold)
+    surface.DrawRect(cx - 1, cy - 1, 2, 2)
 end
 
 ---------------------------------------------------------------------------
@@ -440,6 +626,13 @@ end
 -- text/resource frames and makes the z-order deterministic.
 hook.Add("HUDPaint", "wo_hud_paint", function()
     EnsureHUDCanvas()
+
+    if not HasCustomHUD() then return end
+
+    DrawHUDSection("crosshair", WO.HUD.DrawCrosshair)
+    DrawHUDSection("player nameplates", WO.HUD.DrawPlayerNameplates)
+    DrawHUDSection("npc hover", WO.HUD.DrawHoverNPC)
+    DrawHUDSection("damage numbers", WO.HUD.DrawDamageNumbers)
 end)
 
 hook.Add("InitPostEntity", "wo_hud_canvas_init", function()

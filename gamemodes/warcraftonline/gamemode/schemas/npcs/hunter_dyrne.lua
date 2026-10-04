@@ -1,5 +1,5 @@
 --[[
-    Warcraft Online — охотник: выдаёт последовательные поручения на кабанов и волков.
+    Warcraft Online — охотник выдаёт нож за принятие охоты на кабанов и принимает отчёт.
     Точная WoW-модель пользователя; без гражданского fallback.
 ]]
 
@@ -12,6 +12,6 @@ WO.NPCs.Register({
     scale = 1,
     spawns = WO.Config.NPCSpawnPoints.hunter_dyrne or {},
     dialogue = "hunter_intro",
-    quests = { "boar_hunt", "wolves_of_elwynn" },
+    quests = { "boar_hunt" },
     interactRange = WO.Config.InteractDistance,
 })

@@ -25,7 +25,6 @@ WO.Classes.Register({
     startingItems = {
         { class = "health_potion", amount = 3 },
         { class = "bread", amount = 2 },
-        { class = "starter_knife", amount = 1 },
     },
 
     modifiers = {},

@@ -114,6 +114,7 @@ SCHED_CHASE_ENEMY = 1
 SCHED_IDLE_STAND = 2
 CONTENTS_SOLID = 1
 MASK_SOLID = 1
+KEY_F2 = 93
 TEXT_ALIGN_LEFT = 0
 TEXT_ALIGN_CENTER = 1
 TEXT_ALIGN_RIGHT = 2
@@ -461,6 +462,7 @@ function MOCK.NewEntity(class)
     e.__methods.GetEyeTrace = function(tt) return { HitPos = tt.__pos + Vector(0, 0, 64), Hit = false, Entity = nil } end
     e.__methods.GetClass = function(tt) return tt.__class end
     e.__methods.Nick = function(tt) return tt.__nick or "Player" end
+    e.__methods.Ping = function(tt) return tt.__ping or 0 end
     e.__methods.SteamID = function(tt) return tt.__steamid or "STEAM_0:0:1" end
     e.__methods.SteamID64 = function(tt) return tt.__steamid64 or "76561190000000001" end
     e.__methods.UserID = function(tt) return tt.__userid or 1 end
@@ -1395,6 +1397,7 @@ local function NewPanel(class)
     p.GetText = function(tt) return tt.__text or "" end
     p.SetValue = function(tt, value) tt.__value = value end
     p.GetValue = function(tt) return tt.__value or "" end
+    p.SetPlaceholderText = function(tt, value) tt.__placeholder = value end
     p.SetEnabled = function(tt, enabled) tt.__enabled = enabled == true end
     p.IsEnabled = function(tt) return tt.__enabled end
     p.SetVisible = function(tt, visible) tt.__visible = visible == true end
@@ -1516,6 +1519,21 @@ end
 
 function vgui.CreateX(class, parent) return vgui.Create(class, parent) end
 
+MOCK.dermaMenus = MOCK.dermaMenus or {}
+function DermaMenu()
+    local menu = { options = {}, __open = false }
+    function menu:AddOption(text, callback)
+        local option = { text = text, callback = callback }
+        function option:SetTextColor(color) self.color = color end
+        self.options[#self.options + 1] = option
+        return option
+    end
+    function menu:AddSpacer() self.options[#self.options + 1] = { spacer = true } end
+    function menu:Open() self.__open = true end
+    MOCK.dermaMenus[#MOCK.dermaMenus + 1] = menu
+    return menu
+end
+
 function MOCK.FindPanelByText(text)
     for i = #MOCK.createdPanels, 1, -1 do
         local panel = MOCK.createdPanels[i]
@@ -1546,7 +1564,10 @@ function surface.DrawOutlinedRect() end
 function surface.DrawTexturedRect() end
 function surface.DrawTexturedRectUV() end
 function surface.DrawTexturedRectRotated() end
-function surface.DrawLine() end
+MOCK.surfaceLineCalls = MOCK.surfaceLineCalls or 0
+function surface.DrawLine()
+    MOCK.surfaceLineCalls = MOCK.surfaceLineCalls + 1
+end
 function surface.DrawCircle() end
 function surface.DrawText() end
 function surface.SetTextPos() end

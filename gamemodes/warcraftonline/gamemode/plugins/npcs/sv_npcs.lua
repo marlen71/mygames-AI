@@ -2,6 +2,8 @@
     Warcraft Online — NPC (server): спавн и жизненный цикл.
 ]]
 
+WO.NPCs.SuppressedSpawnKeys = WO.NPCs.SuppressedSpawnKeys or {}
+
 local function SpawnLevel(def, spawn)
     local level = WO.NPCs.ClampLevel(def, spawn and spawn.level or def.level)
 
@@ -16,7 +18,7 @@ local function SetExternalNPCData(ent, def, level, stats)
 
     if isfunction(ent.SetNW2String) then
         ent:SetNW2String("wo_npc_id", def.id or "")
-        ent:SetNW2String("wo_name", (def.name or def.id) .. " · ур. " .. level)
+        ent:SetNW2String("wo_name", def.name or def.id)
         ent:SetNW2String("wo_role", def.type or "creature")
     end
 
@@ -244,7 +246,14 @@ function WO.NPCs.SyncQuestSpawns(questId)
         end
     end
 
-    if not active then return end
+    if not active then
+        for key in pairs(WO.NPCs.SuppressedSpawnKeys or {}) do
+            if string.StartWith(key, tostring(questId) .. ":") then
+                WO.NPCs.SuppressedSpawnKeys[key] = nil
+            end
+        end
+        return
+    end
 
     local map = game.GetMap()
 
@@ -253,7 +262,8 @@ function WO.NPCs.SyncQuestSpawns(questId)
             if spawn.questId == questId and (not spawn.map or spawn.map == map) then
                 local key = SpawnKey(def, spawn, index)
 
-                if not IsValid(existing[key]) then
+                if not IsValid(existing[key]) and
+                    not (WO.NPCs.SuppressedSpawnKeys and WO.NPCs.SuppressedSpawnKeys[key]) then
                     local pos, ang = WO.NPCs.ResolveSpawnPoint(spawn)
 
                     if pos then
@@ -297,17 +307,38 @@ WO.Hook.Add("CharacterUnloaded", "npcs_quest_spawn_unload", function(char)
     end
 end)
 
--- Восстанавливаем только убитые точки активной квестовой группы. Если все
--- цели уже побеждены, группа не появляется повторно до сдачи/отказа.
-WO.Hook.Add("NPCDeath", "npcs_quest_spawn_replenish", function(npcDef)
+-- Убийство владельцем активного квеста не заменяется. Убийства посторонним
+-- игроком или NPC восстанавливают точку, чтобы не лишить участника цели.
+WO.Hook.Add("NPCDeath", "npcs_quest_spawn_replenish", function(npcDef, ent, attacker)
     local questIds = {}
 
-    for _, spawn in ipairs(npcDef and npcDef.spawns or {}) do
-        if spawn.questId then questIds[spawn.questId] = true end
+    if IsValid(ent) and ent.WO_NPCSpawnQuestId then
+        questIds[ent.WO_NPCSpawnQuestId] = true
+    else
+        for _, spawn in ipairs(npcDef and npcDef.spawns or {}) do
+            if spawn.questId then questIds[spawn.questId] = true end
+        end
     end
 
     for questId in pairs(questIds) do
-        timer.Simple(0.9, function() WO.NPCs.SyncQuestSpawns(questId) end)
+        if WO.NPCs.HasActiveQuest(questId) then
+            local killedByParticipant = false
+
+            if IsValid(attacker) and attacker:IsPlayer() and attacker:HasCharacter() then
+                local char = attacker:GetCharacter()
+                local state = char and char.quests and char.quests[questId]
+                killedByParticipant = state and state.status == "active" or false
+            end
+
+            local spawnKey = IsValid(ent) and ent.WO_NPCSpawnKey
+
+            if killedByParticipant and spawnKey then
+                WO.NPCs.SuppressedSpawnKeys[spawnKey] = true
+            elseif spawnKey then
+                WO.NPCs.SuppressedSpawnKeys[spawnKey] = nil
+                timer.Simple(0.9, function() WO.NPCs.SyncQuestSpawns(questId) end)
+            end
+        end
     end
 end)
 

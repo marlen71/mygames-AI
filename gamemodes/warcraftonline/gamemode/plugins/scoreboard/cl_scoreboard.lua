@@ -338,11 +338,14 @@ local function BuildOverviewPage(parent)
 
     local allPlayers = player.GetAll and player.GetAll() or {}
 
-    table.sort(allPlayers, function(a, b)
-        local first = IsValid(a) and a:GetNW2String("wo_name", a:Nick()) or ""
-        local second = IsValid(b) and b:GetNW2String("wo_name", b:Nick()) or ""
+    local function PublicPlayerName(ply)
+        local identity = WO.Social and WO.Social.GetVisibleIdentity and
+            WO.Social.GetVisibleIdentity(ply)
+        return identity and identity.name or "Неизвестный"
+    end
 
-        return string.lower(first) < string.lower(second)
+    table.sort(allPlayers, function(a, b)
+        return string.lower(PublicPlayerName(a)) < string.lower(PublicPlayerName(b))
     end)
 
     for _, ply in ipairs(allPlayers) do
@@ -352,14 +355,15 @@ local function BuildOverviewPage(parent)
             row:SetTall(48)
             row:DockMargin(0, 0, 0, 6)
 
-            local name = ply:GetNW2String("wo_name", ply:Nick())
-            local raceName = ply:GetNW2String("wo_race", "")
-            local className = ply:GetNW2String("wo_class", "")
-            local level = ply:GetNW2Int("wo_level", 1)
-            local detailsText = ""
+            local identity = WO.Social and WO.Social.GetVisibleIdentity and
+                WO.Social.GetVisibleIdentity(ply) or { name = "Неизвестный", race = "" }
+            local name = identity.name or "Неизвестный"
+            local detailsText = identity.race and identity.race ~= "" and
+                ("  ·  " .. identity.race) or ""
+            local known = identity.known == true
 
-            if raceName ~= "" or className ~= "" then
-                detailsText = "  ·  " .. raceName .. (className ~= "" and (" / " .. className) or "")
+            if known and identity.class and identity.class ~= "" then
+                detailsText = detailsText .. " / " .. identity.class
             end
 
             row.Paint = function(_, w, h)
@@ -367,9 +371,11 @@ local function BuildOverviewPage(parent)
                     WO.UI.Colors.border)
                 WO.UI.DrawTextFit(name .. detailsText, "WO.Body", 14, h / 2,
                     WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 188, h - 4)
-                WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level,
-                    "WO.Small", w - 84, h / 2, WO.UI.Colors.textDim,
-                    TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 70, h - 4)
+                if known then
+                    WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. (identity.level or 1),
+                        "WO.Small", w - 84, h / 2, WO.UI.Colors.textDim,
+                        TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 70, h - 4)
+                end
                 WO.UI.DrawTextFit(tostring(ply:Ping()) .. " ms", "WO.Small", w - 14,
                     h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 60, h - 4)
             end
@@ -385,14 +391,103 @@ local function BuildOverviewPage(parent)
     end
 end
 
+local function BuildAdminPage(parent)
+    AddPageHeader(parent, "Администрирование", "Доступные команды режима, их назначение и безопасный запуск.")
+
+    local admin = WO.Admin
+    if not (admin and admin.ClientMenuAccess) then
+        local denied = WO.UI.Label(parent, "Недостаточно прав для этого раздела.",
+            "WO.Body", WO.UI.Colors.textDim)
+        denied:Dock(TOP)
+        denied:SetTall(28)
+        return
+    end
+
+    local commands = admin.ClientMenuCommands or {}
+    local scroll = WO.UI.Scroll(parent)
+    scroll:Dock(FILL)
+
+    if #commands == 0 then
+        local empty = WO.UI.Label(scroll, "Для выданных вам прав нет доступных команд.",
+            "WO.Body", WO.UI.Colors.textDim)
+        empty:Dock(TOP)
+        empty:SetTall(32)
+        return
+    end
+
+    for _, command in ipairs(commands) do
+        local entry = command
+        local args = istable(entry.args) and entry.args or {}
+        local cardHeight = #args > 0 and 122 or 90
+        local card = vgui.Create("DPanel", scroll)
+        card:Dock(TOP)
+        card:SetTall(cardHeight)
+        card:DockMargin(0, 0, 0, 8)
+        card.Paint = function(_, w, h)
+            WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
+                WO.UI.Colors.border)
+            WO.UI.DrawTextFit(entry.title or entry.id, "WO.Body", 14, 8,
+                WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 150, 22)
+            WO.UI.DrawTextFit(entry.id or "", "WO.Tiny", w - 138, 10,
+                WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP, 124, 18)
+            WO.UI.DrawTextFit(entry.description or "", "WO.Small", 14, 32,
+                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 28, 22)
+        end
+
+        local fields = {}
+        local fieldTop = 68
+        local buttonWidth = 112
+        local available = math.max(160, PanelWidth(card, 760) - 28 - buttonWidth - 10)
+        local fieldWidth = #args > 0 and math.max(90, math.floor((available - (#args - 1) * 8) / #args)) or 0
+
+        for index, definition in ipairs(args) do
+            local field = vgui.Create("DTextEntry", card)
+            field:SetPos(14 + (index - 1) * (fieldWidth + 8), fieldTop)
+            field:SetSize(fieldWidth, 32)
+            field:SetPlaceholderText((definition.name or "Аргумент") ..
+                (definition.placeholder and (" · " .. definition.placeholder) or ""))
+            fields[index] = field
+        end
+
+        local runButton = WO.UI.Button(card, "Выполнить", function()
+            local values = {}
+            for _, field in ipairs(fields) do
+                local value = string.Trim(field:GetValue() or "")
+                if value ~= "" then values[#values + 1] = value end
+            end
+
+            RunConsoleCommand(entry.id, unpack(values))
+        end)
+        runButton:SetPos(PanelWidth(card, 760) - buttonWidth - 14, fieldTop)
+        runButton:SetSize(buttonWidth, 32)
+        card.PerformLayout = function(self, w)
+            local usable = math.max(150, w - 28 - buttonWidth - 10)
+            local width = #args > 0 and math.max(90,
+                math.floor((usable - (#args - 1) * 8) / #args)) or 0
+
+            for index, field in ipairs(fields) do
+                field:SetPos(14 + (index - 1) * (width + 8), fieldTop)
+                field:SetSize(width, 32)
+            end
+
+            runButton:SetPos(w - buttonWidth - 14, fieldTop)
+        end
+    end
+end
+
 local function BuildPage(page)
     if not IsValid(menuFrame) or not IsValid(menuFrame.content) then return end
 
     currentPage = page or DefaultPage()
+    if currentPage == "admin" and not (WO.Admin and WO.Admin.ClientMenuAccess) then
+        currentPage = "overview"
+    end
     menuFrame.content:Clear()
 
     if currentPage == "characters" then
         BuildCharactersPage(menuFrame.content)
+    elseif currentPage == "admin" then
+        BuildAdminPage(menuFrame.content)
     else
         BuildOverviewPage(menuFrame.content)
     end
@@ -466,6 +561,10 @@ local function CreateMenuFrame()
         { id = "quests", text = WO.Lang:Get("menu.quests"), characterOnly = true },
     }
 
+    if WO.Admin and WO.Admin.ClientMenuAccess then
+        navItems[#navItems + 1] = { id = "admin", text = "Админ-меню" }
+    end
+
     local navY = 24
 
     for _, item in ipairs(navItems) do
@@ -476,7 +575,7 @@ local function CreateMenuFrame()
                 return
             end
 
-            if entry.id == "overview" or entry.id == "characters" then
+            if entry.id == "overview" or entry.id == "characters" or entry.id == "admin" then
                 BuildPage(entry.id)
                 return
             end
@@ -557,6 +656,10 @@ local function CreateMenuFrame()
 end
 
 function WO.MenuUI.Show(page, fromScoreboardKey)
+    if WO.Admin and WO.Admin.RequestMenuData then
+        WO.Admin.RequestMenuData(false)
+    end
+
     if not IsValid(menuFrame) then
         CreateMenuFrame()
     end
@@ -572,8 +675,19 @@ function WO.MenuUI.Show(page, fromScoreboardKey)
     end
 end
 
+WO.Hook.Add("AdminMenuDataUpdated", "scoreboard_admin_nav", function()
+    if not IsValid(menuFrame) then return end
+
+    local page = currentPage or DefaultPage()
+    local openedFromTab = openedByScoreboardKey
+    local oldFrame = menuFrame
+    menuFrame = nil
+    if IsValid(oldFrame) then oldFrame:Remove() end
+    WO.MenuUI.Show(page, openedFromTab)
+end)
+
 local function ActivatePage(page)
-    if page == "overview" or page == "characters" then
+    if page == "overview" or page == "characters" or page == "admin" then
         BuildPage(page)
     elseif page == "inventory" then
         if not HasLocalCharacter() then return end

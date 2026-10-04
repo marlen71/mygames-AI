@@ -13,6 +13,7 @@ WO.Items.Register({
     weight = 1,
     size = { w = 1, h = 2 },
     stackable = false,
+    uniquePerCharacter = true,
     rarity = "common",
     durability = 100,
     description = "Лёгкий нож. Экипируйте его, чтобы использовать в бою.",

@@ -1,14 +1,13 @@
 --[[
-    Warcraft Online — собственный враждебный волк Клык.
-    Это WO SENT, не внешний wow_npc_14892; модель не подменяется fallback-моделью.
+    Warcraft Online — враждебный волк из подтверждённого Workshop NPC-пака.
+    Используется только точный runtime-класс wow_npc_14892; fallback-классов нет.
 ]]
 
 WO.NPCs.Register({
     id = "black_wolf",
     name = "Волк",
     type = "creature",
-    entityClass = "wo_wolf",
-    model = "models/wow_monsters/direwolf.mdl",
+    workshopClass = "wow_npc_14892",
     hostile = true,
     level = 1,
     minLevel = 1,

@@ -84,13 +84,7 @@ if SERVER then
         self.WO_NPCLevelStats = levelStats
         self:SetUseType(SIMPLE_USE)
         self:SetNPCID(npcDef.id or "")
-        local displayName = npcDef.name or "NPC"
-
-        if npcDef.hostile then
-            displayName = displayName .. " · ур. " .. level
-        end
-
-        self:SetNW2String("wo_name", displayName)
+        self:SetNW2String("wo_name", npcDef.name or "NPC")
         self:SetNW2String("wo_role", npcDef.type or "talker")
         self:SetNW2Int("wo_level", level)
 

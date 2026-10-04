@@ -26,6 +26,21 @@
 
 WO.Combat = WO.Combat or {}
 
+WO.Net.Register("Combat.DamageNumber", {
+    direction = "toclient",
+    write = function(data)
+        net.WriteTable(data or {})
+    end,
+    read = function()
+        return net.ReadTable()
+    end,
+    handler = function(_, data)
+        if CLIENT and WO.HUD and WO.HUD.AddDamageNumber then
+            WO.HUD.AddDamageNumber(data)
+        end
+    end,
+})
+
 ---------------------------------------------------------------------------
 -- Сопротивления
 ---------------------------------------------------------------------------

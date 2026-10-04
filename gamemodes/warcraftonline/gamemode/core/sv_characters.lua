@@ -23,6 +23,8 @@ function WO.Character.EnterLimbo(ply)
     ply:SetMoveType(MOVETYPE_NONE)
     ply:StripWeapons()
     ply:SetNW2Bool("wo_inmenu", true)
+    ply:SetNW2Bool("wo_char_active", false)
+    ply:SetNW2String("wo_character_id", "")
 end
 
 --- Возвращает игрока в мир после выбора персонажа.
@@ -391,6 +393,8 @@ function WO.Character.Unload(ply)
 
     WO.SaveQueue.SaveNow(char)
 
+    ply:SetNW2Bool("wo_char_active", false)
+    ply:SetNW2String("wo_character_id", "")
     ply:SetCharacter(nil)
 
     WO.Hook.Run("CharacterUnloaded", char, ply)
@@ -520,6 +524,7 @@ function WO.Character.ApplyToPlayer(ply)
         (util.IsValidModel and not util.IsValidModel(char.model)) then
         WO.Warn("ApplyToPlayer rejected unavailable race model for character " .. tostring(char.id))
         ply:SetNW2Bool("wo_char_active", false)
+        ply:SetNW2String("wo_character_id", "")
         WO.Character.EnterLimbo(ply)
         return false
     end
@@ -583,6 +588,7 @@ function WO.Character.ApplyToPlayer(ply)
 
     -- NW2-переменные (видны всем клиентам: HUD, target frame)
     ply:SetNW2String("wo_name", char:GetFullName())
+    ply:SetNW2String("wo_character_id", char.id or "")
     ply:SetNW2String("wo_race", char.race or "")
     ply:SetNW2String("wo_class", char.class or "")
     ply:SetNW2Int("wo_level", char.level or 1)

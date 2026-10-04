@@ -353,16 +353,102 @@ MOCK.NetDeliver({ name = "Character.Sync", args = { {
     model = "models/mailer/character/human/male/humanmale00_00.mdl", level = 3, experience = 10, money = 1234,
     customization = { skin = 0, bodygroups = {} },
 } } }, 8, nil)
+LocalPlayer():SetNW2Bool("wo_char_active", true)
+LocalPlayer():SetNW2String("wo_character_id", "active-test-character")
+LocalPlayer():SetNW2String("wo_name", "Тест Герой")
+LocalPlayer():SetNW2String("wo_race", "human")
+LocalPlayer():SetNW2String("wo_class", "warrior")
+LocalPlayer():SetNW2Int("wo_level", 3)
 MOCK.Assert(hudShouldDraw.wo_hud_hide("CHudHealth") == false and
     hudShouldDraw.wo_hud_hide("CHudScoreboard") == false and
-    hudDrawTargetID.wo_hud_hide_targetid() == false,
-    "при активном персонаже скрыты stock HUD и native target ID")
+    hudDrawTargetID.wo_hud_hide_targetid() == false and
+    hudShouldDraw.wo_hud_hide("CHudCrosshair") == false and
+    hudShouldDraw.wo_hud_hide("CHudWeaponSelection") == nil,
+    "WoW HUD hides stock crosshair but leaves the weapon selector accessible")
+
+local stranger = MOCK.CreatePlayer("Private Nick", "STEAM_0:0:991")
+stranger:SetNW2Bool("wo_char_active", true)
+stranger:SetNW2String("wo_character_id", "remote-character")
+stranger:SetNW2String("wo_race", "orc")
+stranger:SetNW2String("wo_class", "mage")
+stranger:SetNW2Int("wo_level", 12)
+stranger:SetPos(LocalPlayer():GetPos() + Vector(100, 0, 0))
+local unknownIdentity = WO.Social.GetVisibleIdentity(stranger)
+MOCK.Assert(unknownIdentity.known == false and unknownIdentity.name == "Неизвестный" and
+    unknownIdentity.race == WO.Races.Get("orc").name and
+    unknownIdentity.class == nil and unknownIdentity.level == nil,
+    "до знакомства публичны только «Неизвестный» и раса")
+MOCK.drawnTextValues = {}
+WO.HUD.DrawPlayerNameplates()
+local defaultPlateHasName, defaultPlateHasRace, defaultPlateLeaksClass = false, false, false
+for _, text in ipairs(MOCK.drawnTextValues) do
+    if text == "Неизвестный" then defaultPlateHasName = true end
+    if text == WO.Races.Get("orc").name then defaultPlateHasRace = true end
+    if text == "Маг" or text == "ур. 12" then defaultPlateLeaksClass = true end
+end
+MOCK.Assert(defaultPlateHasName and defaultPlateHasRace and not defaultPlateLeaksClass,
+    "nameplate до знакомства не раскрывает уровень или класс")
+WO.MenuUI.Show("overview")
+local privateScoreboardRow
+for index = #MOCK.createdPanels, 1, -1 do
+    local panel = MOCK.createdPanels[index]
+    local parent = rawget(panel, "__parent")
+    if rawget(panel, "__class") == "DPanel" and isfunction(panel.Paint) and parent and
+        rawget(parent, "__class") == "DScrollPanel" then
+        privateScoreboardRow = panel
+        break
+    end
+end
+MOCK.Assert(privateScoreboardRow ~= nil, "общее меню создаёт строки списка игроков")
+MOCK.drawnTextValues = {}
+privateScoreboardRow:Paint(640, 48)
+local privateRowText = table.concat(MOCK.drawnTextValues, " ")
+MOCK.Assert(string.find(privateRowText, "Неизвестный", 1, true) and
+    string.find(privateRowText, WO.Races.Get("orc").name, 1, true) and
+    not string.find(privateRowText, "Private Nick", 1, true) and
+    not string.find(privateRowText, "Маг", 1, true) and
+    not string.find(privateRowText, "12", 1, true),
+    "scoreboard скрывает личность, класс и уровень незнакомого игрока")
+WO.MenuUI.Close()
+MOCK.NetDeliver({ name = "Social.Sync", args = { {
+    { characterId = "remote-character", name = "Бран Торн", raceId = "orc",
+        classId = "warrior", level = 12 },
+} } }, 8, nil)
+local knownIdentity = WO.Social.GetVisibleIdentity(stranger)
+MOCK.Assert(knownIdentity.known and knownIdentity.name == "Бран Торн" and
+    knownIdentity.class == WO.Classes.Get("warrior").name and knownIdentity.level == 12,
+    "серверная запись знакомства раскрывает имя, уровень, класс и расу")
+MOCK.NetDeliver({ name = "Social.Sync", args = { {
+    { characterId = "remote-character", name = "Бран Торн", raceId = "orc",
+        classId = "warrior", level = 13 },
+} } }, 8, nil)
+MOCK.Assert(WO.Social.GetVisibleIdentity(stranger).level == 13,
+    "обновлённый Social.Sync немедленно меняет уровень сохранённого знакомства")
+
+local f2Bound = false
+for _, bind in ipairs(WO.UI.Binds or {}) do
+    if bind.id == "social_introduction" and bind.key == KEY_F2 then f2Bound = true end
+end
+MOCK.Assert(f2Bound and WO.Social.IntroductionModes.whisper.range <
+    WO.Social.IntroductionModes.talk.range and
+    WO.Social.IntroductionModes.talk.range < WO.Social.IntroductionModes.shout.range,
+    "F2 открывает меню знакомства с разными радиусами шёпота/разговора/крика")
+WO.Social.OpenIntroductionMenu()
+local whisperButton = MOCK.FindPanelByText("Шёпотом — радиус 180")
+MOCK.Assert(whisperButton ~= nil, "меню F2 отображает точный вариант радиуса шёпота")
+MOCK.TakeOutbox()
+whisperButton.DoClick(whisperButton)
+local introductionOutbox = MOCK.TakeOutbox()
+local introductionMessages = MOCK.FindInbox(introductionOutbox, "Social.Introduce")
+MOCK.Assert(#introductionMessages == 1 and introductionMessages[1].args[1] == "whisper",
+    "выбор радиуса отправляет серверу только идентификатор режима знакомства")
 
 -- Клиентский NW2-флаг может запаздывать после respawn; при активном snapshot
 -- кастомный HUD всё равно должен рисоваться. Валюта в player frame не входит.
 LocalPlayer():SetNW2Bool("wo_inmenu", true)
 MOCK.drawnTextValues = {}
 local hudDrawsBefore = MOCK.drawTextCalls
+local crosshairLinesBefore = MOCK.surfaceLineCalls
 hook.Run("HUDPaint")
 local hudCanvas
 for i = #MOCK.createdPanels, 1, -1 do
@@ -381,6 +467,8 @@ MOCK.Assert(hudCanvas ~= nil, "WoW HUD создаёт прозрачный по�
 hudCanvas:Paint(ScrW(), ScrH())
 MOCK.Assert(MOCK.drawTextCalls > hudDrawsBefore,
     "canvas HUD не пропадает из-за устаревшего wo_inmenu после respawn")
+MOCK.Assert(MOCK.surfaceLineCalls > crosshairLinesBefore,
+    "HUDPaint вызывает пользовательский прицел, а не только экспортирует функцию")
 local formattedMoney = WO.Currency.Format(1234)
 local hudShowsMoney = false
 for _, text in ipairs(MOCK.drawnTextValues) do
@@ -391,6 +479,35 @@ for _, text in ipairs(MOCK.drawnTextValues) do
 end
 MOCK.Assert(not hudShowsMoney, "валюта не отображается в WoW-style HUD")
 LocalPlayer():SetNW2Bool("wo_inmenu", false)
+
+local hoverNPC = MOCK.NewEntity("npc")
+hoverNPC:SetNW2String("wo_npc_id", "black_wolf")
+hoverNPC:SetNW2String("wo_name", "Волк")
+hoverNPC:SetNW2Int("wo_level", 4)
+hoverNPC:SetHealth(72)
+hoverNPC:SetMaxHealth(120)
+local localTrace = LocalPlayer().__methods.GetEyeTrace
+LocalPlayer().__methods.GetEyeTrace = function()
+    return { Entity = hoverNPC, Hit = true, HitPos = hoverNPC:GetPos() }
+end
+MOCK.drawnTextValues = {}
+WO.HUD.DrawHoverNPC()
+local hoverText = table.concat(MOCK.drawnTextValues, " ")
+MOCK.Assert(string.find(hoverText, "Волк", 1, true) and
+    string.find(hoverText, "Урове", 1, true) and
+    string.find(hoverText, "72 / 120", 1, true),
+    "под прицелом отображаются имя/уровень NPC и актуальные HP")
+LocalPlayer().__methods.GetEyeTrace = localTrace
+
+MOCK.NetDeliver({ name = "Combat.DamageNumber", args = { {
+    position = Vector(20, 40, 80), amount = 42, critical = true,
+} } }, 8, nil)
+MOCK.drawnTextValues = {}
+WO.HUD.DrawDamageNumbers()
+MOCK.Assert(table.concat(MOCK.drawnTextValues, " "):find("CRIT  -42", 1, true) ~= nil and
+    isfunction(WO.HUD.DrawCrosshair) and isfunction(WO.HUD.DrawPlayerNameplates),
+    "клиентский HUD рисует числа урона и пользовательский прицел/nameplate")
+WO.HUD.DrawCrosshair()
 
 MOCK.Assert(scripted_ents.Get("wo_npc").RenderGroup == RENDERGROUP_BOTH,
     "NPC marker draw hook is enabled for both opaque and translucent passes")
@@ -452,6 +569,27 @@ for _, child in ipairs(inventoryFrame.__children) do
 end
 MOCK.Assert(inventoryPanelCount >= 2, "инвентарь и экипировка — отдельные панели")
 MOCK.Assert(WO.InventoryUI.IsOpen(), "окно инвентаря сообщает открытое состояние")
+local itemSlotPanel
+for _, panel in ipairs(MOCK.createdPanels) do
+    if rawget(panel, "__class") == "WO_ItemSlot" and
+        rawget(panel, "__removed") ~= true and isfunction(panel.OnContextMenu) then
+        itemSlotPanel = panel
+        break
+    end
+end
+MOCK.Assert(itemSlotPanel ~= nil and WO.Items.Get("mount_stone").useHandler ~= nil,
+    "контекстное меню предмета поддерживает utility-items с useHandler")
+itemSlotPanel.OnContextMenu(itemSlotPanel, { class = "mount_stone", uid = "mount-test-stone" })
+local mountContextMenu = MOCK.dermaMenus[#MOCK.dermaMenus]
+MOCK.Assert(mountContextMenu and mountContextMenu.options[1] and
+    mountContextMenu.options[1].text == WO.Lang:Get("inventory.use"),
+    "камень маунта получает пункт «использовать» в контекстном меню")
+MOCK.TakeOutbox()
+mountContextMenu.options[1].callback()
+local mountUseOutbox = MOCK.TakeOutbox()
+local mountUseMessages = MOCK.FindInbox(mountUseOutbox, "Inventory.Use")
+MOCK.Assert(#mountUseMessages == 1 and mountUseMessages[1].args[1] == "mount-test-stone",
+    "пункт контекстного меню отправляет UID камня на серверное использование")
 WO.InventoryUI.Close()
 
 local panelsBeforeSheet = #MOCK.createdPanels
@@ -545,7 +683,70 @@ MOCK.Assert(#MOCK.createdPanels > panelsBeforeVendor, "окно торговли
 print("[scenario] quest/dialogue/vendor UI OK")
 
 ---------------------------------------------------------------------------
--- 4c. Выход из персонажа: очистка клиентского состояния и окон
+-- 4c. Админ-меню доступно только после серверной проверки прав
+---------------------------------------------------------------------------
+
+WO.Admin.ClientMenuLoaded = false
+WO.Admin.ClientMenuAccess = false
+WO.Admin.MenuRequestPending = false
+WO.Admin.ClientMenuPermissions = {}
+WO.Admin.ClientMenuCommands = {}
+MOCK.TakeOutbox()
+WO.MenuUI.Show("overview")
+local adminRequestOutbox = MOCK.TakeOutbox()
+MOCK.Assert(#MOCK.FindInbox(adminRequestOutbox, "Admin.MenuRequest") == 1,
+    "открытие общего меню запрашивает серверные права админ-каталога")
+MOCK.Assert(MOCK.FindPanelByText("Админ-меню") == nil,
+    "клиент не показывает админ-кнопку до ответа сервера")
+
+MOCK.NetDeliver({ name = "Admin.MenuData", args = { {
+    isAdmin = true,
+    permissions = { ["item.give"] = true },
+    commands = { {
+        id = "wo_giveitem", title = "Выдать предмет",
+        description = "Добавить предмет в инвентарь.", permission = "item.give",
+        args = {
+            { name = "Класс предмета", placeholder = "bread" },
+            { name = "Количество", placeholder = "1" },
+        },
+    } },
+} } }, 8, nil)
+MOCK.Assert(WO.Admin.ClientMenuAccess and MOCK.FindPanelByText("Админ-меню") ~= nil,
+    "серверные права добавляют админ-кнопку в общее меню")
+WO.MenuUI.Show("admin")
+MOCK.Assert(WO.MenuUI.GetPage() == "admin" and
+    WO.Admin.ClientMenuCommands[1] and WO.Admin.ClientMenuCommands[1].id == "wo_giveitem",
+    "админ-страница показывает только команду, присланную сервером")
+local adminFields = {}
+for _, panel in ipairs(MOCK.createdPanels) do
+    local placeholder = rawget(panel, "__placeholder") or ""
+    if rawget(panel, "__class") == "DTextEntry" and rawget(panel, "__removed") ~= true and
+        (string.find(placeholder, "Класс предмета", 1, true) or
+            string.find(placeholder, "Количество", 1, true)) then
+        adminFields[#adminFields + 1] = panel
+    end
+end
+MOCK.Assert(#adminFields == 2, "админ-команда получает поля своих schema arguments")
+adminFields[1]:SetValue("health_potion")
+adminFields[2]:SetValue("2")
+local executeAdminCommand = MOCK.FindPanelByText("Выполнить")
+local consoleCallsBeforeAdmin = #MOCK.consoleCommands
+MOCK.Assert(executeAdminCommand ~= nil, "у админ-команды есть кнопка выполнения")
+executeAdminCommand.DoClick(executeAdminCommand)
+local adminCall = MOCK.consoleCommands[#MOCK.consoleCommands]
+MOCK.Assert(#MOCK.consoleCommands == consoleCallsBeforeAdmin + 1 and
+    adminCall[1] == "wo_giveitem" and adminCall[2] == "health_potion" and adminCall[3] == "2",
+    "кнопка запускает только выбранную команду с введёнными аргументами")
+
+MOCK.NetDeliver({ name = "Admin.MenuData", args = { {
+    isAdmin = false, permissions = {}, commands = {},
+} } }, 8, nil)
+MOCK.Assert(not WO.Admin.ClientMenuAccess and MOCK.FindPanelByText("Админ-меню") == nil,
+    "без серверных прав админ-кнопка скрыта")
+WO.MenuUI.Close()
+
+---------------------------------------------------------------------------
+-- 4d. Выход из персонажа: очистка клиентского состояния и окон
 ---------------------------------------------------------------------------
 
 WO.InventoryUI.Open()

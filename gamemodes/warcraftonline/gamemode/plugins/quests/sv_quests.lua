@@ -133,6 +133,42 @@ function WO.Quests.Accept(ply, questId, npcDef, ent)
         return false, "prerequisites"
     end
 
+    -- Quest-given equipment is schema-driven, server-owned, and granted before
+    -- the quest is committed. If inventory placement fails, no quest is accepted.
+    local container = WO.Inventory and WO.Inventory.GetContainer and WO.Inventory.GetContainer(char)
+
+    for _, entry in ipairs(def.acceptItems or {}) do
+        if not istable(entry) or not isstring(entry.class) or not WO.Items.Get(entry.class) then
+            return false, "invalid_accept_item"
+        end
+
+        local alreadyOwned = false
+        local itemDef = WO.Items.Get(entry.class)
+
+        if itemDef.uniquePerCharacter == true then
+            alreadyOwned = container and container:CountItem(entry.class) > 0 or false
+            local equipment = WO.Equipment and WO.Equipment.Get and WO.Equipment.Get(char)
+
+            for _, instance in pairs(equipment and equipment.slots or {}) do
+                if instance and instance.class == entry.class then
+                    alreadyOwned = true
+                    break
+                end
+            end
+        end
+
+        if not alreadyOwned then
+            local granted, reason = WO.Inventory.GiveItem(ply, entry.class, entry.amount or 1)
+
+            if not granted then
+                WO.Notify(ply, "error", reason == "no_space" and
+                    "Освободите место в инвентаре, чтобы принять задание и получить предмет." or
+                    "Не удалось выдать предмет задания: " .. tostring(reason))
+                return false, reason or "accept_item_failed"
+            end
+        end
+    end
+
     char.quests = char.quests or {}
     char.quests[questId] = {
         status = "active",

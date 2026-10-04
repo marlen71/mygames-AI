@@ -40,7 +40,81 @@ local function SessionValid(ply)
     return true
 end
 
---- Отправляет узел диалога клиенту.
+local function QuestPrerequisitesMet(char, questDef)
+    for _, prerequisite in ipairs(questDef.prerequisites or {}) do
+        local state = char.quests and char.quests[prerequisite]
+        if not state or state.status ~= "completed" then return false end
+    end
+
+    return true
+end
+
+local function QuestProgressLabel(char, questDef, state)
+    for index, step in ipairs(questDef.steps or {}) do
+        local need = math.max(1, tonumber(step.amount) or 1)
+        local have = math.min(need, tonumber(state.progress and state.progress[index]) or 0)
+
+        if have < need then
+            return (step.text or step.target or questDef.name) .. " (" .. have .. "/" .. need .. ")"
+        end
+    end
+
+    return "Цели выполнены — можно сдать задание"
+end
+
+local function BuildNodeOptions(ply, npcDef, node)
+    local char = ply:GetCharacter()
+    local options = {}
+
+    for _, option in ipairs(node.options or {}) do
+        local questId = string.match(option.action or "", "^quest:([%w_]+)$")
+
+        if not questId then
+            options[#options + 1] = option
+        else
+            local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(questId)
+            local offeredHere = false
+
+            for _, offeredId in ipairs(npcDef.quests or {}) do
+                if offeredId == questId then offeredHere = true break end
+            end
+
+            local isGiver = questDef and questDef.giver == npcDef.id
+            local isTurnIn = questDef and (questDef.turnInGiver or questDef.giver) == npcDef.id
+            local state = char and char.quests and char.quests[questId]
+
+            if questDef and offeredHere and (isGiver or isTurnIn) then
+                if state and state.status == "active" then
+                    local ready = WO.Quests.AreStepsDone(char, questId)
+                    local label
+
+                    if isTurnIn and questDef.turnInRequired and ready then
+                        label = "Сдать задание: " .. questDef.name
+                    else
+                        label = "Проверить задание: " .. QuestProgressLabel(char, questDef, state)
+                    end
+
+                    options[#options + 1] = { text = label, action = option.action }
+                    options[#options + 1] = {
+                        text = "Отказаться от задания: " .. questDef.name,
+                        action = "abandon:" .. questId,
+                    }
+                elseif isGiver and (not state or state.status == "failed") and
+                    QuestPrerequisitesMet(char, questDef) and
+                    (char:GetLevel() or 1) >= (questDef.level or 1) then
+                    options[#options + 1] = {
+                        text = (state and "Повторить задание: " or "Взять задание: ") .. questDef.name,
+                        action = option.action,
+                    }
+                end
+            end
+        end
+    end
+
+    return options
+end
+
+--- Отправляет узел диалога клиенту с серверно вычисленными quest options.
 local function SendNode(ply, dialogueId, nodeId)
     local def = WO.Dialogue.Get(dialogueId)
     local node = def and def.nodes[nodeId]
@@ -55,14 +129,15 @@ local function SendNode(ply, dialogueId, nodeId)
     if not session then return end
 
     session.nodeId = nodeId
+    session.options = BuildNodeOptions(ply, session.npcDef, node)
 
     WO.Net.Send("Dialogue.Open", ply, {
         dialogueId = dialogueId,
         nodeId = nodeId,
-        npcId = session and session.npcDef and session.npcDef.id or "",
-        npcName = session and session.npcDef and session.npcDef.name or "",
+        npcId = session.npcDef and session.npcDef.id or "",
+        npcName = session.npcDef and session.npcDef.name or "",
         text = node.text or "",
-        options = node.options or {},
+        options = session.options,
     })
 end
 
@@ -127,6 +202,26 @@ local function RunAction(ply, action)
 
         if session and WO.Quests and WO.Quests.OfferFromDialogue then
             WO.Quests.OfferFromDialogue(ply, arg, session.npcDef, session.ent)
+            if SessionValid(ply) then SendNode(ply, session.dialogueId, session.nodeId) end
+        end
+
+        return
+    end
+
+    if verb == "abandon" and arg ~= "" then
+        local session = GetSession(ply)
+        local questDef = WO.Quests and WO.Quests.Get and WO.Quests.Get(arg)
+        local npcId = session and session.npcDef and session.npcDef.id
+        local listed = false
+
+        for _, offeredId in ipairs(session and session.npcDef and session.npcDef.quests or {}) do
+            if offeredId == arg then listed = true break end
+        end
+
+        if session and questDef and listed and
+            (questDef.giver == npcId or (questDef.turnInGiver or questDef.giver) == npcId) then
+            WO.Quests.Abandon(ply, arg)
+            if SessionValid(ply) then SendNode(ply, session.dialogueId, session.nodeId) end
         end
 
         return
@@ -171,11 +266,7 @@ function WO.Dialogue.OnChoose(ply, dialogueId, nodeId, optionIndex)
 
     if session.dialogueId ~= dialogueId or session.nodeId ~= nodeId then return end
 
-    local node = WO.Dialogue.GetNode(dialogueId, session.nodeId)
-
-    if not node then return end
-
-    local option = (node.options or {})[math.floor(optionIndex)]
+    local option = (session.options or {})[math.floor(optionIndex)]
 
     if not option then return end
 

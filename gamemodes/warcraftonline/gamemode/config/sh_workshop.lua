@@ -45,6 +45,7 @@ WO.Workshop.RequiredAddons = {
 }
 
 WO.Workshop.RequestedNPCClasses = {
+    wolf = "wow_npc_14892",
     boar = "wow_npc_2809",
     horseMount = "wow_npc_8883",
 }

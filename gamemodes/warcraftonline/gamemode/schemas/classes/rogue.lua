@@ -24,7 +24,6 @@ WO.Classes.Register({
 
     startingItems = {
         { class = "leather_helmet", amount = 1 },
-        { class = "starter_knife", amount = 1 },
         { class = "health_potion", amount = 2 },
     },
 
