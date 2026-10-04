@@ -315,15 +315,30 @@ local restoredWidth, restoredHeight = restoredMenu:GetSize()
 MOCK.Assert(restoredWidth == 1920 and restoredHeight == 1080,
     "полноэкранное меню восстанавливает исходное разрешение")
 
-GM:ScoreboardShow()
-GM:ScoreboardHide()
-MOCK.Assert(WO.MenuUI.IsOpen(), "TAB не закрывает постоянное меню выбора персонажа")
-WO.MenuUI.Close()
-GM:ScoreboardShow()
-MOCK.Assert(WO.MenuUI.IsOpen(), "TAB открывает собственный scoreboard")
-GM:ScoreboardHide()
-MOCK.Assert(not WO.MenuUI.IsOpen(), "отпускание TAB закрывает scoreboard")
-WO.CharacterUI.OpenMainMenu()
+do
+    GM:ScoreboardShow()
+    GM:ScoreboardHide()
+    MOCK.Assert(WO.MenuUI.IsOpen(), "TAB не закрывает постоянное меню выбора персонажа")
+
+    WO.MenuUI.Close()
+    local bindHandler = hook.GetTable().PlayerBindPress.wo_menu_scoreboard_bind
+    MOCK.Assert(isfunction(bindHandler), "TAB bind handler установлен")
+    MOCK.Assert(bindHandler(LocalPlayer(), "+showscores", true) == true and
+        WO.MenuUI.IsOpen(), "нажатие TAB перехватывает штатный scoreboard и открывает свой")
+    MOCK.Assert(bindHandler(LocalPlayer(), "+showscores", true) == true and
+        WO.MenuUI.IsOpen(), "удержание TAB не открывает повторно или не закрывает меню")
+    MOCK.Assert(bindHandler(LocalPlayer(), "+showscores", false) == true and
+        not WO.MenuUI.IsOpen(), "отпускание TAB закрывает собственное меню")
+
+    local showFallback = hook.GetTable().ScoreboardShow.wo_menu_scoreboard_show
+    local hideFallback = hook.GetTable().ScoreboardHide.wo_menu_scoreboard_hide
+    MOCK.Assert(showFallback() == true and WO.MenuUI.IsOpen(),
+        "callback ScoreboardShow также заменяет штатную таблицу игроков")
+    MOCK.Assert(hideFallback() == true and not WO.MenuUI.IsOpen(),
+        "callback ScoreboardHide корректно закрывает кастомное меню")
+
+    WO.CharacterUI.OpenMainMenu()
+end
 
 local createButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.create"))
 local loadButton = MOCK.FindPanelByText(WO.Lang:Get("character.menu.load"))
@@ -338,6 +353,7 @@ local mainFrame = FindLatestLiveFrame()
 MOCK.Assert(mainFrame and mainFrame.OnKeyCodePressed, "главное меню обрабатывает Escape")
 mainFrame:OnKeyCodePressed(KEY_ESCAPE)
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "Escape не закрывает главное меню")
+MOCK.RunTimers(0)
 
 exitButton:DoClick()
 MOCK.Assert(MOCK.consoleCommands[#MOCK.consoleCommands][1] == "disconnect",
@@ -483,6 +499,9 @@ local createFrame = FindLatestLiveFrame()
 MOCK.Assert(createFrame and createFrame.OnKeyCodePressed, "мастер создания обрабатывает Escape")
 createFrame:OnKeyCodePressed(KEY_ESCAPE)
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "Escape из мастера возвращает в главное меню")
+MOCK.Assert(hook.GetTable().OnPauseMenuShow.wo_menu_escape_toggle() == false and
+    WO.MenuUI.IsOpen(), "глобальный Escape не переключает повторно меню после закрытия мастера")
+MOCK.RunTimers(0)
 
 -- Повторное открытие через net (например, при retry) не должно падать.
 MOCK.NetDeliver({ name = "Character.OpenCreate", args = {} }, 8, nil)
@@ -525,6 +544,9 @@ local selectFrame = FindLatestLiveFrame()
 MOCK.Assert(selectFrame and selectFrame.OnKeyCodePressed, "список персонажей обрабатывает Escape")
 selectFrame:OnKeyCodePressed(KEY_ESCAPE)
 MOCK.Assert(WO.CharacterUI.CurrentScreen == "main", "Escape из списка возвращает в главное меню")
+MOCK.Assert(hook.GetTable().OnPauseMenuShow.wo_menu_escape_toggle() == false and
+    WO.MenuUI.IsOpen(), "глобальный Escape не закрывает меню после возврата из списка персонажей")
+MOCK.RunTimers(0)
 
 local preview = WO.UI.CreateCharacterModel(nil,
     "models/mailer/character/human/male/humanmale00_00.mdl")
@@ -605,6 +627,43 @@ LocalPlayer():SetNW2String("wo_name", "Тест Герой")
 LocalPlayer():SetNW2String("wo_race", "human")
 LocalPlayer():SetNW2String("wo_class", "warrior")
 LocalPlayer():SetNW2Int("wo_level", 3)
+
+do
+    -- Simulate the post-creation transition into the world, where stale character
+    -- selection UI must no longer own TAB or ESC.
+    if WO.CharacterUI.CloseMenus then WO.CharacterUI.CloseMenus() end
+
+    local bindHandler = hook.GetTable().PlayerBindPress.wo_menu_scoreboard_bind
+    WO.MenuUI.Close()
+    MOCK.Assert(bindHandler(LocalPlayer(), "+showscores", true) == true and
+        WO.MenuUI.IsOpen() and WO.MenuUI.GetPage() == "overview",
+        "после создания персонажа TAB открывает кастомное игровое меню")
+    MOCK.Assert(bindHandler(LocalPlayer(), "+showscores", false) == true and
+        not WO.MenuUI.IsOpen(), "после создания персонажа отпускание TAB закрывает меню")
+
+    local pauseHandler = hook.GetTable().OnPauseMenuShow.wo_menu_escape_toggle
+    MOCK.Assert(isfunction(pauseHandler), "Escape перехватывает попытку открыть паузу GMod")
+    MOCK.Assert(pauseHandler() == false and WO.MenuUI.IsOpen() and
+        WO.MenuUI.GetPage() == "overview", "одиночное нажатие Escape открывает своё меню")
+
+    local escapeFrame = FindLatestLiveFrame()
+    escapeFrame:OnKeyCodePressed(KEY_ESCAPE)
+    MOCK.Assert(WO.MenuUI.IsOpen(), "два пути одного нажатия Escape не переключают меню дважды")
+    MOCK.RunTimers(0)
+
+    escapeFrame = FindLatestLiveFrame()
+    escapeFrame:OnKeyCodePressed(KEY_ESCAPE)
+    MOCK.Assert(not WO.MenuUI.IsOpen(), "следующее нажатие Escape закрывает своё меню")
+    MOCK.RunTimers(0)
+
+    MOCK.Assert(pauseHandler() == false and WO.MenuUI.IsOpen(),
+        "повторное нажатие Escape снова открывает меню")
+    MOCK.RunTimers(0)
+    MOCK.Assert(pauseHandler() == false and not WO.MenuUI.IsOpen(),
+        "следующее одиночное нажатие Escape снова закрывает меню")
+    MOCK.RunTimers(0)
+end
+
 MOCK.Assert(hudShouldDraw.wo_hud_hide("CHudHealth") == false and
     hudShouldDraw.wo_hud_hide("CHudScoreboard") == false and
     hudShouldDraw.wo_hud_hide("CHudDeathNotice") == false and

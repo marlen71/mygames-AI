@@ -756,7 +756,11 @@ function WO.CharacterUI.OpenCreate()
     createFrame:MakePopup()
     createFrame.OnKeyCodePressed = function(_, key)
         if key == KEY_ESCAPE then
+            if WO.MenuUI and WO.MenuUI.SuppressEscapeToggle then
+                WO.MenuUI.SuppressEscapeToggle()
+            end
             WO.CharacterUI.OpenMainMenu()
+            return true
         end
     end
 

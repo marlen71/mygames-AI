@@ -10,6 +10,8 @@ WO.MenuUI = WO.MenuUI or {}
 local menuFrame = nil
 local currentPage = nil
 local openedByScoreboardKey = false
+local scoreboardKeyDown = false
+local escapeDispatchActive = false
 local HEADER_HEIGHT = 78
 
 local function LocalCharacter()
@@ -104,6 +106,53 @@ function WO.MenuUI.Close()
         oldFrame:Close()
     end
 end
+
+-- Escape can reach both the focused VGUI frame and the engine pause-menu hook
+-- for one key press. Process that physical press once, then clear the guard on
+-- the next tick.
+local function BeginEscapeDispatch()
+    if escapeDispatchActive then return false end
+
+    escapeDispatchActive = true
+    timer.Simple(0, function()
+        escapeDispatchActive = false
+    end)
+
+    return true
+end
+
+local function ToggleMenuFromEscape()
+    if WO.MenuUI.IsOpen() then
+        local ply = LocalPlayer()
+        local mandatoryCharacterMenu = IsValid(ply) and not ply:HasCharacter() and
+            currentPage == "characters"
+
+        if not mandatoryCharacterMenu then
+            WO.MenuUI.Close()
+        end
+
+        return
+    end
+
+    WO.MenuUI.Show(DefaultPage())
+end
+
+-- Character creation/selection screens have their own Escape navigation. They
+-- can mark the same key press as consumed so the global pause-menu hook cannot
+-- also open/close the gameplay menu after the character screen changes.
+WO.MenuUI.SuppressEscapeToggle = BeginEscapeDispatch
+
+hook.Add("OnPauseMenuShow", "wo_menu_escape_toggle", function()
+    if not BeginEscapeDispatch() then return false end
+
+    local characterScreen = WO.CharacterUI and WO.CharacterUI.CurrentScreen
+    if characterScreen and characterScreen ~= "main" then
+        return false
+    end
+
+    ToggleMenuFromEscape()
+    return false
+end)
 
 local function BuildCharactersPage(parent)
     local char = LocalCharacter()
@@ -727,12 +776,11 @@ local function CreateMenuFrame()
 
     menuFrame.OnKeyCodePressed = function(_, key)
         if key == KEY_ESCAPE then
-            local ply = LocalPlayer()
-
-            -- Не закрываем обязательное меню персонажа в лимбо.
-            if not (IsValid(ply) and not ply:HasCharacter() and currentPage == "characters") then
-                WO.MenuUI.Close()
+            if BeginEscapeDispatch() then
+                ToggleMenuFromEscape()
             end
+
+            return true
         end
     end
 
@@ -814,21 +862,65 @@ hook.Add("OnScreenSizeChanged", "wo_menu_resize", function()
     WO.MenuUI.Show(page, openedFromTab)
 end)
 
-function GM:ScoreboardShow()
+local function BeginScoreboardKey()
+    if scoreboardKeyDown then return end
+
+    scoreboardKeyDown = true
+
     if WO.MenuUI.IsOpen() then
+        -- TAB must not close a menu that was opened by another action.
         openedByScoreboardKey = false
     else
         WO.MenuUI.Show(DefaultPage(), true)
     end
+end
 
+local function EndScoreboardKey()
+    local closeMenu = openedByScoreboardKey
+    scoreboardKeyDown = false
+    openedByScoreboardKey = false
+
+    if closeMenu then
+        WO.MenuUI.Close()
+    end
+end
+
+local function IsScoreboardBind(bind)
+    return isstring(bind) and string.find(string.lower(bind), "+showscores", 1, true) ~= nil
+end
+
+-- Intercept the actual +showscores bind on both edges. Returning true prevents
+-- the engine's default scoreboard command; only our custom menu is displayed.
+hook.Add("PlayerBindPress", "wo_menu_scoreboard_bind", function(_, bind, pressed)
+    if not IsScoreboardBind(bind) then return end
+
+    if pressed then
+        BeginScoreboardKey()
+    else
+        EndScoreboardKey()
+    end
+
+    return true
+end)
+
+-- Keep engine/gamemode scoreboard callbacks suppressed as a fallback for
+-- commands or addons that call the scoreboard directly instead of the bind.
+hook.Add("ScoreboardShow", "wo_menu_scoreboard_show", function()
+    BeginScoreboardKey()
+    return true
+end)
+
+hook.Add("ScoreboardHide", "wo_menu_scoreboard_hide", function()
+    EndScoreboardKey()
+    return true
+end)
+
+function GM:ScoreboardShow()
+    BeginScoreboardKey()
     return true
 end
 
 function GM:ScoreboardHide()
-    if openedByScoreboardKey then
-        WO.MenuUI.Close()
-    end
-
-    openedByScoreboardKey = false
+    EndScoreboardKey()
     return true
 end

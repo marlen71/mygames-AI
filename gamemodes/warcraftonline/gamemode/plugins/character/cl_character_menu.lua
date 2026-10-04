@@ -64,7 +64,12 @@ function WO.CharacterUI.OpenMainMenu()
     SetScreen("main")
     frame.OnKeyCodePressed = function(_, key)
         -- Не даём закрыть главное меню и оставить игрока в лимбо.
-        if key == KEY_ESCAPE then return end
+        if key == KEY_ESCAPE then
+            if WO.MenuUI and WO.MenuUI.SuppressEscapeToggle then
+                WO.MenuUI.SuppressEscapeToggle()
+            end
+            return true
+        end
     end
 
     frame.Paint = function(_, w, h)
@@ -201,7 +206,11 @@ function WO.CharacterUI.OpenSelect()
     SetScreen("select")
     frame.OnKeyCodePressed = function(_, key)
         if key == KEY_ESCAPE then
+            if WO.MenuUI and WO.MenuUI.SuppressEscapeToggle then
+                WO.MenuUI.SuppressEscapeToggle()
+            end
             WO.CharacterUI.OpenMainMenu()
+            return true
         end
     end
 
