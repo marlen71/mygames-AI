@@ -10,7 +10,7 @@
 
 WO.InventoryUI = WO.InventoryUI or {}
 
-local frame = nil
+local activeInventoryPanel = nil
 local nextInventoryWindowId = 0
 
 ---------------------------------------------------------------------------
@@ -314,40 +314,63 @@ local function BelongsTo(panel, ancestor)
     return false
 end
 
-function WO.InventoryUI.Open()
-    if IsValid(frame) then
-        WO.InventoryUI.Close()
-    end
-
-    local char = WO.Character.GetLocal()
-
-    if not char then
-        WO.Notify.Show("info", WO.Lang:Get("menu.no_character"))
-        return
+local function BuildInventoryPage(parent)
+    if not (WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()) then
+        local unavailable = WO.UI.Label(parent, WO.Lang:Get("menu.no_character"),
+            "WO.Body", WO.UI.Colors.textDim)
+        unavailable:Dock(TOP)
+        unavailable:SetTall(36)
+        return nil
     end
 
     WO.Net.SendToServer("Inventory.RequestSync")
 
-    local frameWidth = math.min(1280, ScrW() - 24)
-    local frameHeight = math.min(760, ScrH() - 24)
-    frame = WO.UI.Window(WO.Lang:Get("inventory.title"), frameWidth, frameHeight)
-    local thisFrame = frame
+    local width = math.max(1, parent:GetWide())
+    local height = math.max(1, parent:GetTall())
+    local root = vgui.Create("DPanel", parent)
+    root:SetPos(0, 0)
+    root:SetSize(width, height)
+    root:SetPaintBackground(false)
+    root.woInventoryPage = true
+    activeInventoryPanel = root
 
-    local contentX = 14
-    local contentY = 48
-    local contentHeight = frameHeight - contentY - 14
-    local gap = 14
-    local contentWidth = frameWidth - contentX * 2
-    local inventoryWidth = math.floor((contentWidth - gap) * 0.62)
-    local equipmentWidth = contentWidth - gap - inventoryWidth
+    local heading = vgui.Create("DPanel", root)
+    heading:SetPos(0, 0)
+    heading:SetSize(width, 48)
+    heading:SetPaintBackground(false)
+    heading.Paint = function(_, w, h)
+        WO.UI.DrawTextFit(WO.Lang:Get("inventory.title"), "WO.Title",
+            2, 20, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 4, 30)
+        WO.UI.DrawTextFit(WO.Lang:Get("inventory.menu_hint"), "WO.Small",
+            2, 42, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 4, 20)
+    end
 
-    local inventoryPanel = vgui.Create("DPanel", frame)
-    inventoryPanel:SetPos(contentX, contentY)
-    inventoryPanel:SetSize(inventoryWidth, contentHeight)
+    local scroll = WO.UI.Scroll(root)
+    scroll:SetPos(0, 56)
+    scroll:SetSize(width, math.max(1, height - 56))
+
+    local stacked = width < 820
+    local gap = 12
+    local inventoryWidth = stacked and width or math.floor((width - gap) * 0.62)
+    local equipmentWidth = stacked and width or math.max(1, width - gap - inventoryWidth)
+    local inventoryHeight = stacked and 500 or math.max(430, height - 56)
+    local equipmentHeight = stacked and 460 or math.max(430, height - 56)
+    local contentHeight = stacked and (inventoryHeight + gap + equipmentHeight) or
+        math.max(inventoryHeight, equipmentHeight)
+    local layout = vgui.Create("DPanel", scroll)
+    layout:SetPos(0, 0)
+    layout:SetSize(width, contentHeight)
+    layout:SetPaintBackground(false)
+
+    local inventoryPanel = vgui.Create("DPanel", layout)
+    inventoryPanel:SetPos(0, 0)
+    inventoryPanel:SetSize(inventoryWidth, inventoryHeight)
     inventoryPanel.Paint = function(_, w, h)
-        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel, WO.UI.Colors.border)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
+            WO.UI.Colors.border, WO.UI.Metrics.radius)
         WO.UI.DrawTextFit(WO.Lang:Get("inventory.title"), "WO.Subtitle",
-            14, 22, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 28, 26)
+            14, 22, WO.UI.Colors.accent, TEXT_ALIGN_LEFT,
+            TEXT_ALIGN_CENTER, w - 28, 26)
     end
 
     CreateResourcesPanel(inventoryPanel)
@@ -356,21 +379,24 @@ function WO.InventoryUI.Open()
     local sortButton = WO.UI.Button(inventoryPanel, WO.Lang:Get("inventory.sort"), function()
         WO.Net.SendToServer("Inventory.Sort")
     end)
-    sortButton:SetPos(12, contentHeight - 40)
+    sortButton:SetPos(12, inventoryHeight - 40)
     sortButton:SetSize(math.min(180, inventoryWidth - 24), 30)
 
-    local equipmentX = contentX + inventoryWidth + gap
+    local equipmentX = stacked and 0 or inventoryWidth + gap
+    local equipmentY = stacked and inventoryHeight + gap or 0
     local previewHeight = math.min(178, math.max(112, math.floor(equipmentWidth * 0.42)))
     local equipmentPanel = WO.EquipmentUI and WO.EquipmentUI.CreatePanel and
-        WO.EquipmentUI.CreatePanel(frame, {
+        WO.EquipmentUI.CreatePanel(layout, {
             x = equipmentX,
-            y = contentY,
+            y = equipmentY,
             width = equipmentWidth,
-            height = contentHeight,
+            height = equipmentHeight,
             topInset = 42 + previewHeight,
         }) or nil
 
-    if IsValid(equipmentPanel) then
+    local char = WO.Character.GetLocal()
+
+    if IsValid(equipmentPanel) and char then
         local charModel = WO.UI.CreateCharacterModel(equipmentPanel, char.model)
         local modelWidth = math.min(220, equipmentWidth - 30)
         charModel:SetPos(math.floor((equipmentWidth - modelWidth) / 2), 38)
@@ -386,60 +412,88 @@ function WO.InventoryUI.Open()
     local refreshHookId = "wo_inventory_ui_" .. tostring(nextInventoryWindowId)
 
     WO.Hook.Add("InventoryChanged", refreshHookId, function()
-        if IsValid(thisFrame) and IsValid(inventoryPanel) and inventoryPanel.RefreshItems then
+        if IsValid(root) and IsValid(inventoryPanel) and inventoryPanel.RefreshItems then
             inventoryPanel:RefreshItems()
         end
     end)
 
     WO.Hook.Add("InventorySynced", refreshHookId .. "_sync", function()
-        if IsValid(thisFrame) and IsValid(inventoryPanel) then
+        if IsValid(root) and IsValid(inventoryPanel) then
             BuildGrid(inventoryPanel)
         end
     end)
 
-    thisFrame.OnRemove = function()
+    root.OnRemove = function()
         WO.Hook.Remove("InventoryChanged", refreshHookId)
         WO.Hook.Remove("InventorySynced", refreshHookId .. "_sync")
         WO.UI.HideTooltip()
 
         if WO.UI.Drag and
-            (not IsValid(WO.UI.Drag.source) or BelongsTo(WO.UI.Drag.source, thisFrame)) then
+            (not IsValid(WO.UI.Drag.source) or BelongsTo(WO.UI.Drag.source, root)) then
             ClearDrag()
         end
 
-        if frame == thisFrame then
-            frame = nil
+        if activeInventoryPanel == root then
+            activeInventoryPanel = nil
         end
+    end
+
+    return root
+end
+
+function WO.InventoryUI.BuildPanel(parent)
+    if not IsValid(parent) then return nil end
+
+    return BuildInventoryPage(parent)
+end
+
+function WO.InventoryUI.Open()
+    if not (WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()) then
+        WO.Notify.Show("info", WO.Lang:Get("menu.no_character"))
+        return
+    end
+
+    if WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() then
+        if WO.MenuUI.ActivatePage then WO.MenuUI.ActivatePage("inventory") end
+    elseif WO.MenuUI and WO.MenuUI.Show then
+        WO.MenuUI.Show("inventory")
     end
 end
 
 function WO.InventoryUI.Close()
-    if IsValid(frame) then
-        local oldFrame = frame
-        frame = nil
-        oldFrame:Close()
-    else
-        frame = nil
+    if WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() and
+        WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "inventory" and
+        WO.MenuUI.ActivatePage then
+        WO.MenuUI.ActivatePage("overview")
+    end
+
+    if IsValid(activeInventoryPanel) then
+        activeInventoryPanel:Remove()
+        activeInventoryPanel = nil
     end
 
     ClearDrag()
 end
 
 function WO.InventoryUI.Toggle()
-    if IsValid(frame) then
-        WO.InventoryUI.Close()
-    else
-        WO.InventoryUI.Open()
+    if WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() and
+        WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "inventory" then
+        WO.MenuUI.ActivatePage("overview")
+        return
     end
+
+    WO.InventoryUI.Open()
+end
+
+function WO.InventoryUI.IsOpen()
+    return IsValid(activeInventoryPanel) or
+        (WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() and
+            WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "inventory")
 end
 
 ---------------------------------------------------------------------------
 -- Клавиша I
 ---------------------------------------------------------------------------
-
-function WO.InventoryUI.IsOpen()
-    return IsValid(frame)
-end
 
 WO.Hook.Add("CharacterMenuOpening", "inventory_ui_clear", function()
     WO.InventoryUI.Close()
@@ -450,4 +504,4 @@ WO.UI.BindKey(KEY_I, function()
     if WO.Character.GetLocal() then
         WO.InventoryUI.Toggle()
     end
-end, "inventory_toggle")
+end, "inventory_toggle", { allowWhenMenuOpen = true })

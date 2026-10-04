@@ -775,7 +775,66 @@ local function DrawWaypointArrow(centerX, centerY, relativeYaw)
     surface.DrawPoly(Triangle(12, 7))
 end
 
---- Navigation badge for the next tracked quest objective or turn-in NPC.
+local function DrawWaypointDiamond(centerX, centerY, size)
+    surface.SetDrawColor(7, 9, 14, 245)
+    surface.DrawPoly({
+        { x = centerX, y = centerY - size },
+        { x = centerX + size, y = centerY },
+        { x = centerX, y = centerY + size },
+        { x = centerX - size, y = centerY },
+    })
+
+    surface.SetDrawColor(WO.UI.Colors.accent)
+    surface.DrawPoly({
+        { x = centerX, y = centerY - size + 3 },
+        { x = centerX + size - 3, y = centerY },
+        { x = centerX, y = centerY + size - 3 },
+        { x = centerX - size + 3, y = centerY },
+    })
+end
+
+local function DrawWaypointLabel(x, y, waypoint, meters, width)
+    local height = 50
+    local screenWidth, screenHeight = ScrW(), ScrH()
+    width = math.min(width or 244, screenWidth - 24)
+    x = math.Clamp(x, 12, math.max(12, screenWidth - width - 12))
+    y = math.Clamp(y, 74, math.max(74, screenHeight - height - 16))
+
+    WO.UI.DrawPanelOutlined(x, y, width, height, WO.UI.Colors.panelDark,
+        WO.UI.Colors.accentDark, WO.UI.Metrics.radiusSmall)
+    WO.UI.DrawTextFit(waypoint.questName or WO.Lang:Get("quest.waypoint_title"),
+        "WO.Tiny", x + 10, y + 6, WO.UI.Colors.accent,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, width - 20, 16)
+    WO.UI.DrawTextFit(waypoint.text or WO.Lang:Get("quest.waypoint_title"),
+        "WO.Small", x + 10, y + 25, WO.UI.Colors.text,
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, math.max(30, width - 86), 20)
+    WO.UI.DrawTextFit(WO.Lang:Get("quest.distance", meters), "WO.Small",
+        x + width - 10, y + 25, WO.UI.Colors.accent,
+        TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 70, 20)
+
+    return x, y, width, height
+end
+
+local function DrawOffscreenWaypoint(waypoint, meters, relativeYaw)
+    local screenWidth, screenHeight = ScrW(), ScrH()
+    local centerX, centerY = screenWidth / 2, screenHeight / 2
+    local radians = math.rad(relativeYaw)
+    local directionX, directionY = math.sin(radians), -math.cos(radians)
+    local halfWidth = math.max(1, centerX - 38)
+    local halfHeight = math.max(1, centerY - 64)
+    local scaleX = math.abs(directionX) > 0.001 and halfWidth / math.abs(directionX) or math.huge
+    local scaleY = math.abs(directionY) > 0.001 and halfHeight / math.abs(directionY) or math.huge
+    local scale = math.min(scaleX, scaleY)
+    local markerX = centerX + directionX * scale
+    local markerY = centerY + directionY * scale
+
+    DrawWaypointArrow(markerX, markerY, relativeYaw)
+    DrawWaypointLabel(markerX - 92, markerY + 18,
+        waypoint, meters, math.min(184, screenWidth - 24))
+end
+
+--- Projects a visible quest marker directly onto its world destination.
+--- When the destination is outside the view, only a small edge pointer remains.
 function WO.HUD.DrawQuestWaypoint()
     if not (WO.Quests and WO.Quests.GetTrackedWaypoint) then return end
 
@@ -790,32 +849,42 @@ function WO.HUD.DrawQuestWaypoint()
     local distance = delta:Length()
     if distance <= 0 then return end
 
+    local meters = math.max(0, math.Round(distance / 52.4934))
     local eyeAngles = isfunction(ply.EyeAngles) and ply:EyeAngles() or angle_zero
     local eyeYaw = eyeAngles and tonumber(eyeAngles.y) or 0
     local bearing = math.deg(math.atan2(delta.y, delta.x))
     local relativeYaw = (bearing - eyeYaw + 180) % 360 - 180
-    local width = math.min(390, ScrW() - 32)
-    local height = 58
-    local x = (ScrW() - width) / 2
-    local y = 136
-    local arrowX = x + 27
-    local arrowY = y + height / 2
-    local textX = x + 52
-    local textWidth = math.max(80, width - 124)
+    local target = waypoint.position + Vector(0, 0, 72)
+    local screen = target:ToScreen()
+    local screenWidth, screenHeight = ScrW(), ScrH()
 
-    WO.UI.DrawPanelOutlined(x, y, width, height, WO.UI.Colors.panelDark,
-        WO.UI.Colors.accentDark)
-    DrawWaypointArrow(arrowX, arrowY, relativeYaw)
+    if screen and screen.visible and screen.x >= 0 and screen.x <= screenWidth and
+        screen.y >= 0 and screen.y <= screenHeight then
+        local markerX = math.Clamp(screen.x, 18, screenWidth - 18)
+        local markerY = math.Clamp(screen.y, 92, screenHeight - 28)
+        local labelWidth = math.min(244, screenWidth - 24)
+        local labelX = markerX - labelWidth / 2
+        local labelY = markerY - 70
 
-    WO.UI.DrawTextFit(waypoint.questName or WO.Lang:Get("quest.waypoint_title"),
-        "WO.Small", textX, y + 6, WO.UI.Colors.accent,
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, textWidth, 22)
-    WO.UI.DrawTextFit(waypoint.text or WO.Lang:Get("quest.waypoint_title"),
-        "WO.Tiny", textX, y + 31, WO.UI.Colors.textDim,
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, textWidth, 18)
-    WO.UI.DrawTextFit(WO.Lang:Get("quest.distance", math.max(1,
-        math.Round(distance / 52.4934))), "WO.Small", x + width - 62,
-        y + 19, WO.UI.Colors.text, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 52, 20)
+        if labelY < 74 then
+            labelY = markerY + 26
+        end
+
+        local drawX, drawY, _, labelHeight = DrawWaypointLabel(
+            labelX, labelY, waypoint, meters, labelWidth)
+        local connectorTop = labelY < markerY and drawY + labelHeight or markerY + 12
+        local connectorBottom = labelY < markerY and markerY - 12 or drawY
+
+        if connectorBottom > connectorTop then
+            surface.SetDrawColor(WO.UI.Colors.accent)
+            surface.DrawRect(markerX - 1, connectorTop, 2, connectorBottom - connectorTop)
+        end
+
+        DrawWaypointDiamond(markerX, markerY, 13)
+        return
+    end
+
+    DrawOffscreenWaypoint(waypoint, meters, relativeYaw)
 end
 
 ---------------------------------------------------------------------------

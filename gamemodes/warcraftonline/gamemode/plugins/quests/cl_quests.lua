@@ -122,6 +122,7 @@ function WO.Quests.GetTrackedWaypoint()
         if def and state and state.status == "active" and state.tracked ~= false then
             local allStepsDone = true
             local candidate
+            local candidateCanBeDismissed = true
 
             for stepIndex, step in ipairs(def.steps or {}) do
                 local need = math.max(1, tonumber(step.amount) or 1)
@@ -136,6 +137,9 @@ function WO.Quests.GetTrackedWaypoint()
                             stepIndex, position, radius, false)
                         break
                     end
+                    -- Non-spatial prerequisites (for example, equipping the
+                    -- starter knife) must not hide the next objective in the world.
+                    candidateCanBeDismissed = false
                 end
             end
 
@@ -154,7 +158,7 @@ function WO.Quests.GetTrackedWaypoint()
                 local distanceSquared = playerPosition:DistToSqr(candidate.position)
                 local radiusSquared = candidate.radius * candidate.radius
 
-                if distanceSquared <= radiusSquared then
+                if distanceSquared <= radiusSquared and candidateCanBeDismissed then
                     dismissedWaypoints[key] = true
                 end
 
@@ -203,15 +207,27 @@ function WO.Quests.GetTrackerLines()
 end
 
 ---------------------------------------------------------------------------
--- Журнал квестов (клавиша J)
+-- Журнал заданий (встроенная страница игрового меню)
 ---------------------------------------------------------------------------
 
-local questFrame = nil
 local questRequests = {}
 local questRequestSerial = 0
 
 local function QuestRequestKey(action, questId)
     return tostring(action) .. "\0" .. tostring(questId)
+end
+
+local function IsJournalPageOpen()
+    return WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() and
+        WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "quests"
+end
+
+local function RefreshJournal()
+    if IsJournalPageOpen() and WO.MenuUI.RefreshPage then
+        return WO.MenuUI.RefreshPage("quests")
+    end
+
+    return false
 end
 
 local function RequestQuestAction(action, questId, button, send)
@@ -235,157 +251,243 @@ local function RequestQuestAction(action, questId, button, send)
 
         questRequests[key] = nil
         WO.Notify.Show("error", WO.Lang:Get("quest.request_timeout"))
-
-        if IsValid(questFrame) then
-            WO.Quests.OpenLog()
-        end
+        RefreshJournal()
     end)
 
     return true
 end
 
-local function CloseLog()
-    if IsValid(questFrame) then
-        questFrame:Remove()
-        questFrame = nil
+local function GetQuestStatus(state)
+    if state.status == "completed" then
+        return WO.Lang:Get("quest.status_completed"), WO.UI.Colors.good
+    elseif state.status == "failed" then
+        return WO.Lang:Get("quest.status_failed"), WO.UI.Colors.bad
     end
+
+    return WO.Lang:Get("quest.status_active"), WO.UI.Colors.accent
 end
 
-function WO.Quests.OpenLog()
-    CloseLog()
+local function GetQuestProgress(def, state)
+    local completed = true
+    local lines = {}
 
-    local sw, sh = ScrW(), ScrH()
-    local w, h = math.min(680, sw * 0.55), math.min(520, sh * 0.7)
-
-    questFrame = vgui.Create("DFrame")
-    questFrame:SetSize(w, h)
-    questFrame:SetPos((sw - w) / 2, (sh - h) / 2)
-    questFrame:SetTitle("")
-    questFrame:ShowCloseButton(true)
-    questFrame:MakePopup()
-
-    questFrame.Paint = function(_, pw, ph)
-        WO.UI.DrawPanelOutlined(0, 0, pw, ph, WO.UI.Colors.bg, WO.UI.Colors.accent)
-        WO.UI.DrawTitleBar(0, 0, pw, 38, WO.Lang:Get("quest.log_title"))
+    for index, step in ipairs(def.steps or {}) do
+        local needed = math.max(1, tonumber(step.amount) or 1)
+        local amount = math.min(needed,
+            math.max(0, tonumber((state.progress or {})[index]) or 0))
+        local done = amount >= needed
+        completed = completed and done
+        lines[#lines + 1] = {
+            text = step.text or step.target or step.type or "Цель",
+            amount = amount,
+            needed = needed,
+            done = done,
+        }
     end
 
-    local scroll = WO.UI.Scroll(questFrame)
+    return lines, completed
+end
 
-    scroll:Dock(FILL)
-    scroll:DockMargin(16, 50, 16, 16)
+local function BuildQuestCard(parent, questId, state, def, index)
+    local objectives, allObjectivesDone = GetQuestProgress(def, state)
+    local isActive = state.status == "active"
+    local showTurnIn = isActive and allObjectivesDone and def.turnInRequired == true
+    local objectiveHeight = 38
+    local cardHeight = 56 + 44 + #objectives * objectiveHeight +
+        (showTurnIn and 28 or 0) + (isActive and 48 or 0)
+    local card = vgui.Create("DPanel", parent)
+    card:Dock(TOP)
+    card:SetTall(cardHeight)
+    card:DockMargin(0, 0, 0, 10)
+    card.woQuestId = questId
+    card.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
+            WO.UI.Colors.border, WO.UI.Metrics.radius)
 
-    local states = GetStateSnapshot()
-    local shown = 0
+        local statusText, statusColor = GetQuestStatus(state)
+        WO.UI.DrawTextFit(def.name or questId, "WO.Subtitle", 14, 22,
+            WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER,
+            math.max(80, w - 180), 28)
+        WO.UI.DrawPanelOutlined(w - 154, 9, 140, 26,
+            WO.UI.Colors.panelDark, statusColor, WO.UI.Metrics.radiusSmall)
+        WO.UI.DrawTextFit(statusText, "WO.Tiny", w - 84, 22,
+            statusColor, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 126, 20)
+    end
 
-    for questId, state in pairs(states) do
-        local def = WO.Quests.Get(questId)
+    local description = WO.UI.Label(card, def.description or "", "WO.Small",
+        WO.UI.Colors.textDim)
+    description:SetPos(14, 46)
+    description:SetSize(math.max(1, parent:GetWide() - 36), 40)
+    description:SetTall(40)
 
-        if def then
-            shown = shown + 1
+    local objectivesTop = 88
 
-            local statusText = state.status == "completed" and WO.Lang:Get("quest.status_completed") or
-                state.status == "failed" and "Провалено" or WO.Lang:Get("quest.status_active")
-            local statusColor = state.status == "completed" and WO.UI.Colors.good or
-                state.status == "failed" and WO.UI.Colors.bad or WO.UI.Colors.accent
-            local statusIcon = state.status == "completed" and "✔ " or
-                state.status == "failed" and "✖ " or "• "
-
-            local header = WO.UI.Label(scroll,
-                statusIcon .. def.name .. "  (" .. statusText .. ")",
-                "WO.Subtitle", statusColor)
-
-            header:Dock(TOP)
-            header:DockMargin(0, 8, 0, 2)
-            header:SetTall(22)
-
-            local desc = WO.UI.Label(scroll, def.description or "", "WO.Small", WO.UI.Colors.textDim)
-
-            desc:Dock(TOP)
-            desc:DockMargin(12, 0, 12, 2)
-            desc:SetTall(16)
-
-            for index, step in ipairs(def.steps) do
-                local need = step.amount or 1
-                local have = math.min((state.progress or {})[index] or 0, need)
-
-                local stepLabel = WO.UI.Label(scroll,
-                    "   " .. (step.text or step.type) .. "  " .. have .. "/" .. need,
-                    "WO.Small",
-                    have >= need and WO.UI.Colors.good or WO.UI.Colors.text)
-
-                stepLabel:Dock(TOP)
-                stepLabel:DockMargin(12, 0, 12, 0)
-                stepLabel:SetTall(16)
-            end
-
-            if state.status == "active" and def.turnInRequired then
-                local complete = true
-
-                for index, step in ipairs(def.steps or {}) do
-                    if ((state.progress or {})[index] or 0) < (step.amount or 1) then
-                        complete = false
-                        break
-                    end
-                end
-
-                if complete then
-                    local npc = WO.NPCs and WO.NPCs.Get and
-                        WO.NPCs.Get(def.turnInGiver or def.giver)
-                    local turnInLabel = WO.UI.Label(scroll,
-                        "Готово — сдайте задание у " .. tostring(npc and npc.name or def.turnInGiver or def.giver),
-                        "WO.Small", WO.UI.Colors.good)
-                    turnInLabel:Dock(TOP)
-                    turnInLabel:DockMargin(12, 2, 12, 2)
-                    turnInLabel:SetTall(18)
-                end
-            end
-
-            if state.status == "active" then
-                local buttonsRow = vgui.Create("DPanel", scroll)
-
-                buttonsRow:Dock(TOP)
-                buttonsRow:DockMargin(12, 6, 12, 0)
-                buttonsRow:SetTall(28)
-                buttonsRow:SetPaintBackground(false)
-
-                local trackBtn
-                trackBtn = WO.UI.Button(buttonsRow,
-                    state.tracked ~= false and WO.Lang:Get("quest.untrack") or WO.Lang:Get("quest.track"),
-                    function()
-                        RequestQuestAction("track", questId, trackBtn, function()
-                            WO.Net.SendToServer("Quest.Track", questId, state.tracked == false)
-                        end)
-                    end)
-
-                trackBtn:Dock(LEFT)
-                trackBtn:SetWide(140)
-                if questRequests[QuestRequestKey("track", questId)] then
-                    trackBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
-                end
-
-                local abandonBtn
-                abandonBtn = WO.UI.Button(buttonsRow, WO.Lang:Get("quest.abandon"), function()
-                    RequestQuestAction("abandon", questId, abandonBtn, function()
-                        WO.Net.SendToServer("Quest.Abandon", questId)
-                    end)
-                end)
-
-                abandonBtn:Dock(RIGHT)
-                abandonBtn:SetWide(120)
-                if questRequests[QuestRequestKey("abandon", questId)] then
-                    abandonBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
-                end
-            end
+    for objectiveIndex, objective in ipairs(objectives) do
+        local row = vgui.Create("DPanel", card)
+        row:SetPos(12, objectivesTop + (objectiveIndex - 1) * objectiveHeight)
+        row:SetSize(math.max(1, parent:GetWide() - 24), objectiveHeight - 4)
+        row.Paint = function(_, w, h)
+            local color = objective.done and WO.UI.Colors.good or WO.UI.Colors.textDim
+            WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panelDark,
+                WO.UI.Colors.border, WO.UI.Metrics.radiusSmall)
+            WO.UI.DrawTextFit((objective.done and "✓ " or "• ") .. objective.text,
+                "WO.Tiny", 10, h / 2, color, TEXT_ALIGN_LEFT,
+                TEXT_ALIGN_CENTER, math.max(40, w - 86), h - 4)
+            WO.UI.DrawTextFit(tostring(objective.amount) .. "/" .. tostring(objective.needed),
+                "WO.Small", w - 10, h / 2, color, TEXT_ALIGN_RIGHT,
+                TEXT_ALIGN_CENTER, 64, h - 4)
+            WO.UI.DrawBar(10, h - 4, math.max(1, w - 20), 2,
+                objective.amount / objective.needed, color,
+                WO.UI.Colors.panel, nil)
         end
     end
 
-    if shown == 0 then
-        local empty = WO.UI.Label(scroll, WO.Lang:Get("quest.log_empty"), "WO.Body", WO.UI.Colors.textDim)
+    local actionsTop = objectivesTop + #objectives * objectiveHeight
 
-        empty:Dock(TOP)
-        empty:DockMargin(0, 20, 0, 0)
-        empty:SetTall(24)
+    if showTurnIn then
+        local npc = WO.NPCs and WO.NPCs.Get and
+            WO.NPCs.Get(def.turnInGiver or def.giver)
+        local turnIn = WO.UI.Label(card,
+            WO.Lang:Get("quest.return_to", tostring(npc and npc.name or
+                def.turnInGiver or def.giver or "")), "WO.Small", WO.UI.Colors.good)
+        turnIn:SetPos(14, actionsTop)
+        turnIn:SetSize(math.max(1, parent:GetWide() - 28), 24)
+        turnIn:SetTall(24)
+        actionsTop = actionsTop + 28
     end
+
+    if isActive then
+        local buttonsRow = vgui.Create("DPanel", card)
+        buttonsRow:SetPos(12, actionsTop)
+        buttonsRow:SetSize(math.max(1, parent:GetWide() - 24), 38)
+        buttonsRow:SetPaintBackground(false)
+        local trackBtn
+        local abandonBtn
+        local function LayoutButtons(w)
+            if not IsValid(trackBtn) or not IsValid(abandonBtn) then return end
+            local buttonGap = 8
+            local buttonWidth = math.max(96, math.floor((w - buttonGap) / 2))
+            trackBtn:SetPos(0, 0)
+            trackBtn:SetSize(buttonWidth, 34)
+            abandonBtn:SetPos(buttonWidth + buttonGap, 0)
+            abandonBtn:SetSize(math.max(96, w - buttonWidth - buttonGap), 34)
+        end
+        buttonsRow.PerformLayout = function(self, w)
+            LayoutButtons(w)
+        end
+
+        trackBtn = WO.UI.Button(buttonsRow,
+            state.tracked ~= false and WO.Lang:Get("quest.untrack") or
+                WO.Lang:Get("quest.track"), function()
+            RequestQuestAction("track", questId, trackBtn, function()
+                WO.Net.SendToServer("Quest.Track", questId, state.tracked == false)
+            end)
+        end)
+        trackBtn:SetSize(140, 34)
+        trackBtn:SetAccent(state.tracked ~= false)
+
+        abandonBtn = WO.UI.Button(buttonsRow, WO.Lang:Get("quest.abandon"), function()
+            RequestQuestAction("abandon", questId, abandonBtn, function()
+                WO.Net.SendToServer("Quest.Abandon", questId)
+            end)
+        end)
+        abandonBtn:SetSize(120, 34)
+        LayoutButtons(buttonsRow:GetWide())
+
+        if questRequests[QuestRequestKey("track", questId)] then
+            trackBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
+        end
+        if questRequests[QuestRequestKey("abandon", questId)] then
+            abandonBtn:SetBusy(true, WO.Lang:Get("ui.pending"))
+        end
+    end
+
+    return card
+end
+
+function WO.Quests.BuildJournal(parent)
+    if not IsValid(parent) then return nil end
+
+    local header = vgui.Create("DPanel", parent)
+    header.woQuestJournalHeader = true
+    header:Dock(TOP)
+    header:SetTall(58)
+    header:DockMargin(0, 0, 0, 10)
+    header:SetPaintBackground(false)
+    header.Paint = function(_, w, h)
+        WO.UI.DrawTextFit(WO.Lang:Get("quest.log_title"), "WO.Title",
+            0, 20, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 8, 30)
+        WO.UI.DrawTextFit(WO.Lang:Get("quest.journal_hint"), "WO.Small",
+            2, 44, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 12, 18)
+    end
+
+    local scroll = WO.UI.Scroll(parent)
+    scroll:Dock(FILL)
+    scroll:SetSize(parent:GetWide(), math.max(1, parent:GetTall() - 68))
+
+    local states = GetStateSnapshot()
+    local questIds = {}
+
+    for questId, state in pairs(states or {}) do
+        if WO.Quests.Get(questId) and istable(state) then
+            questIds[#questIds + 1] = questId
+        end
+    end
+
+    table.sort(questIds, function(a, b)
+        local stateA, stateB = states[a], states[b]
+        local rank = { active = 1, completed = 2, failed = 3 }
+        local statusA = rank[stateA.status] or 4
+        local statusB = rank[stateB.status] or 4
+        if statusA ~= statusB then return statusA < statusB end
+        return string.lower(tostring(WO.Quests.Get(a).name or a)) <
+            string.lower(tostring(WO.Quests.Get(b).name or b))
+    end)
+
+    for index, questId in ipairs(questIds) do
+        BuildQuestCard(scroll, questId, states[questId], WO.Quests.Get(questId), index)
+    end
+
+    if #questIds == 0 then
+        local empty = vgui.Create("DPanel", scroll)
+        empty:Dock(TOP)
+        empty:SetTall(92)
+        empty:DockMargin(0, 4, 0, 8)
+        empty.Paint = function(_, w, h)
+            WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
+                WO.UI.Colors.border, WO.UI.Metrics.radius)
+            WO.UI.DrawTextFit(WO.Lang:Get("quest.log_empty"), "WO.Body",
+                18, h / 2, WO.UI.Colors.textDim,
+                TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 36, 30)
+        end
+    end
+
+    return scroll
+end
+
+function WO.Quests.OpenLog()
+    if not (WO.MenuUI and WO.MenuUI.Show and WO.MenuUI.ActivatePage) then
+        return false
+    end
+
+    if WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() then
+        return WO.MenuUI.ActivatePage("quests")
+    end
+
+    return WO.MenuUI.Show("quests")
+end
+
+function WO.Quests.ToggleLog()
+    if not (WO.MenuUI and WO.MenuUI.Show and WO.MenuUI.ActivatePage) then
+        return false
+    end
+
+    if WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() then
+        local page = WO.MenuUI.GetPage and WO.MenuUI.GetPage() or nil
+        return WO.MenuUI.ActivatePage(page == "quests" and "overview" or "quests")
+    end
+
+    return WO.MenuUI.Show("quests")
 end
 
 WO.Hook.Add("QuestActionResult", "quest_ui_action_result", function(data)
@@ -401,9 +503,7 @@ WO.Hook.Add("QuestActionResult", "quest_ui_action_result", function(data)
             tostring(data.reason or "unknown")))
     end
 
-    if IsValid(questFrame) then
-        WO.Quests.OpenLog()
-    end
+    RefreshJournal()
 end)
 
 ---------------------------------------------------------------------------
@@ -411,7 +511,7 @@ end)
 ---------------------------------------------------------------------------
 
 WO.Hook.Add("QuestsSynced", "quest_ui", function()
-    if IsValid(questFrame) then WO.Quests.OpenLog() end
+    RefreshJournal()
 end)
 
 WO.Hook.Add("QuestEvent", "quest_ui", function(data)
@@ -453,22 +553,19 @@ WO.Hook.Add("QuestEvent", "quest_ui", function(data)
         WO.Notify.Show("info", tostring(data.text or ""))
     end
 
-    if IsValid(questFrame) then WO.Quests.OpenLog() end
+    RefreshJournal()
 end)
 
--- Клавиша J — журнал квестов
+-- J switches to the journal inside the existing game menu.
 if WO.UI and WO.UI.BindKey then
-WO.UI.BindKey(KEY_J, function()
-    if IsValid(questFrame) then
-        CloseLog()
-    else
-        WO.Quests.OpenLog()
-    end
-end, "quests_log")
+    WO.UI.BindKey(KEY_J, function()
+        if WO.Character and WO.Character.GetLocal and WO.Character.GetLocal() then
+            WO.Quests.ToggleLog()
+        end
+    end, "quests_log", { allowWhenMenuOpen = true })
 end
 
-WO.Hook.Add("CharacterMenuOpening", "quest_ui_close", function()
-    CloseLog()
+WO.Hook.Add("CharacterMenuOpening", "quest_ui_reset", function()
     WO.Quests.LocalStates = {}
     dismissedWaypoints = {}
 end)

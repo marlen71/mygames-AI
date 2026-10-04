@@ -82,7 +82,6 @@ WO.Lang.Register("en", {
     ["menu.characters"] = "Characters",
     ["menu.characters_subtitle"] = "Create a character or load a saved one",
     ["menu.inventory"] = "Inventory",
-    ["menu.sheet"] = "Character Stats",
     ["menu.quests"] = "Quest Journal",
     ["menu.settings"] = "Settings",
     ["settings.title"] = "Game Settings",
@@ -107,6 +106,8 @@ WO.Lang.Register("en", {
     -----------------------------------------------------------------------
     -- Stats
     -----------------------------------------------------------------------
+    ["stats.overview_title"] = "Character Attributes",
+    ["stats.loading"] = "Loading attributes…",
     ["stats.strength"] = "Strength",
     ["stats.agility"] = "Agility",
     ["stats.intelligence"] = "Intelligence",
@@ -127,6 +128,7 @@ WO.Lang.Register("en", {
     -- Inventory / items
     -----------------------------------------------------------------------
     ["inventory.title"] = "Inventory",
+    ["inventory.menu_hint"] = "Drag items to move them; press I to open this page quickly.",
     ["inventory.empty"] = "Inventory is empty",
     ["inventory.drop"] = "Drop",
     ["inventory.use"] = "Use",
@@ -207,7 +209,6 @@ WO.Lang.Register("en", {
     -- Equipment / menu
     -----------------------------------------------------------------------
     ["equipment.title"] = "Equipment",
-    ["character_menu.title"] = "Character",
     ["character_menu.stats"] = "Stats",
     ["character_menu.inventory"] = "Inventory",
     ["character_menu.equipment"] = "Equipment",
@@ -273,10 +274,12 @@ WO.Lang.Register("en", {
     -----------------------------------------------------------------------
     -- Quests / dialogue / vendors
     -----------------------------------------------------------------------
-    ["quest.log_title"] = "Quest Log",
+    ["quest.log_title"] = "Quest Journal",
+    ["quest.journal_hint"] = "Active objectives, progress, and tracking controls",
     ["quest.log_empty"] = "No quests yet",
     ["quest.status_active"] = "Active",
     ["quest.status_completed"] = "Completed",
+    ["quest.status_failed"] = "Failed",
     ["quest.track"] = "Track",
     ["quest.untrack"] = "Untrack",
     ["quest.abandon"] = "Abandon",

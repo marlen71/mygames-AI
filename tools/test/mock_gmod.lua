@@ -84,6 +84,7 @@ end
 color_white = Color(255, 255, 255, 255)
 
 -- Клавиши/константы движка (используются в UI/физике)
+KEY_I = 73
 KEY_J = 74
 KEY_ESCAPE = 70
 KEY_C = 67
@@ -1440,6 +1441,8 @@ local function NewPanel(class)
 
     p.Close = function(tt) tt:Remove() end
     p.SetSize = function(tt, w, h) tt.__w, tt.__h = w, h end
+    p.SetWide = function(tt, w) tt.__w = w end
+    p.SetTall = function(tt, h) tt.__h = h end
     p.GetSize = function(tt) return tt.__w or 0, tt.__h or 0 end
     p.GetWide = function(tt) return tt.__w or 0 end
     p.GetTall = function(tt) return tt.__h or 0 end
@@ -1621,7 +1624,11 @@ function surface.SetTextPos() end
 function surface.SetMaterial() end
 function surface.GetTextureID() return 0 end
 function surface.PlaySound() end
-function surface.GetTextSize(txt) return #(txt or "") * 6, 12 end
+function surface.GetTextSize(txt)
+    local value = tostring(txt or "")
+    local _, continuationBytes = value:gsub("[\128-\191]", "")
+    return (#value - continuationBytes) * 6, 12
+end
 function surface.GetFontName() return "default" end
 
 draw = draw or {}
@@ -1670,10 +1677,12 @@ function gui.MouseY() return 0 end
 function gui.MousePos() return 0, 0 end
 function gui.EnableScreenClicker() end
 function gui.IsGameUIVisible() return false end
+function gui.IsConsoleVisible() return false end
 function gui.OpenURL() end
 
 input = input or {}
-function input.IsKeyDown() return false end
+MOCK.keysDown = MOCK.keysDown or {}
+function input.IsKeyDown(key) return MOCK.keysDown[key] == true end
 function input.GetKeyCode() return 0 end
 function input.LookupBinding() return "" end
 function input.GetCursorPos() return 0, 0 end

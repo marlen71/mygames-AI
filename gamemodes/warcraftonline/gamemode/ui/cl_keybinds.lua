@@ -12,12 +12,16 @@ WO.UI.Binds = WO.UI.Binds or {}
     @param keyCode number KEY_*
     @param fn function
     @param id string|nil уникальный id (для удаления)
+    @param options table|nil параметры бинда, например allowWhenMenuOpen
 ]]
-function WO.UI.BindKey(keyCode, fn, id)
+function WO.UI.BindKey(keyCode, fn, id, options)
+    options = istable(options) and options or {}
+
     WO.UI.Binds[#WO.UI.Binds + 1] = {
         key = keyCode,
         fn = fn,
         id = id or ("bind_" .. #WO.UI.Binds),
+        allowWhenMenuOpen = options.allowWhenMenuOpen == true,
     }
 end
 
@@ -55,9 +59,11 @@ hook.Add("Think", "wo_keybinds", function()
     for _, bind in ipairs(WO.UI.Binds) do
         local down = input.IsKeyDown(bind.key)
 
-        -- Не запускаем игровые hotkeys за собственным scoreboard/menu.
-        -- Обновляем edge-state, чтобы закрытие меню не воспроизводило старое нажатие.
-        if not menuOpen and down and not wasDown[bind.key] and not typing then
+        -- Не запускаем игровые hotkeys за собственным scoreboard/menu, если
+        -- для бинда явно не разрешена работа внутри меню. Обновляем edge-state,
+        -- чтобы закрытие меню не воспроизводило старое нажатие.
+        if (not menuOpen or bind.allowWhenMenuOpen) and down and
+            not wasDown[bind.key] and not typing then
             local ok, err = pcall(bind.fn)
 
             if not ok then

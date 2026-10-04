@@ -277,133 +277,118 @@ local function BuildOverviewPage(parent)
 
     AddPageHeader(parent, WO.Lang:Get("menu.overview"), subtitle)
 
-    local hero = vgui.Create("DPanel", parent)
+    local scroll = WO.UI.Scroll(parent)
+    scroll:Dock(FILL)
+    scroll:SetSize(parent:GetWide(), math.max(1, parent:GetTall() - 88))
+
+    local hero = vgui.Create("DPanel", scroll)
     hero:Dock(TOP)
-    hero:SetTall(278)
-    hero:DockMargin(0, 0, 0, 16)
+    hero:SetTall(270)
+    hero:DockMargin(0, 0, 0, 14)
     hero:SetPaintBackground(false)
 
     AddPreviewPanel(hero, char, WO.Lang:Get("menu.character_preview"))
 
     local details = vgui.Create("DPanel", hero)
+    details.woOverviewDetails = true
     details:Dock(FILL)
     details:DockMargin(0, 0, 12, 0)
     details.Paint = function(_, w, h)
         WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
-            WO.UI.Colors.border)
+            WO.UI.Colors.border, WO.UI.Metrics.radius)
 
-        if char then
-            local race = WO.Races.Get(char.race)
-            local class = WO.Classes.Get(char.class)
-            local level = (WO.Leveling.ClientData and WO.Leveling.ClientData.level) or char.level or 1
-
-            WO.UI.DrawTextFit(char:GetFullName(), "WO.Title", 20, 20,
-                WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 32)
-            WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level .. "  ·  " ..
-                (race and race.name or char.race) .. "  ·  " ..
-                (class and class.name or char.class), "WO.Body", 22, 66,
-                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 24)
-            local xp = WO.Leveling and WO.Leveling.ClientData or {}
-            local needed = math.max(1, tonumber(xp.needed) or WO.Config.GetXPForLevel(level))
-            local experience = math.max(0, tonumber(xp.experience) or tonumber(char.experience) or 0)
-            local progressText = WO.Lang:Get("xp.compact", experience, needed,
-                math.max(0, needed - experience))
-            WO.UI.DrawTextFit(progressText, "WO.Tiny",
-                22, 104, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 18)
-            WO.UI.DrawBar(22, 126, w - 44, 8, experience / needed,
-                WO.UI.Colors.xp, WO.UI.Colors.xpBg, nil)
-            WO.UI.DrawTextFit(WO.Lang:Get("menu.server_players") .. ": " .. #player.GetAll(),
-                "WO.Small", 22, 148, WO.UI.Colors.textDim,
-                TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 20)
-        else
-            WO.UI.DrawTextFit(WO.Lang:Get("menu.no_character"), "WO.Subtitle", 20, 22,
-                WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 28)
-            WO.UI.DrawTextFit(WO.Lang:Get("menu.character_start_hint"), "WO.Body", 22, 66,
-                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 44, 44)
+        if not char then
+            WO.UI.DrawTextFit(WO.Lang:Get("menu.no_character"), "WO.Subtitle", 18, 25,
+                WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 36, 30)
+            WO.UI.DrawTextFit(WO.Lang:Get("menu.character_start_hint"), "WO.Body", 20, 66,
+                WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 48)
+            return
         end
+
+        local race = WO.Races.Get(char.race)
+        local class = WO.Classes.Get(char.class)
+        local xp = WO.Leveling and WO.Leveling.ClientData or {}
+        local level = math.max(1, tonumber(xp.level) or tonumber(char.level) or 1)
+        local needed = math.max(1, tonumber(xp.needed) or WO.Config.GetXPForLevel(level))
+        local experience = math.max(0, tonumber(xp.experience) or tonumber(char.experience) or 0)
+
+        WO.UI.DrawTextFit(char:GetFullName(), "WO.Title", 18, 24,
+            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 36, 34)
+        WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. level .. "  ·  " ..
+            (race and race.name or char.race) .. "  ·  " ..
+            (class and class.name or char.class), "WO.Body", 20, 67,
+            WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 24)
+        WO.UI.DrawTextFit(WO.Lang:Get("xp.compact", experience, needed,
+            math.max(0, needed - experience)), "WO.Tiny", 20, 105,
+            WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 18)
+        WO.UI.DrawBar(20, 128, w - 40, 8, experience / needed,
+            WO.UI.Colors.xp, WO.UI.Colors.xpBg, nil)
+        WO.UI.DrawTextFit(WO.Lang:Get("menu.server_players") .. ": " .. #player.GetAll(),
+            "WO.Small", 20, 148, WO.UI.Colors.textDim,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 40, 20)
     end
 
     local actionRow = vgui.Create("DPanel", details)
     actionRow:Dock(BOTTOM)
-    actionRow:DockMargin(16, 0, 16, 16)
-    actionRow:SetTall(48)
+    actionRow:DockMargin(14, 0, 14, 14)
+    actionRow:SetTall(44)
     actionRow:SetPaintBackground(false)
 
-    local actionButtons = char and {
+    local actions = char and {
         { text = WO.Lang:Get("menu.inventory"), id = "inventory" },
-        { text = WO.Lang:Get("menu.sheet"), id = "sheet" },
         { text = WO.Lang:Get("menu.quests"), id = "quests" },
     } or {
         { text = WO.Lang:Get("character.menu.create"), id = "create" },
         { text = WO.Lang:Get("character.menu.load"), id = "characters" },
     }
-
-    local gap = 8
-    local estimatedPreviewWidth = math.max(250, math.min(720, math.floor(ScrW() * 0.32)))
-    local expectedDetailsWidth = math.max(1,
-        PanelWidth(parent, math.max(500, ScrW() - 340)) - estimatedPreviewWidth - 24)
-    local columns = #actionButtons
-
-    if expectedDetailsWidth < 560 then
-        columns = math.min(2, #actionButtons)
-    end
-
-    if expectedDetailsWidth < 300 then
-        columns = 1
-    end
-
-    local rows = math.ceil(#actionButtons / columns)
-    local rowHeight = 44
-    local rowGap = 8
+    local columns = #actions
     local actionControls = {}
 
-    actionRow:SetTall(rows * rowHeight + (rows - 1) * rowGap)
     actionRow.PerformLayout = function(self, w)
-        local controlWidth = math.max(1, math.floor((w - gap * (columns - 1)) / columns))
+        local gap = 8
+        local buttonWidth = math.max(1, math.floor((w - gap * (columns - 1)) / columns))
 
         for index, button in ipairs(actionControls) do
-            local row = math.floor((index - 1) / columns)
-            local column = (index - 1) % columns
-
-            button:SetPos(column * (controlWidth + gap), row * (rowHeight + rowGap))
-            button:SetSize(controlWidth, rowHeight)
+            button:SetPos((index - 1) * (buttonWidth + gap), 0)
+            button:SetSize(buttonWidth, 44)
         end
     end
 
-    for index, action in ipairs(actionButtons) do
+    for index, action in ipairs(actions) do
         local entry = action
         local button = WO.UI.Button(actionRow, entry.text, function()
             if entry.id == "create" then
                 WO.CharacterUI.OpenCreate()
             elseif entry.id == "characters" then
-                WO.MenuUI.Show("characters")
+                WO.MenuUI.ActivatePage("characters")
             else
-                WO.MenuUI.Close()
-
-                if entry.id == "inventory" and WO.InventoryUI then
-                    WO.InventoryUI.Open()
-                elseif entry.id == "sheet" and WO.CharacterUI.OpenSheet then
-                    WO.CharacterUI.OpenSheet()
-                elseif entry.id == "quests" and WO.Quests and WO.Quests.OpenLog then
-                    WO.Quests.OpenLog()
-                end
+                WO.MenuUI.ActivatePage(entry.id)
             end
         end)
         button:SetAccent(index == 1)
-        button:SetFont(expectedDetailsWidth / columns < 180 and "WO.Small" or "WO.Body")
-        actionControls[index] = button
+        button:SetFont("WO.Body")
+        actionControls[#actionControls + 1] = button
     end
 
-    local playersTitle = WO.UI.Label(parent, WO.Lang:Get("menu.players"),
+    if char and WO.CharacterUI and WO.CharacterUI.BuildOverviewStats then
+        WO.CharacterUI.BuildOverviewStats(scroll)
+    end
+
+    local playersTitle = WO.UI.Label(scroll, WO.Lang:Get("menu.players"),
         "WO.Subtitle", WO.UI.Colors.accent)
     playersTitle:Dock(TOP)
     playersTitle:DockMargin(0, 0, 0, 8)
     playersTitle:SetTall(30)
 
-    local playerList = vgui.Create("DScrollPanel", parent)
-    playerList:Dock(FILL)
-
     local allPlayers = player.GetAll and player.GetAll() or {}
+    local playerList = vgui.Create("DPanel", scroll)
+    playerList:Dock(TOP)
+    playerList:SetTall(math.max(66, #allPlayers * 52 + 20))
+    playerList:DockMargin(0, 0, 0, 12)
+    playerList.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
+            WO.UI.Colors.border, WO.UI.Metrics.radius)
+    end
 
     local function PublicPlayerName(ply)
         local identity = WO.Social and WO.Social.GetVisibleIdentity and
@@ -415,46 +400,51 @@ local function BuildOverviewPage(parent)
         return string.lower(PublicPlayerName(a)) < string.lower(PublicPlayerName(b))
     end)
 
-    for _, ply in ipairs(allPlayers) do
-        if IsValid(ply) then
-            local row = vgui.Create("DPanel", playerList)
-            row:Dock(TOP)
-            row:SetTall(48)
-            row:DockMargin(0, 0, 0, 6)
-
-            local identity = WO.Social and WO.Social.GetVisibleIdentity and
-                WO.Social.GetVisibleIdentity(ply) or { name = "Неизвестный", race = "" }
-            local name = identity.name or "Неизвестный"
-            local detailsText = identity.race and identity.race ~= "" and
-                ("  ·  " .. identity.race) or ""
-            local known = identity.known == true
-
-            if known and identity.class and identity.class ~= "" then
-                detailsText = detailsText .. " / " .. identity.class
-            end
-
-            row.Paint = function(_, w, h)
-                WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
-                    WO.UI.Colors.border)
-                WO.UI.DrawTextFit(name .. detailsText, "WO.Body", 14, h / 2,
-                    WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 188, h - 4)
-                if known then
-                    WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " .. (identity.level or 1),
-                        "WO.Small", w - 84, h / 2, WO.UI.Colors.textDim,
-                        TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 70, h - 4)
-                end
-                WO.UI.DrawTextFit(tostring(ply:Ping()) .. " ms", "WO.Small", w - 14,
-                    h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 60, h - 4)
-            end
-        end
-    end
-
     if #allPlayers == 0 then
         local empty = WO.UI.Label(playerList, WO.Lang:Get("menu.no_players"),
             "WO.Body", WO.UI.Colors.textDim)
         empty:Dock(TOP)
-        empty:DockMargin(2, 6, 0, 0)
+        empty:DockMargin(14, 14, 14, 0)
         empty:SetTall(34)
+    end
+
+    for index, ply in ipairs(allPlayers) do
+        if IsValid(ply) then
+            local row = vgui.Create("DPanel", playerList)
+            row.woScoreboardRow = true
+            row:SetPos(10, 10 + (index - 1) * 52)
+            row:SetSize(math.max(1, parent:GetWide() - 20), 46)
+            row.Paint = function(_, w, h)
+                local identity = WO.Social and WO.Social.GetVisibleIdentity and
+                    WO.Social.GetVisibleIdentity(ply) or { name = "Неизвестный", race = "" }
+                local name = identity.name or "Неизвестный"
+                local detailsText = identity.race and identity.race ~= "" and
+                    ("  ·  " .. identity.race) or ""
+                local known = identity.known == true
+
+                if known and identity.class and identity.class ~= "" then
+                    detailsText = detailsText .. " / " .. identity.class
+                end
+
+                WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panelDark,
+                    WO.UI.Colors.border, WO.UI.Metrics.radiusSmall)
+                WO.UI.DrawTextFit(name .. detailsText, "WO.Body", 12, h / 2,
+                    WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 188, h - 4)
+                if known then
+                    WO.UI.DrawTextFit(WO.Lang:Get("character.level") .. " " ..
+                        (identity.level or 1), "WO.Small", w - 84, h / 2,
+                        WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 70, h - 4)
+                end
+                WO.UI.DrawTextFit(tostring(ply:Ping()) .. " ms", "WO.Small", w - 14,
+                    h / 2, WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 60, h - 4)
+            end
+            row.PerformLayout = function(self)
+                local list = self:GetParent()
+                if IsValid(list) then
+                    self:SetWide(math.max(1, list:GetWide() - 20))
+                end
+            end
+        end
     end
 end
 
@@ -613,18 +603,41 @@ local function BuildPage(page)
     if not IsValid(menuFrame) or not IsValid(menuFrame.content) then return end
 
     currentPage = page or DefaultPage()
+
+    if currentPage == "sheet" then
+        currentPage = "overview"
+    end
+
+    if (currentPage == "inventory" or currentPage == "quests") and not HasLocalCharacter() then
+        currentPage = "characters"
+    end
+
     if currentPage == "admin" and not (WO.Admin and WO.Admin.ClientMenuAccess) then
         currentPage = "overview"
     end
+
     menuFrame.content:Clear()
 
     if currentPage == "characters" then
         BuildCharactersPage(menuFrame.content)
+    elseif currentPage == "inventory" then
+        if WO.InventoryUI and WO.InventoryUI.BuildPanel then
+            WO.InventoryUI.BuildPanel(menuFrame.content)
+        else
+            BuildOverviewPage(menuFrame.content)
+        end
+    elseif currentPage == "quests" then
+        if WO.Quests and WO.Quests.BuildJournal then
+            WO.Quests.BuildJournal(menuFrame.content)
+        else
+            BuildOverviewPage(menuFrame.content)
+        end
     elseif currentPage == "settings" then
         BuildSettingsPage(menuFrame.content)
     elseif currentPage == "admin" then
         BuildAdminPage(menuFrame.content)
     else
+        currentPage = "overview"
         BuildOverviewPage(menuFrame.content)
     end
 
@@ -634,6 +647,13 @@ local function BuildPage(page)
             button:SetEnabled(not button.characterOnly or HasLocalCharacter())
         end
     end
+end
+
+function WO.MenuUI.RefreshPage(page)
+    if not IsValid(menuFrame) or (page and currentPage ~= page) then return false end
+
+    BuildPage(currentPage or DefaultPage())
+    return true
 end
 
 local function CreateMenuFrame()
@@ -693,7 +713,6 @@ local function CreateMenuFrame()
         { id = "overview", text = WO.Lang:Get("menu.overview") },
         { id = "characters", text = WO.Lang:Get("menu.characters") },
         { id = "inventory", text = WO.Lang:Get("menu.inventory"), characterOnly = true },
-        { id = "sheet", text = WO.Lang:Get("menu.sheet"), characterOnly = true },
         { id = "quests", text = WO.Lang:Get("menu.quests"), characterOnly = true },
         { id = "settings", text = WO.Lang:Get("menu.settings") },
     }
@@ -712,21 +731,7 @@ local function CreateMenuFrame()
                 return
             end
 
-            if entry.id == "overview" or entry.id == "characters" or
-                entry.id == "settings" or entry.id == "admin" then
-                BuildPage(entry.id)
-                return
-            end
-
-            WO.MenuUI.Close()
-
-            if entry.id == "inventory" and WO.InventoryUI and WO.InventoryUI.Open then
-                WO.InventoryUI.Open()
-            elseif entry.id == "sheet" and WO.CharacterUI and WO.CharacterUI.OpenSheet then
-                WO.CharacterUI.OpenSheet()
-            elseif entry.id == "quests" and WO.Quests and WO.Quests.OpenLog then
-                WO.Quests.OpenLog()
-            end
+            BuildPage(entry.id)
         end)
 
         button:SetPos(14, navY)
@@ -830,21 +835,24 @@ WO.Hook.Add("AutoCollectSettingsUpdated", "scoreboard_settings_refresh", functio
 end)
 
 local function ActivatePage(page)
-    if page == "overview" or page == "characters" or page == "settings" or page == "admin" then
-        BuildPage(page)
-    elseif page == "inventory" then
-        if not HasLocalCharacter() then return end
-        WO.MenuUI.Close()
-        if WO.InventoryUI and WO.InventoryUI.Open then WO.InventoryUI.Open() end
-    elseif page == "sheet" then
-        if not HasLocalCharacter() then return end
-        WO.MenuUI.Close()
-        if WO.CharacterUI and WO.CharacterUI.OpenSheet then WO.CharacterUI.OpenSheet() end
-    elseif page == "quests" then
-        if not HasLocalCharacter() then return end
-        WO.MenuUI.Close()
-        if WO.Quests and WO.Quests.OpenLog then WO.Quests.OpenLog() end
+    if page == "sheet" then
+        page = "overview"
     end
+
+    if page == "inventory" or page == "quests" then
+        if not HasLocalCharacter() then
+            WO.Notify.Show("info", WO.Lang:Get("menu.no_character"))
+            return false
+        end
+    end
+
+    if page == "overview" or page == "characters" or page == "inventory" or
+        page == "quests" or page == "settings" or page == "admin" then
+        BuildPage(page)
+        return true
+    end
+
+    return false
 end
 
 WO.MenuUI.ActivatePage = ActivatePage

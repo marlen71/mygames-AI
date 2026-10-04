@@ -31,6 +31,13 @@ local function FindLatestLiveFrame()
     end
 end
 
+local function PressKey(key)
+    MOCK.keysDown[key] = true
+    hook.Run("Think")
+    MOCK.keysDown[key] = false
+    hook.Run("Think")
+end
+
 print("[scenario] loading gamemode (client)...")
 
 include("gamemodes/warcraftonline/gamemode/cl_init.lua")
@@ -800,8 +807,7 @@ local privateScoreboardRow
 for index = #MOCK.createdPanels, 1, -1 do
     local panel = MOCK.createdPanels[index]
     local parent = rawget(panel, "__parent")
-    if rawget(panel, "__class") == "DPanel" and isfunction(panel.Paint) and parent and
-        rawget(parent, "__class") == "DScrollPanel" then
+    if rawget(panel, "woScoreboardRow") == true and isfunction(panel.Paint) and parent then
         privateScoreboardRow = panel
         break
     end
@@ -1103,28 +1109,41 @@ modelLessSlot:Paint(64, 64)
 MOCK.Assert(table.concat(MOCK.drawnTextValues, " "):find("Н", 1, true) ~= nil,
     "предметы без 3D-модели отображают заданный iconText")
 
+do
 local panelsBeforeInventory = #MOCK.createdPanels
-WO.InventoryUI.Open()
-MOCK.Assert(#MOCK.createdPanels > panelsBeforeInventory, "окно инвентаря создаёт панели")
+PressKey(KEY_I)
+local inventoryMenuFrame = FindLatestLiveFrame()
+MOCK.Assert(#MOCK.createdPanels > panelsBeforeInventory and inventoryMenuFrame and
+    WO.MenuUI.IsOpen() and WO.MenuUI.GetPage() == "inventory",
+    "клавиша I открывает инвентарь внутри игрового меню")
 
-local inventoryFrame
+local inventoryRoot
 for i = #MOCK.createdPanels, 1, -1 do
     local candidate = MOCK.createdPanels[i]
-    if rawget(candidate, "__class") == "WO_Window" and rawget(candidate, "__removed") ~= true then
-        inventoryFrame = candidate
+    if rawget(candidate, "woInventoryPage") == true and rawget(candidate, "__removed") ~= true then
+        inventoryRoot = candidate
         break
     end
 end
-MOCK.Assert(inventoryFrame ~= nil, "окно инвентаря открыто")
+MOCK.Assert(inventoryRoot ~= nil and rawget(inventoryRoot, "__class") == "DPanel",
+    "инвентарь встроен в страницу меню, отдельное окно не создаётся")
 
-local inventoryPanelCount = 0
-for _, child in ipairs(inventoryFrame.__children) do
-    if rawget(child, "__class") == "DPanel" and rawget(child, "__removed") ~= true then
-        inventoryPanelCount = inventoryPanelCount + 1
-    end
+local inventoryScroll
+for _, child in ipairs(inventoryRoot.__children) do
+    if rawget(child, "__class") == "DScrollPanel" then inventoryScroll = child end
 end
-MOCK.Assert(inventoryPanelCount >= 2, "инвентарь и экипировка — отдельные панели")
-MOCK.Assert(WO.InventoryUI.IsOpen(), "окно инвентаря сообщает открытое состояние")
+local inventoryLayout = inventoryScroll and inventoryScroll.__children[1]
+local inventoryPanelCount = inventoryLayout and #inventoryLayout.__children or 0
+MOCK.Assert(inventoryPanelCount >= 2, "инвентарь и экипировка остаются отдельными панелями")
+MOCK.Assert(WO.InventoryUI.IsOpen(), "интегрированный инвентарь сообщает открытое состояние")
+PressKey(KEY_I)
+MOCK.Assert(WO.MenuUI.IsOpen() and WO.MenuUI.GetPage() == "overview" and
+    not WO.InventoryUI.IsOpen() and FindLatestLiveFrame() == inventoryMenuFrame,
+    "повторное I возвращает в обзор того же окна меню")
+PressKey(KEY_I)
+MOCK.Assert(WO.MenuUI.GetPage() == "inventory" and WO.InventoryUI.IsOpen() and
+    FindLatestLiveFrame() == inventoryMenuFrame,
+    "I открывает страницу инвентаря в том же уже открытом меню")
 local itemSlotPanel
 for index = #MOCK.createdPanels, 1, -1 do
     local panel = MOCK.createdPanels[index]
@@ -1149,19 +1168,34 @@ MOCK.Assert(#mountUseMessages == 1 and mountUseMessages[1].args[1] == "mount-tes
     "пункт контекстного меню отправляет UID камня на серверное использование")
 WO.InventoryUI.Close()
 
-local panelsBeforeSheet = #MOCK.createdPanels
+local panelsBeforeOverview = #MOCK.createdPanels
 WO.CharacterUI.OpenSheet()
-MOCK.Assert(#MOCK.createdPanels > panelsBeforeSheet,
-    "лист персонажа создаётся после синхронизации статов")
-local expectedXPRemaining = WO.Lang:Get("xp.compact", 10, 100, 90)
-local sheetShowsXPRemaining = false
+MOCK.Assert(#MOCK.createdPanels > panelsBeforeOverview and WO.MenuUI.IsOpen() and
+    WO.MenuUI.GetPage() == "overview",
+    "совместимый вызов листа персонажа открывает обзор общего меню")
+local overviewStatsPanel
+local overviewDetails
 for _, panel in ipairs(MOCK.createdPanels) do
-    if (rawget(panel, "woText") or ""):find(expectedXPRemaining, 1, true) then
-        sheetShowsXPRemaining = true
+    if rawget(panel, "woCharacterStatsOverview") == true and rawget(panel, "__removed") ~= true then
+        overviewStatsPanel = panel
+    elseif rawget(panel, "woOverviewDetails") == true and rawget(panel, "__removed") ~= true then
+        overviewDetails = panel
     end
 end
-MOCK.Assert(sheetShowsXPRemaining,
-    "лист персонажа показывает точное количество XP до следующего уровня")
+MOCK.Assert(overviewStatsPanel and isfunction(overviewStatsPanel.Paint),
+    "характеристики встроены в обзор отдельной страницы не создаётся")
+local expectedXPRemaining = WO.Lang:Get("xp.compact", 10, 100, 90)
+MOCK.drawnTextValues = {}
+overviewDetails:Paint(620, 270)
+local overviewText = table.concat(MOCK.drawnTextValues, " ")
+MOCK.Assert(overviewText:find(expectedXPRemaining, 1, true) ~= nil,
+    "обзор показывает точное количество XP до следующего уровня")
+MOCK.drawnTextValues = {}
+overviewStatsPanel:Paint(620, overviewStatsPanel:GetTall())
+local overviewStatsText = table.concat(MOCK.drawnTextValues, " ")
+MOCK.Assert(overviewStatsText:find(WO.Lang:Get("stats.strength"), 1, true) ~= nil and
+    overviewStatsText:find("12", 1, true) ~= nil,
+    "обзор показывает синхронизированные характеристики персонажа")
 MOCK.drawnTextValues = {}
 WO.HUD.DrawPlayerFrame()
 local hudShowsXPRemaining = false
@@ -1170,6 +1204,7 @@ for _, text in ipairs(MOCK.drawnTextValues) do
 end
 MOCK.Assert(hudShowsXPRemaining,
     "основной HUD выводит числом оставшийся XP рядом со шкалой")
+end
 
 local panelsBeforeUI = #MOCK.createdPanels
 
@@ -1192,24 +1227,39 @@ local previousLocalPosition = LocalPlayer():GetPos()
 MOCK.mapName = "rp_lordaeron"
 LocalPlayer():SetPos(Vector(0, 0, 0))
 WO.Quests.LocalStates = {
-    boar_hunt = { status = "active", progress = { [1] = 1 }, tracked = true },
+    boar_hunt = { status = "active", progress = {}, tracked = true },
 }
 local boarWaypoint = WO.Quests.GetTrackedWaypoint()
 MOCK.Assert(boarWaypoint and boarWaypoint.questId == "boar_hunt" and
     boarWaypoint.position == WO.Config.NPCSpawnPoints.elwynn_boar[1].pos and
     boarWaypoint.text == "Победите кабанов",
     "принятое и отслеживаемое задание показывает точку следующего кабана")
+LocalPlayer():SetPos(boarWaypoint.position)
+MOCK.Assert(WO.Quests.GetTrackedWaypoint() ~= nil,
+    "непространственный prerequisite не удаляет метку будущей цели преждевременно")
+LocalPlayer():SetPos(Vector(0, 0, 0))
 MOCK.drawnTextValues = {}
 local waypointPolygonsBefore = MOCK.surfacePolyCalls or 0
+local vectorMeta = getmetatable(Vector())
+local originalToScreen = vectorMeta.ToScreen
+function vectorMeta:ToScreen()
+    MOCK.lastQuestWaypointProjection = Vector(self.x, self.y, self.z)
+    return originalToScreen(self)
+end
 WO.HUD.DrawQuestWaypoint()
+vectorMeta.ToScreen = originalToScreen
 local waypointDrawText = table.concat(MOCK.drawnTextValues, " ")
+local waypointMeters = math.max(0, math.Round(boarWaypoint.position:Length() / 52.4934))
 MOCK.Assert(string.find(waypointDrawText, "Кабаны у фермы", 1, true) and
     string.find(waypointDrawText, "Победите кабанов", 1, true) and
+    string.find(waypointDrawText, WO.Lang:Get("quest.distance", waypointMeters), 1, true) and
+    MOCK.lastQuestWaypointProjection == boarWaypoint.position + Vector(0, 0, 72) and
     (MOCK.surfacePolyCalls or 0) >= waypointPolygonsBefore + 2,
-    "HUD показывает название задания, цель, расстояние и повёрнутую стрелку")
+    "HUD ставит видимый маркер прямо над точкой цели и показывает расстояние на нём")
+WO.Quests.LocalStates.boar_hunt.progress[1] = 1
 LocalPlayer():SetPos(boarWaypoint.position)
 MOCK.Assert(WO.Quests.GetTrackedWaypoint() == nil,
-    "метка исчезает после входа в радиус точки")
+    "метка исчезает после входа в радиус активной цели")
 WO.Quests.LocalStates.boar_hunt.progress[2] = 1
 LocalPlayer():SetPos(Vector(0, 0, 0))
 local nextBoarWaypoint = WO.Quests.GetTrackedWaypoint()
@@ -1241,19 +1291,37 @@ LocalPlayer():SetPos(previousLocalPosition)
 MOCK.mapName = previousMapName
 end
 
-WO.Quests.OpenLog()
-MOCK.Assert(#MOCK.createdPanels > panelsBeforeUI, "журнал квестов создаёт панели")
-local originalQuestLog = FindLatestLiveFrame()
-MOCK.NetDeliver({ name = "Quest.Sync", args = { {
-    ["supplies_for_the_road"] = { status = "completed", progress = { [1] = 3 }, tracked = true },
-    ["boar_hunt"] = { status = "active", progress = { [1] = 1 }, tracked = true },
-    ["wolves_of_elwynn"] = { status = "active", progress = { [1] = 1 }, tracked = true },
-} } }, 8, nil)
-local refreshedQuestLog = FindLatestLiveFrame()
-MOCK.Assert(originalQuestLog and rawget(originalQuestLog, "__removed") == true and
-    refreshedQuestLog and refreshedQuestLog ~= originalQuestLog and
-    WO.Quests.LocalStates["boar_hunt"].progress[1] == 1,
-    "открытый журнал автоматически перестраивается после Quest.Sync")
+do
+    local commonMenuFrame = FindLatestLiveFrame()
+    WO.Quests.OpenLog()
+    MOCK.Assert(#MOCK.createdPanels > panelsBeforeUI and commonMenuFrame and
+        FindLatestLiveFrame() == commonMenuFrame and WO.MenuUI.IsOpen() and
+        WO.MenuUI.GetPage() == "quests",
+        "журнал заданий открывается страницей того же общего меню")
+
+    local function FindLatestLiveQuestHeader()
+        for index = #MOCK.createdPanels, 1, -1 do
+            local panel = MOCK.createdPanels[index]
+            if rawget(panel, "woQuestJournalHeader") == true and
+                rawget(panel, "__removed") ~= true then
+                return panel
+            end
+        end
+    end
+
+    local originalQuestHeader = FindLatestLiveQuestHeader()
+    MOCK.NetDeliver({ name = "Quest.Sync", args = { {
+        ["supplies_for_the_road"] = { status = "completed", progress = { [1] = 3 }, tracked = true },
+        ["boar_hunt"] = { status = "active", progress = { [1] = 1 }, tracked = true },
+        ["wolves_of_elwynn"] = { status = "active", progress = { [1] = 1 }, tracked = true },
+    } } }, 8, nil)
+    local refreshedQuestHeader = FindLatestLiveQuestHeader()
+    MOCK.Assert(originalQuestHeader and rawget(originalQuestHeader, "__removed") == true and
+        refreshedQuestHeader and refreshedQuestHeader ~= originalQuestHeader and
+        WO.MenuUI.GetPage() == "quests" and
+        WO.Quests.LocalStates["boar_hunt"].progress[1] == 1,
+        "встроенный журнал обновляется после Quest.Sync, не создавая отдельное окно")
+end
 local refreshedTracker = WO.Quests.GetTrackerLines()
 local trackerHasBoars = false
 for _, line in ipairs(refreshedTracker) do
@@ -1279,6 +1347,12 @@ MOCK.NetDeliver({ name = "Quest.ActionResult", args = { {
 local retrackButton = MOCK.FindPanelByText(WO.Lang:Get("quest.track"))
 MOCK.Assert(retrackButton ~= nil and retrackButton:IsEnabled(),
     "серверный ответ завершает запрос и возвращает кнопку в рабочее состояние")
+PressKey(KEY_J)
+MOCK.Assert(WO.MenuUI.IsOpen() and WO.MenuUI.GetPage() == "overview",
+    "повторное J возвращает из журнала в обзор, не закрывая игровое меню")
+PressKey(KEY_J)
+MOCK.Assert(WO.MenuUI.GetPage() == "quests",
+    "J снова открывает журнал внутри того же меню")
 
 -- События квестов (уведомления)
 MOCK.NetDeliver({ name = "Quest.Event", args = { { type = "accepted", questId = "q", name = "Тест" } } }, 8, nil)
