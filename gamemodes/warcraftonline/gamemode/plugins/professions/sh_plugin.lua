@@ -8,6 +8,6 @@ return {
     id = "professions",
     author = "Warcraft Online Team",
     version = "1.0.0",
-    dependencies = { "currency", "inventory", "classes", "races" },
-    priority = 46,
+    dependencies = { "currency", "inventory", "classes", "races", "dialogue", "interaction" },
+    priority = 47,
 }

@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Принять ящик",
-                    mode = "timing",
+                    mode = "ropemaking",
                     instruction = "Проверьте груз и закрепите его для выгрузки.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -26,7 +26,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сложить партию",
-                    mode = "timing",
+                    mode = "ropemaking",
                     instruction = "Уложите груз устойчивой стопкой.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить трос",
-                    mode = "timing",
+                    mode = "ropemaking",
                     instruction = "Проверьте натяжение каната.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Перевязать груз",
-                    mode = "timing",
+                    mode = "ropemaking",
                     instruction = "Закрепите узел в зелёном секторе.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подать швартов",
-                    mode = "timing",
+                    mode = "ropemaking",
                     instruction = "Выберите момент для безопасной подачи каната.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Закрепить причал",
-                    mode = "timing",
+                    mode = "ropemaking",
                     instruction = "Удерживайте натяжение швартова в нужном диапазоне.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разметить ткань",
-                    mode = "timing",
+                    mode = "sewing",
                     instruction = "Совместите линию раскроя с меткой.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Выкроить детали",
-                    mode = "timing",
+                    mode = "sewing",
                     instruction = "Режьте ткань по выкройке без отклонений.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить нить",
-                    mode = "timing",
+                    mode = "sewing",
                     instruction = "Подберите натяжение нити перед шитьём.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сшить изделие",
-                    mode = "timing",
+                    mode = "sewing",
                     instruction = "Держите стежок в зелёной зоне.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Сложить подкладку",
-                    mode = "timing",
+                    mode = "sewing",
                     instruction = "Подготовьте тканевую основу для брони.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сшить панцирь",
-                    mode = "timing",
+                    mode = "sewing",
                     instruction = "Укрепите швы, удерживая темп работы.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

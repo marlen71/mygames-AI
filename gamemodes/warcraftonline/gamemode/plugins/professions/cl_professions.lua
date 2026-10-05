@@ -1,15 +1,40 @@
 --[[
-    Warcraft Online — интерфейс ремёсел.
-    Мини-игра использует вертикальный зелёный сектор и движущийся маркер;
-    сервер самостоятельно проверяет удержание, перенос и завершение заказов.
+    Warcraft Online — in-world interface for profession shifts.
+    Work starts and is handed in at the matching profession NPC. Mini-games
+    are drawn over the live world HUD; no profession page or popup menu is used.
 ]]
 
 WO.ProfessionsUI = WO.ProfessionsUI or {}
 
 local requestedCharacter = nil
+local inputContext = nil
+local previousKeys = {}
+local sentStates = {}
+local sentShiftId = nil
 
 local function LocalCharacter()
     return WO.Character and WO.Character.GetLocal and WO.Character.GetLocal() or nil
+end
+
+local function ClientData()
+    local char = LocalCharacter()
+    local data = WO.Professions.ClientData
+    if not char or not data or data.characterId ~= char.id then return nil end
+    return data
+end
+
+local function CurrentShift()
+    local data = ClientData()
+    return data and data.shift or nil
+end
+
+local function CurrentTask()
+    local shift = CurrentShift()
+    return shift and shift.task or nil
+end
+
+function WO.ProfessionsUI.GetCurrentShift()
+    return CurrentShift()
 end
 
 local function RequestSnapshot()
@@ -22,304 +47,549 @@ local function RequestSnapshot()
     end
 end
 
-local function SkillFor(data, professionId)
-    local skill = data and data.skills and data.skills[professionId]
-    if not istable(skill) then return { xp = 0, level = 1, completedShifts = 0 } end
-    return skill
-end
-
-local function AddHeader(parent)
-    local header = vgui.Create("DPanel", parent)
-    header:Dock(TOP)
-    header:SetTall(74)
-    header:DockMargin(0, 0, 0, 10)
-    header:SetPaintBackground(false)
-    header.Paint = function(_, w)
-        WO.UI.DrawTextFit("Гильдия ремёсел", "WO.Title", 0, 2,
-            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 8, 34)
-        WO.UI.DrawTextFit("Выберите работу, выполните три заказа и сдайте смену. Зарплата и опыт выдаются только сервером после сдачи.",
-            "WO.Small", 2, 42, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT,
-            TEXT_ALIGN_TOP, w - 10, 26)
-    end
-end
-
-local function CurrentShift()
-    local data = WO.Professions.ClientData
-    return data and data.shift or nil
-end
-
-local function CurrentTask()
-    local shift = CurrentShift()
-    return shift and shift.task or nil
-end
-
 local function SendInput(shiftId, action, value)
     if not isstring(shiftId) or shiftId == "" then return end
     WO.Net.SendToServer("Profession.WorkInput", shiftId, action, value == true)
 end
 
-local function MakeShiftPanel(parent, shift, def)
-    local panel = vgui.Create("DPanel", parent)
-    panel:Dock(TOP)
-    panel:SetTall(shift.status == "ready" and 250 or 440)
-    panel:DockMargin(0, 0, 0, 12)
+local function SetInputState(shift, action, isDown)
+    isDown = isDown == true
+    if sentStates[action] == isDown then return end
+    if sentStates[action] == nil and not isDown then
+        sentStates[action] = false
+        return
+    end
+    sentStates[action] = isDown
+    sentShiftId = shift.id
+    SendInput(shift.id, action, isDown)
+end
 
-    local rank = def.ranks[math.Clamp(tonumber(shift.rank) or 1, 1, 3)]
-    panel.Paint = function(_, w, h)
-        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
-            WO.UI.Colors.border, WO.UI.Metrics.radius)
-        local title = def.name .. " — " .. (rank and rank.name or "")
-        WO.UI.DrawTextFit(title, "WO.Subtitle", 16, 12,
-            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 32, 26)
-        local stateText = shift.status == "ready" and
-            "Заказы готовы: сдайте смену, чтобы получить зарплату." or
-            ("Заказ " .. tostring(math.min((shift.completedOrders or 0) + 1,
-                shift.requiredOrders or 3)) .. "/" .. tostring(shift.requiredOrders or 3) ..
-                " · базовая ставка " .. tostring((shift.basePay or 0) * (shift.requiredOrders or 3)) ..
-                " монет до бонусов и качества.")
-        WO.UI.DrawTextFit(stateText, "WO.Small", 16, 42,
-            WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 32, 24)
+local function KeyDown(key)
+    return key ~= nil and input and input.IsKeyDown and input.IsKeyDown(key) == true
+end
+
+local function KeyPressed(name, key)
+    local down = KeyDown(key)
+    local wasDown = previousKeys[name] == true
+    previousKeys[name] = down
+    return down and not wasDown, down
+end
+
+local function ResetInputState()
+    if sentShiftId then
+        for action, isDown in pairs(sentStates) do
+            if isDown then SendInput(sentShiftId, action, false) end
+        end
     end
 
-    if shift.status ~= "ready" and istable(shift.task) then
-        local game = vgui.Create("DPanel", panel)
-        game:Dock(TOP)
-        game:DockMargin(14, 74, 14, 8)
-        game:SetTall(246)
-        game.woShiftId = shift.id
-        game.woHolding = false
-        game:SetMouseInputEnabled(true)
+    previousKeys = {}
+    sentStates = {}
+    sentShiftId = nil
+    inputContext = nil
+end
 
-        game.Paint = function(self, w, h)
-            local task = CurrentTask()
-            if not task then return end
+local function GetInputContext(shift, task)
+    return table.concat({ tostring(shift and shift.id or ""), tostring(shift and shift.status or ""),
+        tostring(task and task.orderIndex or ""), tostring(task and task.mode or "") }, ":")
+end
 
-            WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panelDark,
-                WO.UI.Colors.border)
-            WO.UI.DrawTextFit(task.title or "Заказ", "WO.Body", 14, 10,
-                WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 28, 22)
+local function PollDirectionalStates(shift, axis)
+    local leftDown = KeyDown(KEY_A)
+    local rightDown = KeyDown(KEY_D)
+    local upDown = KeyDown(KEY_W)
+    local downDown = KeyDown(KEY_S)
 
-            if task.mode == "timing" then
-                local barX, barY, barW, barH = 28, 43, 48, h - 66
-                surface.SetDrawColor(12, 18, 28, 255)
-                surface.DrawRect(barX, barY, barW, barH)
-                surface.SetDrawColor(WO.UI.Colors.borderLight)
-                surface.DrawOutlinedRect(barX, barY, barW, barH, 1)
-
-                local center = math.Clamp(tonumber(task.zoneCenter) or 0.5, 0, 1)
-                local zoneWidth = math.Clamp(tonumber(task.zoneWidth) or 0.2, 0.08, 0.5)
-                local greenHeight = barH * zoneWidth
-                local greenY = barY + barH - (center + zoneWidth * 0.5) * barH
-                surface.SetDrawColor(64, 190, 113, 220)
-                surface.DrawRect(barX + 2, greenY, barW - 4, greenHeight)
-
-                local now = CurTime()
-                local startedAt = tonumber(task.clientStartedAt) or now
-                local marker = 0.5 + 0.44 * math.sin(
-                    math.max(0, now - startedAt) * (tonumber(task.speed) or 1) +
-                    (tonumber(task.phaseOffset) or 0))
-                local markerY = barY + barH - marker * barH
-                surface.SetDrawColor(245, 248, 252, 255)
-                surface.DrawRect(barX - 4, markerY - 3, barW + 8, 6)
-
-                local activeShift = CurrentShift()
-                if activeShift and activeShift.professionId == "fisher" then
-                    local fishX = barX + barW + 4
-                    surface.SetDrawColor(235, 242, 250, 255)
-                    surface.DrawPoly({
-                        { x = fishX, y = markerY },
-                        { x = fishX + 5, y = markerY - 4 },
-                        { x = fishX + 11, y = markerY - 3 },
-                        { x = fishX + 16, y = markerY },
-                        { x = fishX + 11, y = markerY + 3 },
-                        { x = fishX + 5, y = markerY + 4 },
-                    })
-                    surface.DrawPoly({
-                        { x = fishX, y = markerY },
-                        { x = fishX - 5, y = markerY - 4 },
-                        { x = fishX - 5, y = markerY + 4 },
-                    })
-                    surface.SetDrawColor(18, 22, 30, 255)
-                    surface.DrawRect(fishX + 10, markerY - 1, 2, 2)
-                end
-
-                local labelColor = self.woHolding and WO.UI.Colors.good or WO.UI.Colors.text
-                WO.UI.DrawTextFit("Удерживайте ЛКМ в зелёной зоне", "WO.Small",
-                    96, 58, labelColor, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 22)
-                WO.UI.DrawTextFit("Отпустите кнопку, если маркер вышел за пределы.", "WO.Tiny",
-                    96, 84, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 30)
-                local progress = math.Clamp(tonumber(task.progress) or 0, 0, 1)
-                WO.UI.DrawTextFit("Прогресс заказа", "WO.Tiny", 96, 135,
-                    WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 18)
-                WO.UI.DrawBar(96, 158, math.max(90, w - 120), 14, progress,
-                    WO.UI.Colors.good, WO.UI.Colors.panelDark, nil)
-                WO.UI.DrawTextFit(math.floor(progress * 100) .. "%", "WO.Tiny",
-                    96, 181, WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 18)
-                WO.UI.DrawTextFit(task.instruction or "", "WO.Tiny", 96, 205,
-                    WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 30)
-            else
-                local distance = math.max(0, tonumber(task.carriedDistance) or 0)
-                local required = math.max(1, tonumber(task.requiredDistance) or 1)
-                local ratio = math.Clamp(distance / required, 0, 1)
-                local phase = task.phase or "pickup"
-                local message = phase == "pickup" and "Подойдите к грузу и нажмите «Забрать груз»." or
-                    ("Несите груз: " .. math.floor(math.min(distance, required)) .. " / " .. required .. " юнитов.")
-                WO.UI.DrawTextFit(message, "WO.Small", 96, 58,
-                    WO.UI.Colors.text, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 44)
-                WO.UI.DrawTextFit("Прогресс доставки", "WO.Tiny", 96, 123,
-                    WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 18)
-                WO.UI.DrawBar(96, 148, math.max(90, w - 120), 16, ratio,
-                    WO.UI.Colors.accent, WO.UI.Colors.panelDark, nil)
-                WO.UI.DrawTextFit(task.instruction or "", "WO.Tiny", 96, 180,
-                    WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 112, 32)
-            end
-        end
-
-        if shift.task.mode == "timing" then
-            game.OnMousePressed = function(self, mouseCode)
-                if mouseCode == MOUSE_LEFT and not self.woHolding then
-                    self.woHolding = true
-                    self:MouseCapture(true)
-                    SendInput(self.woShiftId, "hold", true)
-                end
-            end
-            game.OnMouseReleased = function(self, mouseCode)
-                if mouseCode == MOUSE_LEFT and self.woHolding then
-                    self.woHolding = false
-                    self:MouseCapture(false)
-                    SendInput(self.woShiftId, "hold", false)
-                end
-            end
-            game.OnRemove = function(self)
-                if self.woHolding then
-                    self.woHolding = false
-                    SendInput(self.woShiftId, "hold", false)
-                end
-            end
-        else
-            local pickup = WO.UI.Button(game, "Забрать груз", function()
-                SendInput(shift.id, "pickup", false)
-            end)
-            pickup:SetSize(160, 36)
-            pickup:SetPos(96, 184)
-            pickup:SetAccent(true)
-            pickup:SetFont("WO.Small")
-            pickup.Think = function(self)
-                local task = CurrentTask()
-                self:SetVisible(task ~= nil and task.mode == "delivery" and task.phase == "pickup")
-            end
-        end
+    if axis == "vertical" then
+        SetInputState(shift, "up", upDown)
+        SetInputState(shift, "down", downDown)
     else
-        local ready = WO.UI.Label(panel,
-            "Все три заказа выполнены. Нажмите «Завершить смену», чтобы получить расчётную зарплату и опыт.",
-            "WO.Body", WO.UI.Colors.text)
-        ready:Dock(TOP)
-        ready:DockMargin(16, 78, 16, 12)
-        ready:SetTall(44)
+        SetInputState(shift, "left", leftDown)
+        SetInputState(shift, "right", rightDown)
     end
-
-    local cancel = WO.UI.Button(panel, "Отменить смену без оплаты", function()
-        WO.Net.SendToServer("Profession.CancelShift", shift.id)
-    end)
-    cancel:Dock(BOTTOM)
-    cancel:DockMargin(14, 6, 14, 12)
-    cancel:SetTall(34)
-    cancel:SetFont("WO.Tiny")
-
-    local finish = WO.UI.Button(panel, "Завершить смену и получить зарплату", function()
-        WO.Net.SendToServer("Profession.FinishShift", shift.id)
-    end)
-    finish:Dock(BOTTOM)
-    finish:DockMargin(14, 8, 14, 0)
-    finish:SetTall(42)
-    finish:SetAccent(true)
-    finish:SetEnabled(shift.status == "ready")
-
-    return panel
 end
 
-local function MakeProfessionCard(parent, def, data, char, hasShift)
-    local skill = SkillFor(data, def.id)
-    local level = math.Clamp(math.floor(tonumber(skill.level) or
-        WO.Professions.GetLevelForXP(def.id, skill.xp)), 1, 3)
-    local rank = def.ranks[level]
-    local bonus = WO.Professions.GetBonus(char, def.id)
-    local basePay = WO.Professions.GetBasePay(def.id, level, 3)
-    local projectedPay = math.floor(basePay * (1 + bonus))
+local function PollMiniGameInput(shift, task)
+    local gameMode = WO.Professions.GetMiniGame(task.mode)
+    local engine = gameMode and gameMode.engine
+    if not engine then return end
 
-    local card = vgui.Create("DPanel", parent)
-    card:Dock(TOP)
-    card:SetTall(108)
-    card:DockMargin(0, 0, 0, 8)
-    card.Paint = function(_, w, h)
-        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
-            WO.UI.Colors.border, WO.UI.Metrics.radiusSmall)
-        WO.UI.DrawTextFit(def.name, "WO.Body", 14, 10,
-            WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, w - 170, 22)
-        WO.UI.DrawTextFit("Ступень " .. level .. "/3 — " .. rank.name,
-            "WO.Small", 14, 36, WO.UI.Colors.text, TEXT_ALIGN_LEFT,
-            TEXT_ALIGN_TOP, w - 170, 20)
-        local xpNeeded = level >= 3 and "максимум" or
-            tostring(def.ranks[level + 1].requiredXP - (tonumber(skill.xp) or 0)) .. " опыта до повышения"
-        WO.UI.DrawTextFit("Опыт: " .. tostring(skill.xp or 0) .. " · " .. xpNeeded ..
-            " · бонус расы/класса +" .. math.floor(bonus * 100) .. "%",
-            "WO.Tiny", 14, 60, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT,
-            TEXT_ALIGN_TOP, w - 170, 16)
-        WO.UI.DrawTextFit("Базовая ставка за три заказа: " .. basePay ..
-            " · расчётно с бонусом: около " .. projectedPay .. " монет",
-            "WO.Tiny", 14, 81, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT,
-            TEXT_ALIGN_TOP, w - 170, 16)
+    if engine == "delivery" then
+        local pickupPressed = KeyPressed("pickup", KEY_E)
+        if pickupPressed and task.phase == "pickup" then SendInput(shift.id, "pickup", true) end
+        return
     end
 
-    local start = WO.UI.Button(card, "Устроиться", function()
-        WO.Net.SendToServer("Profession.StartShift", def.id)
-    end)
-    start:SetSize(132, 40)
-    start:SetPos(0, 34)
-    start:SetAccent(true)
-    start:SetFont("WO.Small")
-    start:SetEnabled(not hasShift)
-    card.PerformLayout = function(self, w)
-        start:SetPos(w - start:GetWide() - 12, 34)
+    if engine == "hold" then
+        local _, spaceDown = KeyPressed("space", KEY_SPACE)
+        SetInputState(shift, "hold", spaceDown)
+    elseif engine == "strike" or engine == "rhythm" or engine == "stack" then
+        local pressed = KeyPressed("space", KEY_SPACE)
+        if pressed then SendInput(shift.id, "strike", true) end
+    elseif engine == "tap" then
+        local pressed = KeyPressed("space", KEY_SPACE)
+        if pressed then SendInput(shift.id, "tap", true) end
+    elseif engine == "sequence" or engine == "identify" or engine == "choice" then
+        local maxChoice = math.Clamp(#(task.choiceOptions or {}), 1, 4)
+        if engine == "sequence" then maxChoice = 4 end
+        for choice = 1, maxChoice do
+            local key = KEY_1 + choice - 1
+            local pressed = KeyPressed("choice" .. choice, key)
+            if pressed then SendInput(shift.id, "choice" .. choice, true) end
+        end
+    elseif engine == "alternate" then
+        local leftPressed = KeyPressed("left", KEY_A)
+        local rightPressed = KeyPressed("right", KEY_D)
+        if leftPressed then SendInput(shift.id, "left", true) end
+        if rightPressed then SendInput(shift.id, "right", true) end
+    elseif engine == "steer" or engine == "adjust" or engine == "balance" or engine == "sweep" or
+        engine == "dodge" then
+        PollDirectionalStates(shift, gameMode.axis or "horizontal")
+        if engine == "dodge" then
+            SetInputState(shift, "up", KeyDown(KEY_W))
+            SetInputState(shift, "down", KeyDown(KEY_S))
+        end
+    elseif engine == "precision" then
+        local leftPressed = KeyPressed("left", KEY_A)
+        local rightPressed = KeyPressed("right", KEY_D)
+        local confirmPressed = KeyPressed("confirm", KEY_SPACE)
+        if leftPressed then SendInput(shift.id, "left", true) end
+        if rightPressed then SendInput(shift.id, "right", true) end
+        if confirmPressed then SendInput(shift.id, "confirm", true) end
     end
-
-    return card
 end
 
-function WO.ProfessionsUI.BuildPanel(parent)
-    if not IsValid(parent) then return end
+local function DrawText(text, font, x, y, color, alignX, alignY)
+    draw.SimpleTextOutlined(tostring(text or ""), font or "WO.Small", x, y,
+        color or WO.UI.Colors.text, alignX or TEXT_ALIGN_LEFT, alignY or TEXT_ALIGN_TOP,
+        1, Color(0, 0, 0, 220))
+end
 
+local function DrawProgress(x, y, w, h, value, color)
+    draw.RoundedBox(4, x, y, w, h, Color(12, 18, 28, 240))
+    draw.RoundedBox(4, x, y, math.max(0, math.floor(w * math.Clamp(value or 0, 0, 1))), h,
+        color or WO.UI.Colors.good)
+    surface.SetDrawColor(175, 190, 210, 160)
+    surface.DrawOutlinedRect(x, y, w, h, 1)
+end
+
+local function CursorPosition(task)
+    local elapsed = math.max(0, CurTime() - (tonumber(task.clientStartedAt) or CurTime()))
+    return 0.5 + 0.44 * math.sin(elapsed * (tonumber(task.speed) or 1) +
+        (tonumber(task.phaseOffset) or 0))
+end
+
+local function DrawFishIcon(x, y)
+    surface.SetDrawColor(236, 243, 250, 255)
+    surface.DrawPoly({
+        { x = x, y = y }, { x = x + 9, y = y - 6 }, { x = x + 20, y = y - 4 },
+        { x = x + 26, y = y }, { x = x + 20, y = y + 4 }, { x = x + 9, y = y + 6 },
+    })
+    surface.DrawPoly({ { x = x, y = y }, { x = x - 7, y = y - 6 }, { x = x - 7, y = y + 6 } })
+    surface.SetDrawColor(18, 22, 30, 255)
+    surface.DrawRect(x + 18, y - 2, 2, 2)
+end
+
+local function DrawFishing(task, x, y, w)
+    local bx, by, bw, bh = x + 24, y + 74, 44, 116
+    local center = math.Clamp(tonumber(task.zoneCenter) or 0.5, 0, 1)
+    local zoneWidth = math.Clamp(tonumber(task.zoneWidth) or 0.2, 0.08, 0.5)
+    local marker = CursorPosition(task)
+    local markerY = by + bh - marker * bh
+    local greenY = by + bh - (center + zoneWidth * 0.5) * bh
+
+    draw.RoundedBox(4, bx, by, bw, bh, Color(9, 18, 30, 255))
+    surface.SetDrawColor(64, 190, 113, 235)
+    surface.DrawRect(bx + 3, greenY, bw - 6, bh * zoneWidth)
+    surface.SetDrawColor(245, 248, 252, 255)
+    surface.DrawRect(bx - 5, markerY - 3, bw + 10, 6)
+    DrawFishIcon(bx + bw + 10, markerY)
+    DrawText("РЫБА", "WO.Tiny", x + 86, by + 7, WO.UI.Colors.accent)
+    DrawText("Следите за клёвом", "WO.Small", x + 86, by + 31)
+    DrawText("Удерживайте ПРОБЕЛ", "WO.Tiny", x + 86, by + 56, WO.UI.Colors.textDim)
+    DrawProgress(x + 86, by + 81, math.max(120, w - 120), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawStrike(task, x, y, w, mode)
+    local engine = mode.engine
+    local label = engine == "stack" and "КАМЕННАЯ КЛАДКА" or
+        engine == "rhythm" and "РАБОЧИЙ РИТМ" or "РАБОЧАЯ ЗОНА"
+    DrawText(label, "WO.Tiny", x + 26, y + 82, WO.UI.Colors.accent)
+
+    local iconX, iconY = x + w - 66, y + 97
+    surface.SetDrawColor(176, 141, 85, 245)
+    if task.mode == "chopping" then
+        surface.DrawLine(iconX - 18, iconY + 6, iconX + 18, iconY - 6)
+        surface.DrawLine(iconX - 12, iconY + 12, iconX - 8, iconY - 12)
+        surface.DrawLine(iconX - 8, iconY - 12, iconX + 2, iconY - 19)
+    elseif task.mode == "smithing" then
+        draw.RoundedBox(2, iconX - 18, iconY + 5, 36, 8, Color(135, 144, 157, 255))
+        draw.RoundedBox(2, iconX - 12, iconY - 1, 24, 8, Color(171, 182, 196, 255))
+        surface.SetDrawColor(248, 138, 75, 240)
+        surface.DrawRect(iconX - 7, iconY - 7, 14, 5)
+    elseif task.mode == "masonry" then
+        draw.RoundedBox(2, iconX - 20, iconY - 12, 40, 10, Color(166, 145, 120, 255))
+        draw.RoundedBox(2, iconX - 16, iconY, 32, 10, Color(137, 117, 97, 255))
+        surface.SetDrawColor(54, 43, 34, 255)
+        surface.DrawLine(iconX, iconY - 11, iconX, iconY - 3)
+        surface.DrawLine(iconX - 8, iconY + 1, iconX - 8, iconY + 8)
+    elseif task.mode == "ropemaking" then
+        surface.SetDrawColor(205, 179, 124, 245)
+        surface.DrawLine(iconX - 18, iconY - 12, iconX + 15, iconY + 12)
+        surface.DrawLine(iconX - 18, iconY + 12, iconX + 15, iconY - 12)
+        surface.DrawLine(iconX - 10, iconY - 15, iconX + 18, iconY + 8)
+    end
+    local bx, by, bw, bh = x + 26, y + 112, math.max(180, w - 52), 22
+    local center = math.Clamp(tonumber(task.zoneCenter) or 0.5, 0, 1)
+    local zoneWidth = math.Clamp(tonumber(task.zoneWidth) or 0.2, 0.08, 0.5)
+    local marker = CursorPosition(task)
+    draw.RoundedBox(4, bx, by, bw, bh, Color(10, 16, 25, 255))
+    surface.SetDrawColor(64, 190, 113, 225)
+    surface.DrawRect(bx + (center - zoneWidth * 0.5) * bw, by + 2, bw * zoneWidth, bh - 4)
+    surface.SetDrawColor(245, 248, 252, 255)
+    surface.DrawRect(bx + marker * bw - 3, by - 5, 6, bh + 10)
+    DrawText(engine == "stack" and "Совместите камень со швом" or
+        "Нажмите ПРОБЕЛ в нужный момент", "WO.Small", x + 26, y + 149)
+    DrawProgress(x + 26, y + 181, math.max(180, w - 52), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawTap(task, x, y, w)
+    local cx, cy = x + 108, y + 136
+    draw.RoundedBox(24, cx - 44, cy - 38, 88, 76, Color(69, 78, 91, 255))
+    surface.SetDrawColor(185, 195, 207, 255)
+    surface.DrawLine(cx - 22, cy - 13, cx + 5, cy + 3)
+    surface.DrawLine(cx + 5, cy + 3, cx - 6, cy + 23)
+    surface.DrawLine(cx + 8, cy - 24, cx + 5, cy + 3)
+    DrawText("Удары", "WO.Small", x + 174, y + 100, WO.UI.Colors.accent)
+    DrawText("ПРОБЕЛ", "WO.Body", x + 174, y + 128)
+    DrawProgress(x + 174, y + 164, math.max(140, w - 204), 16, task.progress,
+        WO.UI.Colors.accent)
+end
+
+local function DrawSequence(task, x, y, w, mode)
+    local sequence = task.sequence or {}
+    local count = math.max(1, #sequence)
+    local gap, boxW = 8, math.min(64, math.floor((w - 70 - gap * (count - 1)) / count))
+    local startX, by = x + 26, y + 115
+
+    for index, value in ipairs(sequence) do
+        local bx = startX + (index - 1) * (boxW + gap)
+        local active = index == (task.sequenceIndex or 1)
+        local complete = index < (task.sequenceIndex or 1)
+        local color = complete and WO.UI.Colors.good or
+            active and WO.UI.Colors.accent or WO.UI.Colors.panelDark
+        draw.RoundedBox(5, bx, by, boxW, 42, color)
+        DrawText(string.match(value, "([1-4])") or "?", "WO.Body",
+            bx + boxW * 0.5, by + 20, WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    end
+
+    DrawText(mode.controls or "Повторите последовательность клавишами 1–4.",
+        "WO.Small", x + 26, y + 82, WO.UI.Colors.textDim)
+    DrawProgress(x + 26, y + 176, math.max(180, w - 52), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawAlternate(task, x, y, w, mode)
+    local expected = task.expectedInput == "right" and "D  ▶" or "◀  A"
+    if task.mode == "baking" then
+        draw.RoundedBox(20, x + w - 94, y + 95, 58, 42, Color(205, 176, 122, 255))
+        surface.SetDrawColor(239, 218, 174, 255)
+        surface.DrawLine(x + w - 76, y + 108, x + w - 52, y + 124)
+    elseif task.mode == "sawing" then
+        draw.RoundedBox(3, x + w - 101, y + 103, 64, 24, Color(145, 102, 60, 255))
+        surface.SetDrawColor(210, 217, 225, 255)
+        for tooth = 0, 5 do
+            surface.DrawLine(x + w - 84 + tooth * 7, y + 94,
+                x + w - 79 + tooth * 7, y + 104)
+        end
+    elseif task.mode == "loading" then
+        draw.RoundedBox(3, x + w - 96, y + 97, 28, 28, Color(161, 117, 61, 255))
+        draw.RoundedBox(3, x + w - 67, y + 110, 28, 28, Color(187, 141, 74, 255))
+        surface.SetDrawColor(91, 62, 34, 255)
+        surface.DrawLine(x + w - 82, y + 97, x + w - 82, y + 125)
+        surface.DrawLine(x + w - 53, y + 110, x + w - 53, y + 138)
+    end
+
+    DrawText(mode.label or "Чередуйте движения", "WO.Tiny", x + 26, y + 88,
+        WO.UI.Colors.accent)
+    DrawText(expected, "WO.Title", x + 26, y + 113, WO.UI.Colors.text)
+    DrawText("Следующее движение: " .. expected, "WO.Small", x + 180, y + 124,
+        WO.UI.Colors.textDim)
+    DrawProgress(x + 26, y + 176, math.max(180, w - 52), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawChoice(task, x, y, w)
+    local options = task.choiceOptions or { "1", "2", "3" }
+    local count = math.max(1, #options)
+    local gap = 8
+    local boxW = math.floor((w - 52 - gap * (count - 1)) / count)
+    DrawText(task.choiceTarget or "Выберите верный вариант", "WO.Small",
+        x + 26, y + 79, WO.UI.Colors.textDim)
+
+    for index, label in ipairs(options) do
+        local bx = x + 26 + (index - 1) * (boxW + gap)
+        draw.RoundedBox(6, bx, y + 111, boxW, 48, Color(44, 57, 76, 240))
+        DrawText(index .. "  " .. label, count > 3 and "WO.Tiny" or "WO.Small",
+            bx + boxW * 0.5, y + 135, WO.UI.Colors.text,
+            TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    end
+
+    DrawProgress(x + 26, y + 176, math.max(180, w - 52), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawSteering(task, x, y, w, engine, mode)
+    DrawText(mode.label or "Управление", "WO.Tiny", x + 26, y + 82, WO.UI.Colors.accent)
+    local position = math.Clamp(tonumber(task.cursorPosition) or 0.5, 0, 1)
+    local center = math.Clamp(tonumber(task.targetCenter) or 0.5, 0, 1)
+    local width = math.Clamp(tonumber(task.targetWidth or task.zoneWidth) or 0.22, 0.08, 0.5)
+    local axisText = mode.axis == "vertical" and "W / S" or "A / D"
+
+    if engine == "adjust" then
+        local bx, by, bw, bh = x + 48, y + 104, 28, 66
+        draw.RoundedBox(7, bx, by, bw, bh, Color(10, 16, 25, 255))
+        surface.SetDrawColor(238, 112, 68, 230)
+        surface.DrawRect(bx + 5, by + bh - (center + width * 0.5) * bh, bw - 10, width * bh)
+        surface.SetDrawColor(245, 248, 252, 255)
+        surface.DrawRect(bx - 5, by + bh - position * bh - 3, bw + 10, 6)
+        DrawText("ЖАР", "WO.Tiny", bx + 44, by + 10, WO.UI.Colors.accent)
+        DrawText("КОТЁЛ", "WO.Small", bx + 44, by + 31)
+        DrawText("W / S регулируют температуру", "WO.Tiny", bx + 44, by + 51,
+            WO.UI.Colors.textDim)
+    else
+        local bx, by, bw, bh = x + 26, y + 119, math.max(180, w - 52), 24
+        draw.RoundedBox(5, bx, by, bw, bh, Color(10, 16, 25, 255))
+        surface.SetDrawColor(64, 190, 113, 225)
+        surface.DrawRect(bx + (center - width * 0.5) * bw, by + 2, width * bw, bh - 4)
+        surface.SetDrawColor(245, 248, 252, 255)
+        surface.DrawRect(bx + position * bw - 4, by - 5, 8, bh + 10)
+
+        if engine == "steer" then
+            surface.SetDrawColor(196, 155, 75, 255)
+            surface.DrawRect(bx + 8, by - 9, 4, bh + 18)
+            surface.DrawRect(bx + bw - 12, by - 9, 4, bh + 18)
+            DrawText("ВОРОТА", "WO.Tiny", bx + bw - 56, by - 22, WO.UI.Colors.accent)
+        elseif engine == "balance" then
+            surface.SetDrawColor(205, 175, 115, 255)
+            surface.DrawLine(bx + 30, by - 11, bx + bw - 30, by - 11)
+            draw.RoundedBox(3, bx + 27, by - 19, 14, 9, Color(81, 148, 204, 255))
+            draw.RoundedBox(3, bx + bw - 41, by - 19, 14, 9, Color(81, 148, 204, 255))
+        elseif engine == "sweep" then
+            surface.SetDrawColor(176, 153, 116, 235)
+            for dust = 1, 5 do
+                surface.DrawRect(bx + dust * bw / 6, by + 7 + (dust % 2) * 4, 4, 4)
+            end
+        end
+    end
+
+    if engine ~= "adjust" then
+        DrawText(axisText .. " удерживают цель в отмеченной зоне", "WO.Small", x + 26, y + 152,
+            WO.UI.Colors.textDim)
+    end
+    DrawProgress(x + 26, y + 181, math.max(180, w - 52), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawPrecision(task, x, y, w)
+    local bx, by, bw, bh = x + 26, y + 116, math.max(180, w - 52), 24
+    local center = math.Clamp(tonumber(task.targetCenter) or 0.5, 0, 1)
+    local cursor = math.Clamp(tonumber(task.cursorPosition) or 0.5, 0, 1)
+    local zone = math.Clamp(tonumber(task.zoneWidth) or 0.18, 0.08, 0.5)
+    DrawText("ОГРАНКА · НАВЕДИТЕ РЕЗЕЦ", "WO.Tiny", x + 26, y + 82, WO.UI.Colors.accent)
+    draw.RoundedBox(5, bx, by, bw, bh, Color(10, 16, 25, 255))
+    surface.SetDrawColor(89, 167, 220, 230)
+    surface.DrawRect(bx + (center - zone * 0.5) * bw, by + 2, zone * bw, bh - 4)
+    surface.SetDrawColor(250, 220, 120, 255)
+    surface.DrawRect(bx + cursor * bw - 4, by - 6, 8, bh + 12)
+    DrawText("A / D — навести · ПРОБЕЛ — резать", "WO.Small", x + 26, y + 151)
+    DrawProgress(x + 26, y + 181, math.max(180, w - 52), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawDodge(task, x, y)
+    local bx, by, size = x + 26, y + 78, 126
+    draw.RoundedBox(5, bx, by, size, size, Color(15, 25, 27, 245))
+    surface.SetDrawColor(70, 104, 75, 170)
+    for line = 1, 3 do
+        surface.DrawLine(bx, by + line * size * 0.25, bx + size, by + line * size * 0.25)
+        surface.DrawLine(bx + line * size * 0.25, by, bx + line * size * 0.25, by + size)
+    end
+
+    local targetX = bx + (task.targetX or 0.7) * size
+    local targetY = by + (task.targetY or 0.7) * size
+    local hazardX = bx + (task.hazardX or 0.8) * size
+    local hazardY = by + (task.hazardY or 0.25) * size
+    local playerX = bx + (task.playerX or 0.2) * size
+    local playerY = by + (task.playerY or 0.5) * size
+    draw.RoundedBox(4, targetX - 6, targetY - 6, 12, 12, WO.UI.Colors.good)
+    draw.RoundedBox(5, hazardX - 6, hazardY - 6, 12, 12, WO.UI.Colors.danger)
+    draw.RoundedBox(5, playerX - 6, playerY - 6, 12, 12, WO.UI.Colors.accent)
+    DrawText("Соты", "WO.Tiny", x + 174, y + 95, WO.UI.Colors.good)
+    DrawText("Пчела", "WO.Tiny", x + 174, y + 120, WO.UI.Colors.danger)
+    DrawText("W / A / S / D", "WO.Small", x + 174, y + 154)
+    DrawProgress(x + 174, y + 184, 220, 14, task.progress, WO.UI.Colors.good)
+end
+
+local function DrawDelivery(task, shift, x, y, w)
+    if task.phase == "pickup" then
+        DrawText("ГРУЗ ОЖИДАЕТ У ТОЧКИ", "WO.Tiny", x + 26, y + 88, WO.UI.Colors.accent)
+        DrawText("Подойдите к грузу и нажмите E.", "WO.Body", x + 26, y + 119)
+        DrawText(task.instruction or "", "WO.Small", x + 26, y + 158, WO.UI.Colors.textDim)
+    else
+        local distance = math.max(0, tonumber(task.carriedDistance) or 0)
+        local required = math.max(1, tonumber(task.requiredDistance) or 1)
+        DrawText("НЕСИТЕ ГРУЗ ЧЕРЕЗ МИР", "WO.Tiny", x + 26, y + 84, WO.UI.Colors.accent)
+        DrawText(math.floor(math.min(distance, required)) .. " / " .. required .. " units",
+            "WO.Body", x + 26, y + 111)
+        DrawProgress(x + 26, y + 150, math.max(180, w - 52), 18,
+            distance / required, WO.UI.Colors.accent)
+        DrawText(task.instruction or "", "WO.Small", x + 26, y + 180, WO.UI.Colors.textDim)
+    end
+end
+
+local function DrawWorldShift()
+    local shift = CurrentShift()
+    if not shift then return end
+
+    local def = WO.Professions.Get(shift.professionId)
+    if not def then return end
+
+    local w, h = math.min(470, ScrW() - 32), 246
+    local x, y = 24, ScrH() - h - 28
+    local rank = def.ranks[math.Clamp(tonumber(shift.rank) or 1, 1, 3)]
+
+    draw.RoundedBox(10, x, y, w, h, Color(12, 17, 25, 232))
+    surface.SetDrawColor(196, 155, 75, 235)
+    surface.DrawOutlinedRect(x, y, w, h, 2)
+    DrawText(def.name .. " · " .. (rank and rank.name or ""), "WO.Subtitle",
+        x + 18, y + 12, WO.UI.Colors.accent)
+
+    local progressText = "Заказ " .. tostring(math.min((shift.completedOrders or 0) + 1,
+        shift.requiredOrders or 3)) .. "/" .. tostring(shift.requiredOrders or 3)
+    DrawText(progressText .. " · работайте в мире; зарплата после сдачи у работодателя",
+        "WO.Tiny", x + 18, y + 43, WO.UI.Colors.textDim)
+
+    if shift.status == "ready" then
+        DrawText("Заказы готовы. Вернитесь к «" .. tostring(shift.npcName or "работодателю") .. "».",
+            "WO.Body", x + 22, y + 100, WO.UI.Colors.good)
+        DrawText("Нажмите E и выберите «Сдать смену».", "WO.Small", x + 22, y + 135,
+            WO.UI.Colors.text)
+        DrawText("X — отменить смену без выплаты", "WO.Tiny", x + 22, y + 178,
+            WO.UI.Colors.textDim)
+        return
+    end
+
+    DrawText("X — отменить", "WO.Tiny", x + w - 18, y + 17,
+        WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
+
+    local task = shift.task
+    if not task then return end
+    local mode = WO.Professions.GetMiniGame(task.mode) or {}
+    DrawText((mode.label or task.mode) .. " · " .. (task.title or "Заказ"),
+        "WO.Small", x + 18, y + 66, WO.UI.Colors.text)
+
+    if mode.engine == "hold" then
+        DrawFishing(task, x, y, w)
+    elseif mode.engine == "strike" or mode.engine == "rhythm" or mode.engine == "stack" then
+        DrawStrike(task, x, y, w, mode)
+    elseif mode.engine == "tap" then
+        DrawTap(task, x, y, w)
+    elseif mode.engine == "sequence" then
+        DrawSequence(task, x, y, w, mode)
+    elseif mode.engine == "alternate" then
+        DrawAlternate(task, x, y, w, mode)
+    elseif mode.engine == "choice" or mode.engine == "identify" then
+        DrawChoice(task, x, y, w)
+    elseif mode.engine == "steer" or mode.engine == "adjust" or mode.engine == "balance" or
+        mode.engine == "sweep" then
+        DrawSteering(task, x, y, w, mode.engine, mode)
+    elseif mode.engine == "precision" then
+        DrawPrecision(task, x, y, w)
+    elseif mode.engine == "dodge" then
+        DrawDodge(task, x, y)
+    elseif mode.engine == "delivery" then
+        DrawDelivery(task, shift, x, y, w)
+    end
+
+    if mode.controls and mode.controls ~= "" and mode.engine ~= "delivery" then
+        DrawText(mode.controls, "WO.Tiny", x + 18, y + h - 24,
+            WO.UI.Colors.textDim)
+    end
+end
+
+hook.Add("Think", "wo_professions_world_input", function()
     RequestSnapshot()
-    AddHeader(parent)
+    local shift = CurrentShift()
 
-    local scroll = WO.UI.Scroll(parent)
-    scroll:Dock(FILL)
-
-    local char = LocalCharacter()
-    local data = WO.Professions.ClientData or { skills = {}, shift = nil }
-    local shift = data.shift
-    local hasShift = istable(shift) and isstring(shift.id)
-
-    if hasShift then
-        local def = WO.Professions.Get(shift.professionId)
-        if def then MakeShiftPanel(scroll, shift, def) end
+    if not shift then
+        ResetInputState()
+        return
     end
 
-    local jobsHeader = WO.UI.Label(scroll, hasShift and "Другие доступные ремёсла" or
-        "Выберите ремесло и начните смену", "WO.Subtitle", WO.UI.Colors.accent)
-    jobsHeader:Dock(TOP)
-    jobsHeader:DockMargin(0, 0, 0, 10)
-    jobsHeader:SetTall(30)
+    local task = shift.task
+    local context = GetInputContext(shift, task)
 
-    for _, professionId in ipairs(WO.Professions.GetIDs()) do
-        local def = WO.Professions.Get(professionId)
-        if def then MakeProfessionCard(scroll, def, data, char, hasShift) end
+    if context ~= inputContext then
+        ResetInputState()
+        inputContext = context
     end
-end
 
-WO.Hook.Add("ProfessionsSynced", "professions_ui_refresh", function(_, revisionChanged)
-    if revisionChanged and WO.MenuUI and WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "work" and
-        WO.MenuUI.RefreshPage then
-        WO.MenuUI.RefreshPage("work")
+    local cancelPressed = KeyPressed("cancel", KEY_X)
+    if cancelPressed then
+        WO.Net.SendToServer("Profession.CancelShift", shift.id)
+        return
     end
+
+    if shift.status == "working" and task then
+        PollMiniGameInput(shift, task)
+    end
+end)
+
+hook.Add("HUDPaint", "wo_professions_world_hud", DrawWorldShift)
+
+hook.Add("PlayerBindPress", "wo_professions_world_bind", function(ply, bind)
+    if ply ~= LocalPlayer() then return end
+    local shift = CurrentShift()
+    if not shift or shift.status ~= "working" then return end
+
+    local task = shift.task
+    local mode = task and WO.Professions.GetMiniGame(task.mode) or nil
+    local engine = mode and mode.engine
+    local lowerBind = string.lower(bind or "")
+
+    if (engine == "hold" or engine == "strike" or engine == "rhythm" or engine == "stack" or
+        engine == "tap" or engine == "precision") and string.find(lowerBind, "+jump", 1, true) then
+        return true
+    end
+
+    if engine == "delivery" and task.phase == "pickup" and
+        string.find(lowerBind, "+use", 1, true) then
+        return true
+    end
+
+    if string.find(lowerBind, "+drop", 1, true) then return true end
+
+    if engine == "steer" or engine == "adjust" or engine == "balance" or engine == "sweep" or
+        engine == "dodge" or engine == "alternate" or engine == "precision" then
+        if string.find(lowerBind, "+forward", 1, true) or string.find(lowerBind, "+back", 1, true) or
+            string.find(lowerBind, "+moveleft", 1, true) or string.find(lowerBind, "+moveright", 1, true) then
+            return true
+        end
+    end
+
+    if engine == "sequence" or engine == "identify" or engine == "choice" then
+        if string.find(lowerBind, "slot1", 1, true) or string.find(lowerBind, "slot2", 1, true) or
+            string.find(lowerBind, "slot3", 1, true) or string.find(lowerBind, "slot4", 1, true) then
+            return true
+        end
+    end
+end)
+
+hook.Add("CharacterMenuOpening", "professions_reset_world_controls", ResetInputState)
+
+WO.Hook.Add("ProfessionsSynced", "professions_world_ui", function()
+    local shift = CurrentShift()
+    if not shift then ResetInputState() end
 end)

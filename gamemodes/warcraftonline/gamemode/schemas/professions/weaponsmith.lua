@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить древко",
-                    mode = "timing",
+                    mode = "fletching",
                     instruction = "Выберите прямую заготовку для лука.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Согнуть лук",
-                    mode = "timing",
+                    mode = "fletching",
                     instruction = "Настройте натяжение лука в зелёном секторе.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Выправить древко",
-                    mode = "timing",
+                    mode = "fletching",
                     instruction = "Выровняйте древко стрелы без перекоса.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Установить наконечник",
-                    mode = "timing",
+                    mode = "fletching",
                     instruction = "Закрепите наконечник в правильный момент.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Собрать механизм",
-                    mode = "timing",
+                    mode = "fletching",
                     instruction = "Совместите детали спускового механизма.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Настроить арбалет",
-                    mode = "timing",
+                    mode = "fletching",
                     instruction = "Отрегулируйте натяжение тетивы.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

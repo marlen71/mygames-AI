@@ -55,6 +55,10 @@ function ENT:GetInteractionText(ply)
 
     if not def then return "" end
 
+    if def.professionId then
+        return "Работа: " .. (def.name or "ремесло")
+    end
+
     if def.type == "vendor" then
         return WO.Lang:Get("interact.npc_vendor") .. ": " .. (def.name or "")
     end

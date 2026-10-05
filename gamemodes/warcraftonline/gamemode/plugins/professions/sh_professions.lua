@@ -10,7 +10,47 @@ WO.Professions = WO.Professions or {}
 WO.Professions.Registry = WO.Professions.Registry or WO.Registry.New("Professions")
 WO.Professions.ClientData = WO.Professions.ClientData or nil
 
+-- Each trade has its own world mini-game. Engines share server-side primitives,
+-- but each mode has a distinct activity, controls and world-HUD presentation.
+WO.Professions.MiniGames = WO.Professions.MiniGames or {
+    fishing = { engine = "hold", label = "Рыбалка", controls = "Удерживайте ПРОБЕЛ, пока рыба в зелёной зоне." },
+    chopping = { engine = "strike", label = "Рубка", controls = "Нажимайте ПРОБЕЛ, когда метка пилы проходит по зарубке." },
+    mining = { engine = "tap", label = "Добыча руды", controls = "Ударяйте кирку ПРОБЕЛОМ, чтобы расколоть жилу." },
+    sowing = { engine = "sequence", label = "Посев", controls = "Повторите порядок семян клавишами 1–4." },
+    herding = { engine = "steer", axis = "horizontal", label = "Управление стадом", controls = "A / D направляют животное к отмеченным воротам." },
+    loading = { engine = "alternate", label = "Погрузка", controls = "Чередуйте A и D, чтобы переносить ящики равномерно." },
+    smithing = { engine = "rhythm", label = "Кузнечное дело", controls = "Куйте ПРОБЕЛОМ, попадая по раскалённой зоне." },
+    sewing = { engine = "sequence", label = "Шитьё", controls = "Введите последовательность стежков клавишами 1–4." },
+    baking = { engine = "alternate", label = "Замес теста", controls = "Чередуйте A и D, чтобы вымесить тесто." },
+    brewing = { engine = "adjust", axis = "vertical", label = "Варка напитка", controls = "W / S удерживают температуру в рецептурном диапазоне." },
+    alchemy = { engine = "sequence", label = "Алхимическая формула", controls = "Добавьте реагенты в порядке, показанном на колбах 1–4." },
+    haggling = {
+        engine = "choice", label = "Торговый торг",
+        controls = "Оцените цель сделки и выберите ближайшее предложение клавишей 1–3.",
+        choiceOptions = { "10 монет", "50 монет", "90 монет" },
+    },
+    sweeping = { engine = "sweep", axis = "horizontal", label = "Подметание", controls = "A / D ведут щётку по отмеченному мусору." },
+    balancing = { engine = "balance", axis = "horizontal", label = "Баланс воды", controls = "A / D выравнивают коромысло и удерживают воду." },
+    sawing = { engine = "alternate", label = "Распил", controls = "Чередуйте A и D, чтобы вести пилу ровно." },
+    fletching = { engine = "sequence", label = "Изготовление оружия", controls = "Соберите детали в показанном порядке клавишами 1–4." },
+    gemcutting = { engine = "precision", axis = "horizontal", label = "Огранка камня", controls = "A / D наведите резец, ПРОБЕЛ фиксирует грань." },
+    ropemaking = { engine = "rhythm", label = "Канатная работа", controls = "Нажимайте ПРОБЕЛ в такт натяжению каната." },
+    beekeeping = { engine = "dodge", label = "Сбор мёда", controls = "W / A / S / D уворачивают от пчёл и ведут к сотам." },
+    herbcraft = {
+        engine = "identify", label = "Опознание трав",
+        controls = "Найдите заказанное растение и выберите его клавишей 1–4.",
+        choiceOptions = { "Мята", "Чабрец", "Лаванда", "Полынь" },
+    },
+    masonry = { engine = "stack", label = "Кладка", controls = "Укладывайте камень ПРОБЕЛОМ, пока метка над швом." },
+    delivery = { engine = "delivery", label = "Перенос груза", controls = "Заберите груз у точки и доставьте его, пройдя нужное расстояние." },
+    timing = { engine = "hold", label = "Рабочий ритм", controls = "Удерживайте ПРОБЕЛ в зелёной зоне." },
+}
+
 local DEFAULT_RANK_XP = { 0, 300, 900 }
+
+function WO.Professions.GetMiniGame(mode)
+    return isstring(mode) and WO.Professions.MiniGames[mode] or nil
+end
 
 function WO.Professions.Register(def)
     if not istable(def) or not isstring(def.id) or
@@ -39,7 +79,7 @@ function WO.Professions.Register(def)
 
         for activityIndex, activity in ipairs(rank.activities) do
             if not istable(activity) or not isstring(activity.name) or activity.name == "" or
-                (activity.mode ~= "timing" and activity.mode ~= "delivery") then
+                not WO.Professions.GetMiniGame(activity.mode) then
                 WO.Error("WO.Professions.Register: invalid activity " .. activityIndex ..
                     " in rank " .. rankIndex .. " for '" .. def.id .. "'")
                 return false
@@ -156,17 +196,24 @@ WO.Net.Register("Profession.SyncRequest", {
 WO.Net.Register("Profession.StartShift", {
     direction = "toserver",
     rate = { max = 3, window = 5 },
-    write = function(professionId) net.WriteString(professionId or "") end,
-    read = function() return net.ReadString() end,
-    validate = function(ply, professionId)
+    write = function(professionId, rank)
+        net.WriteString(professionId or "")
+        net.WriteUInt(math.Clamp(math.floor(tonumber(rank) or 1), 1, 3), 2)
+    end,
+    read = function() return net.ReadString(), net.ReadUInt(2) end,
+    validate = function(ply, professionId, rank)
         if not IsValid(ply) or not ply:HasCharacter() then return false, "no_character" end
         if not isstring(professionId) or #professionId > 48 or not WO.Professions.Get(professionId) then
             return false, "unknown_profession"
         end
+        if not isnumber(rank) or rank < 1 or rank > 3 or rank ~= math.floor(rank) then
+            return false, "invalid_rank"
+        end
+        if not WO.Professions.CanWorkAtNPC(ply, professionId) then return false, "wrong_employer" end
         return true
     end,
-    handler = function(ply, professionId)
-        if SERVER then WO.Professions.StartShift(ply, professionId) end
+    handler = function(ply, professionId, rank)
+        if SERVER then WO.Professions.StartShift(ply, professionId, rank) end
     end,
 })
 
@@ -183,7 +230,13 @@ WO.Net.Register("Profession.WorkInput", {
         if not IsValid(ply) or not ply:HasCharacter() then return false, "no_character" end
         if not isstring(shiftId) or #shiftId > 64 or not isstring(action) or #action > 16 or
             not isbool(value) then return false, "invalid_input" end
-        if action ~= "hold" and action ~= "pickup" then return false, "invalid_action" end
+        local allowed = {
+            hold = true, pickup = true, strike = true, tap = true, confirm = true,
+            left = true, right = true, up = true, down = true,
+            choice1 = true, choice2 = true, choice3 = true, choice4 = true,
+        }
+        if not allowed[action] then return false, "invalid_action" end
+        if action == "pickup" and not value then return false, "invalid_input" end
         return true
     end,
     handler = function(ply, shiftId, action, value)

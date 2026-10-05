@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Отбить жилу",
-                    mode = "timing",
+                    mode = "mining",
                     instruction = "Выберите правильный момент для удара киркой.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Отсеять породу",
-                    mode = "timing",
+                    mode = "mining",
                     instruction = "Отделите полезную руду от пустой породы.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Загрузить вагонетку",
-                    mode = "timing",
+                    mode = "mining",
                     instruction = "Распределите руду по вагонетке равномерно.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -55,7 +55,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Разгрузить руду",
-                    mode = "timing",
+                    mode = "mining",
                     instruction = "Сдайте содержимое в приёмный бункер без потерь.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Настроить дробилку",
-                    mode = "timing",
+                    mode = "mining",
                     instruction = "Подберите темп подачи руды в дробилку.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Раздробить породу",
-                    mode = "timing",
+                    mode = "mining",
                     instruction = "Удерживайте нагрузку в зелёном секторе.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Найти ингредиент",
-                    mode = "timing",
+                    mode = "alchemy",
                     instruction = "Выберите подходящий момент для сбора растения.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Собрать компоненты",
-                    mode = "timing",
+                    mode = "alchemy",
                     instruction = "Снимите ингредиенты аккуратно, не повредив их.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить ступку",
-                    mode = "timing",
+                    mode = "alchemy",
                     instruction = "Отмерьте компоненты для смеси.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Растереть реагенты",
-                    mode = "timing",
+                    mode = "alchemy",
                     instruction = "Измельчайте ингредиенты ровным нажимом.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разогреть колбу",
-                    mode = "timing",
+                    mode = "alchemy",
                     instruction = "Настройте нагрев колбы в зелёной зоне.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сварить зелье",
-                    mode = "timing",
+                    mode = "alchemy",
                     instruction = "Добавляйте реагенты в правильный момент.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Срубить дерево",
-                    mode = "timing",
+                    mode = "chopping",
                     instruction = "Подсекайте дерево и держите удар в зелёной зоне.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -26,7 +26,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сколоть ветви",
-                    mode = "timing",
+                    mode = "chopping",
                     instruction = "Снимайте сучья точными ударами.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Расколоть чурбак",
-                    mode = "timing",
+                    mode = "chopping",
                     instruction = "Попадите топором в слабое место чурбака.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Уложить поленья",
-                    mode = "timing",
+                    mode = "chopping",
                     instruction = "Соберите ровную поленницу, удерживая маркер в зелёной зоне.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Выставить бревно",
-                    mode = "timing",
+                    mode = "chopping",
                     instruction = "Совместите бревно с направляющей пилорамы.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Распилить доски",
-                    mode = "timing",
+                    mode = "chopping",
                     instruction = "Проведите распил без ухода маркера из зелёного сектора.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

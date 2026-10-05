@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Опустить ведро",
-                    mode = "timing",
+                    mode = "balancing",
                     instruction = "Выберите момент, чтобы наполнить ведро без пролива.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Набрать воду",
-                    mode = "timing",
+                    mode = "balancing",
                     instruction = "Удерживайте уровень воды в безопасном секторе.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Наполнить бурдюк",
-                    mode = "timing",
+                    mode = "balancing",
                     instruction = "Отмерьте нужный объём воды.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -55,7 +55,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Раздать запас",
-                    mode = "timing",
+                    mode = "balancing",
                     instruction = "Распределите воду между ёмкостями без потерь.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Проверить подъёмник",
-                    mode = "timing",
+                    mode = "balancing",
                     instruction = "Отрегулируйте механизм колодца.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Поднять бочку",
-                    mode = "timing",
+                    mode = "balancing",
                     instruction = "Поднимайте бочку, удерживая тягу в зелёной зоне.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

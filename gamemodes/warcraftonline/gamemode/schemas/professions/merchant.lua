@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Оформить прилавок",
-                    mode = "timing",
+                    mode = "haggling",
                     instruction = "Разложите товары и ценники в правильном порядке.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -26,7 +26,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сверить выручку",
-                    mode = "timing",
+                    mode = "haggling",
                     instruction = "Сверьте записи в торговой ведомости.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Составить список",
-                    mode = "timing",
+                    mode = "haggling",
                     instruction = "Подберите нужную партию товара по заказу.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -55,7 +55,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Проверить поставку",
-                    mode = "timing",
+                    mode = "haggling",
                     instruction = "Сверьте количество товара с накладной.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Осмотреть товар",
-                    mode = "timing",
+                    mode = "haggling",
                     instruction = "Найдите признаки качества товара.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -84,7 +84,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Назначить цену",
-                    mode = "timing",
+                    mode = "haggling",
                     instruction = "Оцените стоимость по правильной шкале.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

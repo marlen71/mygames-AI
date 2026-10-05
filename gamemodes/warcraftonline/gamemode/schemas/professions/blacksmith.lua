@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разжечь горн",
-                    mode = "timing",
+                    mode = "smithing",
                     instruction = "Удерживайте температуру горна в зелёном секторе.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Подать заготовку",
-                    mode = "timing",
+                    mode = "smithing",
                     instruction = "Выберите правильный момент для подачи металла.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Нагреть металл",
-                    mode = "timing",
+                    mode = "smithing",
                     instruction = "Следите за температурой раскалённой заготовки.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Выковать деталь",
-                    mode = "timing",
+                    mode = "smithing",
                     instruction = "Попадайте молотом по металлу в нужный такт.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Закрепить клинок",
-                    mode = "timing",
+                    mode = "smithing",
                     instruction = "Настройте угол клинка на точильном станке.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Заточить лезвие",
-                    mode = "timing",
+                    mode = "smithing",
                     instruction = "Ведите клинок, удерживая маркер в зелёной зоне.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

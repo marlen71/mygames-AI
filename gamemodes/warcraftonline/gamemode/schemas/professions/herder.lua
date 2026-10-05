@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Собрать стадо",
-                    mode = "timing",
+                    mode = "herding",
                     instruction = "Соберите животных в стадо, удерживая ритм.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -39,7 +39,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить корм",
-                    mode = "timing",
+                    mode = "herding",
                     instruction = "Смешайте корм в правильной пропорции.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -47,7 +47,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Раздать корм",
-                    mode = "timing",
+                    mode = "herding",
                     instruction = "Поддерживайте ровную подачу корма.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -68,7 +68,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Открыть проход",
-                    mode = "timing",
+                    mode = "herding",
                     instruction = "Выберите безопасный момент для открытия ворот.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -82,7 +82,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Закрыть загон",
-                    mode = "timing",
+                    mode = "herding",
                     instruction = "Зафиксируйте ворота в нужном положении.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подсечь рыбу",
-                    mode = "timing",
+                    mode = "fishing",
                     instruction = "Удерживайте маркер в зелёной зоне, чтобы вываживать рыбу.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Настроить снасть",
-                    mode = "timing",
+                    mode = "fishing",
                     instruction = "Подберите натяжение лески в нужном секторе.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Поставить сеть",
-                    mode = "timing",
+                    mode = "fishing",
                     instruction = "Выберите подходящий момент для заброса сети.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -55,7 +55,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Распутать снасть",
-                    mode = "timing",
+                    mode = "fishing",
                     instruction = "Освободите улов, удерживая натяжение в зелёной зоне.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить рыбу",
-                    mode = "timing",
+                    mode = "fishing",
                     instruction = "Подберите точный темп разделки рыбы.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Разделать улов",
-                    mode = "timing",
+                    mode = "fishing",
                     instruction = "Проводите нож по безопасному сектору.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

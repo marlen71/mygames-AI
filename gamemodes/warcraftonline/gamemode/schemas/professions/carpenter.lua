@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Выбрать бревно",
-                    mode = "timing",
+                    mode = "sawing",
                     instruction = "Подберите ровную заготовку для распила.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Распилить доску",
-                    mode = "timing",
+                    mode = "sawing",
                     instruction = "Ведите пилу по направляющей.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разметить деталь",
-                    mode = "timing",
+                    mode = "sawing",
                     instruction = "Совместите разметку с шаблоном.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Собрать изделие",
-                    mode = "timing",
+                    mode = "sawing",
                     instruction = "Соедините детали в правильной последовательности.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить балки",
-                    mode = "timing",
+                    mode = "sawing",
                     instruction = "Подгоните балки для строительного заказа.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Собрать каркас",
-                    mode = "timing",
+                    mode = "sawing",
                     instruction = "Выставьте каркас по уровню.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

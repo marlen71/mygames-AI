@@ -179,6 +179,67 @@ local function BuildWorkOptions(ply, npcDef, node)
     }, node.emptyText or "Пока подходящих поручений нет. Загляни позже."
 end
 
+local function BuildProfessionOptions(ply, npcDef)
+    local char = ply:GetCharacter()
+    local professionId = npcDef and npcDef.professionId
+    local profession = professionId and WO.Professions and WO.Professions.Get(professionId)
+
+    if not profession then
+        return { { text = "До встречи", action = "close" } },
+            "У этого работодателя пока нет настроенной профессии."
+    end
+
+    local activeShift = char and char.activeProfessionShift
+
+    if istable(activeShift) then
+        if activeShift.npcId == npcDef.id and activeShift.status == "ready" then
+            return {
+                { text = "Сдать смену и получить зарплату", action = "profession_finish" },
+                { text = "Остаться в мире", action = "close" },
+            }, "Все заказы выполнены. Сдайте смену работодателю, чтобы получить оплату и опыт."
+        end
+
+        if activeShift.npcId == npcDef.id then
+            return { { text = "Продолжить смену", action = "close" } },
+                "Вы уже работаете. Продолжайте задания прямо в мире; расчёт будет доступен после всех заказов."
+        end
+
+        local employer = WO.NPCs and WO.NPCs.Get and WO.NPCs.Get(activeShift.npcId)
+        return { { text = "До встречи", action = "close" } },
+            "Сначала завершите смену у работодателя «" ..
+                tostring(employer and employer.name or activeShift.npcId or "работы") .. "»."
+    end
+
+    local skill = WO.Professions.GetSkillData(char, professionId)
+    local options = {}
+
+    for rankIndex, rank in ipairs(profession.ranks or {}) do
+        local basePay = WO.Professions.GetBasePay(professionId, rankIndex, 3)
+
+        if rankIndex <= skill.level then
+            options[#options + 1] = {
+                text = "Работать: " .. rank.name .. " · базовая ставка за смену " .. basePay .. " монет",
+                action = "profession_rank:" .. rankIndex,
+            }
+        else
+            local missingXP = math.max(0, (rank.requiredXP or 0) - skill.xp)
+            options[#options + 1] = {
+                text = "Закрыто: " .. rank.name .. " · ещё " .. missingXP .. " опыта",
+                action = "profession_locked:" .. rankIndex,
+            }
+        end
+    end
+
+    options[#options + 1] = { text = "Пока не работать", action = "close" }
+    local nextRank = profession.ranks[skill.level + 1]
+    local nextText = nextRank and
+        (" До следующей ступени «" .. nextRank.name .. "» нужно ещё " ..
+            math.max(0, nextRank.requiredXP - skill.xp) .. " опыта.") or " Максимальная ступень открыта."
+
+    return options, "Опыт ремесла: " .. skill.xp .. ". Открыты ступени 1–" ..
+        skill.level .. "/3. Выберите, за кого работать." .. nextText
+end
+
 --- Отправляет узел диалога с вариантами, вычисленными на сервере.
 local function SendNode(ply, dialogueId, nodeId)
     local def = WO.Dialogue.Get(dialogueId)
@@ -196,7 +257,9 @@ local function SendNode(ply, dialogueId, nodeId)
     local text = node.text or ""
     local options
 
-    if node.work == true then
+    if node.profession == true then
+        options, text = BuildProfessionOptions(ply, session.npcDef)
+    elseif node.work == true then
         options, text = BuildWorkOptions(ply, session.npcDef, node)
     else
         options = BuildNodeOptions(ply, session.npcDef, node)
@@ -363,6 +426,57 @@ local function RunAction(ply, action)
 
         if session then
             SendNode(ply, session.dialogueId, "work")
+        end
+
+        return
+    end
+
+    if verb == "profession_rank" and arg ~= "" then
+        local session = GetSession(ply)
+        local professionId = session and session.npcDef and session.npcDef.professionId
+        local started, reason = false, "invalid_profession"
+
+        if WO.Professions and WO.Professions.StartShift then
+            started, reason = WO.Professions.StartShift(ply, professionId, tonumber(arg))
+        end
+
+        if started then
+            WO.Dialogue.Close(ply)
+        else
+            local message = reason == "rank_locked" and "Эта ступень ещё закрыта: сначала заработайте нужный опыт." or
+                reason == "shift_already_active" and "У вас уже есть активная смена." or
+                "Не удалось начать смену. Подойдите к своему работодателю и попробуйте ещё раз."
+            WO.Notify(ply, "error", message)
+            if SessionValid(ply) then SendNode(ply, session.dialogueId, session.nodeId) end
+        end
+
+        return
+    end
+
+    if verb == "profession_locked" and arg ~= "" then
+        WO.Notify(ply, "info", "Эта работа откроется после получения указанного опыта ремесла.")
+        local session = GetSession(ply)
+        if session and SessionValid(ply) then SendNode(ply, session.dialogueId, session.nodeId) end
+        return
+    end
+
+    if action == "profession_finish" then
+        local session = GetSession(ply)
+        local char = ply:GetCharacter()
+        local shift = char and char.activeProfessionShift
+        local finished, reason = false, "orders_incomplete"
+
+        if shift and WO.Professions and WO.Professions.FinishShift then
+            finished, reason = WO.Professions.FinishShift(ply, shift.id)
+        end
+
+        if finished then
+            WO.Dialogue.Close(ply)
+        else
+            WO.Notify(ply, "error", reason == "wrong_employer" and
+                "Сдать смену можно только у работодателя, который её выдал." or
+                "Смена ещё не готова к сдаче.")
+            if session and SessionValid(ply) then SendNode(ply, session.dialogueId, session.nodeId) end
         end
 
         return

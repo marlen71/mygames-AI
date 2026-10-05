@@ -637,61 +637,121 @@ LocalPlayer():SetNW2Int("wo_level", 3)
 
 do
     MOCK.Assert(WO.Plugins.IsLoaded("professions") and #WO.Professions.GetIDs() == 21 and
-        WO.ProfessionsUI and WO.ProfessionsUI.BuildPanel,
-        "клиент зарегистрировал все ремёсла и их UI")
+        WO.ProfessionsUI and WO.ProfessionsUI.GetCurrentShift and
+        WO.ProfessionsUI.BuildPanel == nil,
+        "клиент зарегистрировал ремёсла, но не строит их внутри общего меню")
 
-    WO.MenuUI.Show("work")
-    MOCK.Assert(WO.MenuUI.GetPage() == "work" and
-        MOCK.FindPanelByText("Устроиться") ~= nil and
-        MOCK.FindPanelByText("Ремёсла") ~= nil,
-        "страница ремёсел открывается из меню и показывает 21 работу")
-    MOCK.TakeOutbox()
-
-    local joinButton = MOCK.FindPanelByText("Устроиться")
-    joinButton:DoClick()
-    local joinMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.StartShift")
-    MOCK.Assert(#joinMessages == 1 and WO.Professions.Get(joinMessages[1].args[1]) ~= nil,
-        "кнопка найма отправляет только идентификатор выбранного ремесла")
+    WO.MenuUI.Show("overview")
+    MOCK.Assert(MOCK.FindPanelByText("Ремёсла") == nil,
+        "страницы или вкладки ремёсел нет в главном меню")
+    WO.MenuUI.Close()
 
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character",
         revision = 1,
         skills = { fisher = { xp = 0, level = 1, completedShifts = 0 } },
         shift = {
-            id = "client-work-shift", professionId = "fisher", rank = 1,
+            id = "client-work-shift", professionId = "fisher", professionName = "Рыбак",
+            npcId = "work_fisher", npcName = "Рыбак", rank = 1,
             completedOrders = 0, requiredOrders = 3, status = "working", basePay = 33, bonus = 0,
             task = {
-                orderIndex = 1, mode = "timing", title = "Подсечь рыбу",
-                instruction = "Удерживайте маркер в зелёной зоне.", phase = "working",
-                progress = 0.25, elapsed = 0, zoneCenter = 0.5, zoneWidth = 0.2,
-                speed = 1, phaseOffset = 0,
+                orderIndex = 1, mode = "fishing", engine = "hold", title = "Подсечь рыбу",
+                instruction = "Рыба клюёт.", phase = "working", progress = 0.25, elapsed = 0,
+                zoneCenter = 0.5, zoneWidth = 0.2, speed = 1, phaseOffset = 0,
             },
         },
     } } }, 8, nil)
 
-    local miniGamePanel
-    for index = #MOCK.createdPanels, 1, -1 do
-        local candidate = MOCK.createdPanels[index]
-        if rawget(candidate, "woShiftId") == "client-work-shift" and
-            rawget(candidate, "__removed") ~= true then
-            miniGamePanel = candidate
-            break
-        end
-    end
-    MOCK.Assert(miniGamePanel ~= nil and isfunction(miniGamePanel.Paint),
-        "серверная смена строит вертикальную мини-игру с маркером и зелёной зоной")
     local fishPolygonsBefore = MOCK.surfacePolyCalls or 0
-    miniGamePanel:Paint(420, 246)
-    MOCK.Assert((MOCK.surfacePolyCalls or 0) >= fishPolygonsBefore + 2,
-        "рыба рисуется иконкой у маркера в вертикальной мини-игре рыбака")
+    MOCK.drawnTextValues = {}
+    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    local fishHudVisible = false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        if text:find("Рыбалка", 1, true) then fishHudVisible = true end
+    end
+    MOCK.Assert(fishHudVisible and (MOCK.surfacePolyCalls or 0) >= fishPolygonsBefore + 2,
+        "рыбалка рисуется поверх живого мира отдельной вертикальной шкалой с иконкой рыбы")
+
     MOCK.TakeOutbox()
-    miniGamePanel.OnMousePressed(miniGamePanel, MOUSE_LEFT)
-    miniGamePanel.OnMouseReleased(miniGamePanel, MOUSE_LEFT)
+    MOCK.keysDown[KEY_SPACE] = true
+    hook.GetTable().Think.wo_professions_world_input()
+    MOCK.keysDown[KEY_SPACE] = false
+    hook.GetTable().Think.wo_professions_world_input()
     local workInputMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
     MOCK.Assert(#workInputMessages == 2 and workInputMessages[1].args[1] == "client-work-shift" and
         workInputMessages[1].args[2] == "hold" and workInputMessages[1].args[3] == true and
         workInputMessages[2].args[3] == false,
-        "мини-игра отправляет серверу только начало/окончание удержания")
-    WO.MenuUI.Close()
+        "рыбацкая мини-игра принимает удержание/отпускание пробела без открытия меню")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 2, skills = {},
+        shift = {
+            id = "client-merchant-shift", professionId = "merchant", professionName = "Торговец",
+            npcId = "work_merchant", npcName = "Торговец", rank = 1,
+            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 36, bonus = 0,
+            task = {
+                orderIndex = 1, mode = "haggling", engine = "choice", title = "Оценить партию",
+                instruction = "Сверьте цель сделки.", phase = "working", progress = 0.25,
+                choiceOptions = { "10 монет", "50 монет", "90 монет" },
+                choiceTarget = "Цель сделки — 60 монет. Выберите ближайшую цену.",
+            },
+        },
+    } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    local merchantTargetVisible, merchantPriceVisible = false, false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        merchantTargetVisible = merchantTargetVisible or text:find("60 монет", 1, true) ~= nil
+        merchantPriceVisible = merchantPriceVisible or text:find("50 монет", 1, true) ~= nil
+    end
+    MOCK.Assert(merchantTargetVisible and merchantPriceVisible,
+        "торговая мини-игра выводит на игровой HUD рыночную цель и выбор цен")
+    MOCK.TakeOutbox()
+    MOCK.keysDown[KEY_1] = true
+    hook.GetTable().Think.wo_professions_world_input()
+    MOCK.keysDown[KEY_1] = false
+    hook.GetTable().Think.wo_professions_world_input()
+    local merchantInput = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
+    MOCK.Assert(#merchantInput == 1 and merchantInput[1].args[1] == "client-merchant-shift" and
+        merchantInput[1].args[2] == "choice1" and merchantInput[1].args[3] == true,
+        "клавиши выбора цены отправляют действие напрямую серверу, не открывая меню")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 3, skills = {},
+        shift = {
+            id = "client-herbalist-shift", professionId = "herbalist", professionName = "Травник",
+            npcId = "work_herbalist", npcName = "Травник", rank = 1,
+            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 33, bonus = 0,
+            task = {
+                orderIndex = 1, mode = "herbcraft", engine = "identify", title = "Найти растение",
+                instruction = "Найдите заказанную траву.", phase = "working", progress = 0.25,
+                choiceOptions = { "Мята", "Чабрец", "Лаванда", "Полынь" },
+                choiceTarget = "Найдите заказанное растение: Полынь",
+            },
+        },
+    } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    local herbTargetVisible, herbOptionVisible = false, false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        herbTargetVisible = herbTargetVisible or text:find("Полынь", 1, true) ~= nil
+        herbOptionVisible = herbOptionVisible or text:find("Мята", 1, true) ~= nil
+    end
+    MOCK.Assert(herbTargetVisible and herbOptionVisible,
+        "мини-игра травника отображает опознание растения среди четырёх названий")
+    MOCK.TakeOutbox()
+    MOCK.keysDown[KEY_4] = true
+    hook.GetTable().Think.wo_professions_world_input()
+    MOCK.keysDown[KEY_4] = false
+    hook.GetTable().Think.wo_professions_world_input()
+    local herbInput = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
+    MOCK.Assert(#herbInput == 1 and herbInput[1].args[1] == "client-herbalist-shift" and
+        herbInput[1].args[2] == "choice4" and herbInput[1].args[3] == true,
+        "идентификация травы использует четвёртую клавишу и отправляет её серверу")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 4, skills = {}, shift = nil,
+    } } }, 8, nil)
 end
 
 do

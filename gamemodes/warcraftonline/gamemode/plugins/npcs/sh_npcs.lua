@@ -54,6 +54,11 @@ function WO.NPCs.Register(def)
         return false
     end
 
+    if def.professionId ~= nil and (not isstring(def.professionId) or def.professionId == "") then
+        WO.Error("WO.NPCs.Register: invalid professionId for '" .. def.id .. "'")
+        return false
+    end
+
     WO.NPCs.List[def.id] = def
 
     WO.Debug("NPC registered: " .. def.id)

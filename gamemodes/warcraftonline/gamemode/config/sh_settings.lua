@@ -108,6 +108,30 @@ WO.Config.ArcaneHands = {
 WO.Config.WorldMap = "rp_lordaeron"
 
 WO.Config.NPCSpawnPoints = {
+    -- Пустые data-driven точки работодателей: добавьте сюда точные Vector/Angle
+    -- конкретной карты, когда координаты будут готовы. До этого NPC не спавнятся.
+    work_lumberjack = {},
+    work_miner = {},
+    work_farmer = {},
+    work_herder = {},
+    work_fisher = {},
+    work_porter = {},
+    work_blacksmith = {},
+    work_tailor = {},
+    work_baker = {},
+    work_brewer = {},
+    work_alchemist = {},
+    work_merchant = {},
+    work_cleaner = {},
+    work_water_carrier = {},
+    work_carpenter = {},
+    work_weaponsmith = {},
+    work_jeweler = {},
+    work_dockworker = {},
+    work_beekeeper = {},
+    work_herbalist = {},
+    work_builder = {},
+
     hunter_dyrne = {
         { map = WO.Config.WorldMap, pos = Vector(-5812.6, 7972.9, -1572), ang = Angle(0, 4, 0) },
     },

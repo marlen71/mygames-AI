@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить ячмень",
-                    mode = "timing",
+                    mode = "brewing",
                     instruction = "Отберите чистое зерно для солода.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Перемолоть солод",
-                    mode = "timing",
+                    mode = "brewing",
                     instruction = "Настройте помол на нужную крупность.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Загрузить котёл",
-                    mode = "timing",
+                    mode = "brewing",
                     instruction = "Добавляйте ингредиенты в нужный момент.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Выдержать варку",
-                    mode = "timing",
+                    mode = "brewing",
                     instruction = "Сохраняйте температуру сусла в зелёной зоне.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить бутылки",
-                    mode = "timing",
+                    mode = "brewing",
                     instruction = "Выстройте тару для розлива.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Разлить напиток",
-                    mode = "timing",
+                    mode = "brewing",
                     instruction = "Держите уровень наполнения в зелёном секторе.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

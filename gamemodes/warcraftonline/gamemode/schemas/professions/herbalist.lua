@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Найти траву",
-                    mode = "timing",
+                    mode = "herbcraft",
                     instruction = "Выберите подходящий момент для сбора растения.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Собрать листья",
-                    mode = "timing",
+                    mode = "herbcraft",
                     instruction = "Снимите листья, не повредив корень.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разложить травы",
-                    mode = "timing",
+                    mode = "herbcraft",
                     instruction = "Распределите растения по сушильным рамам.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Высушить сбор",
-                    mode = "timing",
+                    mode = "herbcraft",
                     instruction = "Поддерживайте сушку в правильном диапазоне.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Отобрать листья",
-                    mode = "timing",
+                    mode = "herbcraft",
                     instruction = "Отделите ценные листья от примесей.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Разделить сбор",
-                    mode = "timing",
+                    mode = "herbcraft",
                     instruction = "Сверьте травы с заказом гильдии.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

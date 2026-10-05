@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разметить котлован",
-                    mode = "timing",
+                    mode = "masonry",
                     instruction = "Совместите линию копки с разметкой.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Копать грунт",
-                    mode = "timing",
+                    mode = "masonry",
                     instruction = "Поддерживайте ровный темп земляных работ.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить раствор",
-                    mode = "timing",
+                    mode = "masonry",
                     instruction = "Смешайте строительный раствор до нужной густоты.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Уложить камень",
-                    mode = "timing",
+                    mode = "masonry",
                     instruction = "Совместите камень с зелёным сектором кладки.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить крышу",
-                    mode = "timing",
+                    mode = "masonry",
                     instruction = "Закрепите основу для кровельного покрытия.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Уложить черепицу",
-                    mode = "timing",
+                    mode = "masonry",
                     instruction = "Выравнивайте ряд, удерживая маркер в зелёной зоне.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

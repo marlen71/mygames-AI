@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Осмотреть улей",
-                    mode = "timing",
+                    mode = "beekeeping",
                     instruction = "Проверьте улей в правильный момент.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Подготовить рамку",
-                    mode = "timing",
+                    mode = "beekeeping",
                     instruction = "Установите рамку, не тревожа пчёл.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Открыть улей",
-                    mode = "timing",
+                    mode = "beekeeping",
                     instruction = "Выберите безопасный момент для работы с ульем.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Собрать мёд",
-                    mode = "timing",
+                    mode = "beekeeping",
                     instruction = "Снимите рамку, удерживая движение в зелёной зоне.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Очистить воск",
-                    mode = "timing",
+                    mode = "beekeeping",
                     instruction = "Отделите чистый воск от примесей.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Растопить воск",
-                    mode = "timing",
+                    mode = "beekeeping",
                     instruction = "Поддерживайте нагрев в зелёном секторе.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

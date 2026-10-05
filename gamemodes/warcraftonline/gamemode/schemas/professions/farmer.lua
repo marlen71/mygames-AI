@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Вспахать борозду",
-                    mode = "timing",
+                    mode = "sowing",
                     instruction = "Ведите плуг ровно по зелёному сектору.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Разрыхлить почву",
-                    mode = "timing",
+                    mode = "sowing",
                     instruction = "Поддерживайте равномерный темп обработки земли.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить семена",
-                    mode = "timing",
+                    mode = "sowing",
                     instruction = "Отмерьте нужную порцию зерна для посева.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Засеять ряд",
-                    mode = "timing",
+                    mode = "sowing",
                     instruction = "Удерживайте сеялку на правильном ритме.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Настроить серп",
-                    mode = "timing",
+                    mode = "sowing",
                     instruction = "Выберите момент для чистого среза колосьев.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сжать сноп",
-                    mode = "timing",
+                    mode = "sowing",
                     instruction = "Свяжите сноп, удерживая маркер в зелёной зоне.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

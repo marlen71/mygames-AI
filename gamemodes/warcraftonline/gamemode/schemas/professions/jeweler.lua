@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Отобрать камень",
-                    mode = "timing",
+                    mode = "gemcutting",
                     instruction = "Найдите подходящий камень для заказа.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Очистить минерал",
-                    mode = "timing",
+                    mode = "gemcutting",
                     instruction = "Снимите лишнюю породу, не повредив камень.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разметить грани",
-                    mode = "timing",
+                    mode = "gemcutting",
                     instruction = "Выберите правильный угол будущей огранки.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Огранить камень",
-                    mode = "timing",
+                    mode = "gemcutting",
                     instruction = "Ведите резец в зелёном секторе.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить оправу",
-                    mode = "timing",
+                    mode = "gemcutting",
                     instruction = "Подберите оправу подходящего размера.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Закрепить самоцвет",
-                    mode = "timing",
+                    mode = "gemcutting",
                     instruction = "Установите камень в оправу без перекоса.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

@@ -18,7 +18,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Подмести двор",
-                    mode = "timing",
+                    mode = "sweeping",
                     instruction = "Ведите метлу ровными движениями.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -39,7 +39,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Очистить проход",
-                    mode = "timing",
+                    mode = "sweeping",
                     instruction = "Поддерживайте равномерный темп подметания.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -53,7 +53,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Собрать листву",
-                    mode = "timing",
+                    mode = "sweeping",
                     instruction = "Сгребите листву в нужную зону.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -68,7 +68,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Отсортировать отходы",
-                    mode = "timing",
+                    mode = "sweeping",
                     instruction = "Разделите пригодные и опасные отходы.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -82,7 +82,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сдать вторсырьё",
-                    mode = "timing",
+                    mode = "sweeping",
                     instruction = "Проверьте сортировку перед сдачей.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Просеять муку",
-                    mode = "timing",
+                    mode = "baking",
                     instruction = "Отмерьте муку и просейте её без потерь.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -20,7 +20,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Замесить тесто",
-                    mode = "timing",
+                    mode = "baking",
                     instruction = "Удерживайте ритм замеса в зелёном секторе.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Разогреть печь",
-                    mode = "timing",
+                    mode = "baking",
                     instruction = "Следите за температурой печи.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -49,7 +49,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Испечь хлеб",
-                    mode = "timing",
+                    mode = "baking",
                     instruction = "Выньте хлеб в правильный момент.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Приготовить крем",
-                    mode = "timing",
+                    mode = "baking",
                     instruction = "Смешивайте ингредиенты с ровной скоростью.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -78,7 +78,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Украсить десерт",
-                    mode = "timing",
+                    mode = "baking",
                     instruction = "Нанесите узор, удерживая маркер в зелёной зоне.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,

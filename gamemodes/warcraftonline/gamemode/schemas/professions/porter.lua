@@ -12,7 +12,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Собрать заказ",
-                    mode = "timing",
+                    mode = "loading",
                     instruction = "Сверьте и соберите груз по ведомости.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -26,7 +26,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Разложить товар",
-                    mode = "timing",
+                    mode = "loading",
                     instruction = "Установите ящики в безопасном порядке.",
                     zoneWidth = 0.24,
                     progressRate = 0.72,
@@ -41,7 +41,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Подготовить тележку",
-                    mode = "timing",
+                    mode = "loading",
                     instruction = "Равномерно разместите груз на тележке.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -55,7 +55,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Сдать накладную",
-                    mode = "timing",
+                    mode = "loading",
                     instruction = "Подтвердите доставку по правильной ведомости.",
                     zoneWidth = 0.22,
                     progressRate = 0.76,
@@ -70,7 +70,7 @@ WO.Professions.Register({
             activities = {
                 {
                     name = "Поднять груз",
-                    mode = "timing",
+                    mode = "loading",
                     instruction = "Поймайте баланс при подъёме тяжёлого груза.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
@@ -84,7 +84,7 @@ WO.Professions.Register({
                 },
                 {
                     name = "Закрепить груз",
-                    mode = "timing",
+                    mode = "loading",
                     instruction = "Проверьте крепление груза перед сдачей.",
                     zoneWidth = 0.20,
                     progressRate = 0.80,
