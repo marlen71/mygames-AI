@@ -1,0 +1,17 @@
+--[[ Warcraft Online — работодатель ремесла «Пасечник».
+     Координаты намеренно не заданы: добавьте их в NPCSpawnPoints на целевой карте. ]]
+
+WO.NPCs.Register({
+    id = "work_beekeeper",
+    name = "Пасечник",
+    title = "Наставник ремесла",
+    type = "talker",
+    model = "models/mailer/character/pandaren/male/pandarenmale03_00.mdl",
+    skin = 0,
+    scale = 1,
+    professionId = "beekeeper",
+    spawns = WO.Config.NPCSpawnPoints.work_beekeeper or {},
+    dialogue = "profession_work",
+    quests = {},
+    interactRange = WO.Config.InteractDistance,
+})
