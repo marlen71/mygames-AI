@@ -478,34 +478,38 @@ local function PlayerDistanceFrom(position)
 end
 
 local function DrawLumberSequence(task, x, y, w)
-    local sequence = task.sequence or {}
     local keyLabels = { up = "W", left = "A", down = "S", right = "D" }
-    local count = #sequence
-    if count < 1 then return end
+    local length = math.max(1, math.floor(tonumber(task.sequenceLength) or 6))
+    local completed = math.Clamp(math.floor(tonumber(task.sequenceCount) or
+        ((tonumber(task.sequenceIndex) or 1) - 1)), 0, length)
+    local prompt = keyLabels[task.sequencePrompt] or "?"
+    local centerX = x + w * 0.5
+    local promptY = y + 108
+    local feedback = "Нажмите показанную клавишу."
+    local feedbackColor = WO.UI.Colors.textDim
 
-    local gap = 8
-    local boxWidth = math.max(34, math.min(64,
-        math.floor((w - 52 - gap * (count - 1)) / count)))
-    local rowWidth = count * boxWidth + (count - 1) * gap
-    local startX = x + (w - rowWidth) * 0.5
-    local boxY = y + 128
-    local current = math.Clamp(tonumber(task.sequenceIndex) or 1, 1, count + 1)
-
-    for index, direction in ipairs(sequence) do
-        local boxX = startX + (index - 1) * (boxWidth + gap)
-        local completed = index < current
-        local active = index == current
-        local fill = completed and WO.UI.Colors.good or
-            active and WO.UI.Colors.accent or Color(36, 47, 63, 245)
-        draw.RoundedBox(6, boxX, boxY, boxWidth, 40, fill)
-        DrawText(keyLabels[direction] or "?", "WO.Body", boxX + boxWidth * 0.5,
-            boxY + 20, WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    if task.sequenceLastInputCorrect == true then
+        feedback = "Верно! Следующая подсказка уже готова."
+        feedbackColor = WO.UI.Colors.good
+    elseif task.sequenceLastInputCorrect == false then
+        feedback = "Не та клавиша — попробуйте ещё раз."
+        feedbackColor = WO.UI.Colors.bad
     end
 
-    DrawText("Повторите WASD по порядку", "WO.Small", x + 26, y + 102,
-        WO.UI.Colors.textDim)
-    DrawProgress(x + 26, y + 179, math.max(180, w - 52), 14, task.progress,
-        WO.UI.Colors.good)
+    DrawText("ОДНА СЛУЧАЙНАЯ КЛАВИША ЗА РАЗ", "WO.Tiny", centerX, y + 84,
+        WO.UI.Colors.accent, TEXT_ALIGN_CENTER)
+    draw.RoundedBox(8, centerX - 31, promptY, 62, 54, Color(36, 47, 63, 245))
+    surface.SetDrawColor(212, 175, 55, 235)
+    surface.DrawOutlinedRect(centerX - 31, promptY, 62, 54, 2)
+    DrawText(prompt, "WO.Title", centerX, promptY + 27, WO.UI.Colors.text,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    DrawText(tostring(completed) .. " / " .. tostring(length) .. " верных нажатий",
+        "WO.Tiny", centerX, y + 168, WO.UI.Colors.text,
+        TEXT_ALIGN_CENTER)
+    DrawProgress(x + 26, y + 187, math.max(180, w - 52), 12,
+        tonumber(task.progress) or completed / length, WO.UI.Colors.good)
+    DrawText(feedback, "WO.Tiny", centerX, y + 205, feedbackColor,
+        TEXT_ALIGN_CENTER)
 end
 
 local function DrawLumberDelivery(task, x, y, w)

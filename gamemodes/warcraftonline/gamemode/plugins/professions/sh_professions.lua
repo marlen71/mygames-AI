@@ -45,7 +45,7 @@ WO.Professions.MiniGames = WO.Professions.MiniGames or {
     delivery = { engine = "delivery", label = "Перенос груза", controls = "Заберите груз у точки и доставьте его, пройдя нужное расстояние." },
     lumber_delivery = {
         engine = "lumber", label = "Перенос брёвен",
-        controls = "E — взять/сдать брёвна · у штабеля повторите WASD-последовательность.",
+        controls = "E — взять/сдать брёвна · нажмите шесть случайных подсказок WASD по очереди.",
     },
     timing = { engine = "hold", label = "Рабочий ритм", controls = "Удерживайте ПРОБЕЛ в зелёной зоне." },
 

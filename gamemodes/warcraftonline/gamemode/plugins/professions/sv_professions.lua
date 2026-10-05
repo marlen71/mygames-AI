@@ -10,6 +10,11 @@ local LUMBER_MIN_CARRY_DISTANCE_FRACTION = 0.70
 local PROGRESS_SYNC_INTERVAL = 0.25
 local MAX_SAVED_XP = 10000000
 local warnedMissingLumberSWEP = false
+local LUMBER_DIRECTIONS = { "up", "left", "down", "right" }
+
+local function RandomLumberDirection()
+    return LUMBER_DIRECTIONS[math.random(1, #LUMBER_DIRECTIONS)]
+end
 
 local function EnsureState(char)
     char.professions = istable(char.professions) and char.professions or {}
@@ -251,23 +256,10 @@ local function BuildTask(ply, shift, orderIndex)
         task.requiredDistance = math.floor(routeDistance * LUMBER_MIN_CARRY_DISTANCE_FRACTION)
         task.carryWeaponClass = site.carryWeaponClass
         task.carriedDistance = 0
-        task.sequence = {}
         task.sequenceIndex = 1
-
-        local sequenceLength = math.Clamp(math.floor(tonumber(site.sequenceLength) or 4), 3, 8)
-        local directions = { "up", "left", "down", "right" }
-        local previousDirection
-
-        for index = 1, sequenceLength do
-            local direction = directions[math.random(1, #directions)]
-
-            while direction == previousDirection do
-                direction = directions[math.random(1, #directions)]
-            end
-
-            task.sequence[index] = direction
-            previousDirection = direction
-        end
+        task.sequenceLength = math.Clamp(math.floor(tonumber(site.sequenceLength) or 6), 3, 8)
+        task.sequencePrompt = nil
+        task.lastInputCorrect = nil
 
         return task
     end
@@ -373,6 +365,25 @@ local function Snapshot(char)
 
         if istable(task) then
             local gameMode = WO.Professions.GetMiniGame(task.mode)
+            local sequenceSnapshot = CopySequence(task.sequence)
+            local sequencePrompt
+            local sequenceCount
+            local sequenceLength
+            local sequenceLastInputCorrect
+
+            if gameMode and gameMode.engine == "lumber" then
+                -- Keep the remaining randomized WASD prompts server-side. The client
+                -- sees only the current key, so later prompts are revealed in turn.
+                sequenceSnapshot = nil
+
+                if task.phase == "work" then
+                    sequencePrompt = task.sequencePrompt
+                    sequenceCount = math.max(0, (task.sequenceIndex or 1) - 1)
+                    sequenceLength = tonumber(task.sequenceLength) or 0
+                    sequenceLastInputCorrect = task.lastInputCorrect
+                end
+            end
+
             shiftPayload.task = {
                 orderIndex = task.orderIndex,
                 mode = task.mode,
@@ -397,8 +408,12 @@ local function Snapshot(char)
                 targetCenter = task.targetCenter,
                 targetWidth = task.targetWidth,
                 axis = task.axis,
-                sequence = CopySequence(task.sequence),
+                sequence = sequenceSnapshot,
                 sequenceIndex = task.sequenceIndex,
+                sequencePrompt = sequencePrompt,
+                sequenceCount = sequenceCount,
+                sequenceLength = sequenceLength,
+                sequenceLastInputCorrect = sequenceLastInputCorrect,
                 expectedInput = task.expectedInput,
                 actionCount = task.actionCount,
                 requiredActions = task.requiredActions,
@@ -552,6 +567,8 @@ function WO.Professions.HandleInput(ply, shiftId, action, value)
 
             task.phase = "work"
             task.sequenceIndex = 1
+            task.sequencePrompt = RandomLumberDirection()
+            task.lastInputCorrect = nil
             task.progress = 0
             task.totalActions = 0
             task.goodActions = 0
@@ -561,7 +578,7 @@ function WO.Professions.HandleInput(ply, shiftId, action, value)
             task.nextSync = now + PROGRESS_SYNC_INTERVAL
             MarkRevision(char)
             WO.Professions.Sync(ply)
-            WO.Notify(ply, "info", "Повторите последовательность WASD, чтобы поднять связку брёвен.")
+            WO.Notify(ply, "info", "Правильно нажмите шесть случайных подсказок WASD по одной, чтобы поднять связку брёвен.")
             return true
         end
 
@@ -626,7 +643,10 @@ function WO.Professions.HandleInput(ply, shiftId, action, value)
     local isDirection = action == "left" or action == "right" or action == "up" or action == "down"
 
     if isDirection and engine == "lumber" then
-        if task.phase ~= "work" or not istable(task.sequence) or #task.sequence < 1 then
+        local prompt = task.sequencePrompt
+        if task.phase ~= "work" or not isnumber(task.sequenceLength) or
+            task.sequenceLength < 1 or
+            (prompt ~= "up" and prompt ~= "left" and prompt ~= "down" and prompt ~= "right") then
             return false, "wrong_task"
         end
 
@@ -643,22 +663,28 @@ function WO.Professions.HandleInput(ply, shiftId, action, value)
 
         task.lastActionAt = now
         task.totalActions = (task.totalActions or 0) + 1
-        local expected = task.sequence[task.sequenceIndex or 1]
+        local sequenceIndex = task.sequenceIndex or 1
+        local successful = action == prompt
+        task.lastInputCorrect = successful
 
-        if action == expected then
-            task.sequenceIndex = (task.sequenceIndex or 1) + 1
+        if successful then
+            task.sequenceIndex = sequenceIndex + 1
             task.goodActions = (task.goodActions or 0) + 1
+            task.sequencePrompt = task.sequenceIndex <= task.sequenceLength and
+                RandomLumberDirection() or nil
         else
+            -- Keep the same randomized prompt active; only correct presses count.
             task.badActions = (task.badActions or 0) + 1
-            task.sequenceIndex = action == task.sequence[1] and 2 or 1
         end
 
-        task.progress = math.Clamp(((task.sequenceIndex or 1) - 1) / #task.sequence, 0, 1)
+        task.progress = math.Clamp(((task.sequenceIndex or 1) - 1) / task.sequenceLength, 0, 1)
 
-        if task.sequenceIndex > #task.sequence then
+        if task.sequenceIndex > task.sequenceLength then
             local weapon = GiveLumberCarryWeapon(ply, shift)
             if not IsValid(weapon) then
                 task.sequenceIndex = 1
+                task.sequencePrompt = RandomLumberDirection()
+                task.lastInputCorrect = nil
                 task.progress = 0
                 task.nextSync = now
                 WO.Professions.Sync(ply)
@@ -1067,6 +1093,8 @@ hook.Add("PlayerDeath", "wo_professions_lumber_death", function(ply)
 
     task.phase = "pickup"
     task.sequenceIndex = 1
+    task.sequencePrompt = nil
+    task.lastInputCorrect = nil
     task.progress = 0
     task.goodActions = 0
     task.badActions = 0

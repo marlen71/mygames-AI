@@ -1217,12 +1217,18 @@ MOCK.Assert(ChooseWorkDialogueAction(workPlayer, "profession_rank:1"),
 local shift = workCharacter.activeProfessionShift
 MOCK.Assert(shift and shift.npcId == workNPCDef.id and shift.status == "working" and
     shift.rank == 1 and shift.task.mode == "lumber_delivery" and shift.task.engine == "lumber" and
-    shift.task.phase == "pickup" and shift.task.sequence and #shift.task.sequence == 4 and
+    shift.task.phase == "pickup" and shift.task.sequence == nil and shift.task.sequenceLength == 6 and
     shift.task.pickupPos == lumberWorksite.pickupPos and
     shift.task.deliveryPos == lumberWorksite.deliveryPos and
     shift.bonus == lumberjackBonus,
     "NPC запускает перенос брёвен между точными рабочими точками на выбранной ступени")
 local firstShiftID = shift.id
+local initialProfessionSnapshots = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
+local initialProfessionTask = initialProfessionSnapshots[#initialProfessionSnapshots] and
+    initialProfessionSnapshots[#initialProfessionSnapshots].args[1].shift.task
+MOCK.Assert(initialProfessionTask and initialProfessionTask.sequence == nil and
+    initialProfessionTask.sequencePrompt == nil,
+    "сервер не раскрывает клиенту будущие клавиши WASD до начала мини-игры")
 
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
 local duplicateStart, duplicateReason = WO.Professions.StartShift(workPlayer, "lumberjack", 1)
@@ -1240,11 +1246,14 @@ MOCK.Assert(shift.task.progress == 0,
 
 MOCK.AdvanceTime(1.1)
 
+local lumberPromptDirections = { up = true, left = true, down = true, right = true }
+
 local function CompleteLumberOrder(checkCarryRestrictions)
     local task = shift.task
     MOCK.Assert(task and task.mode == "lumber_delivery" and task.engine == "lumber" and
-        task.phase == "pickup" and #task.sequence == 4,
-        "каждый заказ первой ступени лесоруба требует переноса связки брёвен")
+        task.phase == "pickup" and task.sequence == nil and task.sequenceLength == 6 and
+        task.sequencePrompt == nil,
+        "каждый заказ первой ступени лесоруба требует шесть случайных клавиш и перенос связки брёвен")
 
     workPlayer:SetPos(task.pickupPos + Vector(500, 0, 0))
     MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", true } }, 8, workPlayer)
@@ -1253,8 +1262,14 @@ local function CompleteLumberOrder(checkCarryRestrictions)
     workPlayer:SetPos(task.pickupPos)
     MOCK.AdvanceTime(0.12)
     MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", true } }, 8, workPlayer)
-    MOCK.Assert(task.phase == "work" and task.sequenceIndex == 1,
-        "E у точного штабеля запускает последовательность WASD")
+    local promptMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
+    local promptTask = promptMessages[#promptMessages] and promptMessages[#promptMessages].args[1].shift.task
+    MOCK.Assert(task.phase == "work" and task.sequenceIndex == 1 and task.sequence == nil and
+        task.sequenceLength == 6 and lumberPromptDirections[task.sequencePrompt] and
+        promptTask and promptTask.sequence == nil and
+        promptTask.sequencePrompt == task.sequencePrompt and promptTask.sequenceCount == 0 and
+        promptTask.sequenceLength == 6,
+        "E у штабеля генерирует и раскрывает только первую из шести случайных клавиш")
 
     local workMove = {
         forward = 100, side = -50, up = 25,
@@ -1266,25 +1281,49 @@ local function CompleteLumberOrder(checkCarryRestrictions)
     MOCK.Assert(workMove.forward == 0 and workMove.side == 0 and workMove.up == 0,
         "WASD-мини-игра не сдвигает персонажа с точки заготовки")
 
-    local firstDirection = task.sequence[1]
+    local firstDirection = task.sequencePrompt
     local wrongDirection = firstDirection == "up" and "down" or "up"
     MOCK.AdvanceTime(0.12)
     MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
         shift.id, wrongDirection, true,
     } }, 8, workPlayer)
-    MOCK.Assert(task.sequenceIndex == 1 and task.progress == 0,
-        "неверная WASD-кнопка сбрасывает последовательность, не выдавая связку")
+    local incorrectMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
+    local incorrectTask = incorrectMessages[#incorrectMessages] and
+        incorrectMessages[#incorrectMessages].args[1].shift.task
+    MOCK.Assert(task.sequenceIndex == 1 and task.progress == 0 and
+        task.lastInputCorrect == false and incorrectTask and
+        incorrectTask.sequence == nil and incorrectTask.sequencePrompt == firstDirection and
+        incorrectTask.sequenceCount == 0 and incorrectTask.sequenceLastInputCorrect == false,
+        "неверная WASD-кнопка не засчитывается, оставляет ту же подсказку и сохраняет счёт 0/6")
 
-    for _, direction in ipairs(task.sequence) do
+    for index = 1, task.sequenceLength do
+        local direction = task.sequencePrompt
+        MOCK.Assert(lumberPromptDirections[direction],
+            "сервер хранит только одну из четырёх случайных клавиш текущей подсказки")
         MOCK.AdvanceTime(0.12)
         MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, direction, true } }, 8, workPlayer)
+        MOCK.Assert(task.sequenceIndex == index + 1 and task.lastInputCorrect == true and
+            task.sequence == nil,
+            "каждая правильная случайная клавиша засчитывается ровно один раз")
+
+        if index == 1 then
+            local nextPromptMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
+            local nextPromptTask = nextPromptMessages[#nextPromptMessages] and
+                nextPromptMessages[#nextPromptMessages].args[1].shift.task
+            MOCK.Assert(nextPromptTask and nextPromptTask.sequence == nil and
+                nextPromptTask.sequencePrompt == task.sequencePrompt and
+                lumberPromptDirections[nextPromptTask.sequencePrompt] and
+                nextPromptTask.sequenceCount == 1 and nextPromptTask.sequenceLength == 6,
+                "после правильного нажатия клиенту раскрывается только следующая подсказка")
+        end
     end
 
     local carryWeapon = workPlayer:GetWeapon(lumberWorksite.carryWeaponClass)
-    MOCK.Assert(task.phase == "carry" and IsValid(carryWeapon) and
+    MOCK.Assert(task.phase == "carry" and task.sequenceIndex == 7 and
+        task.sequencePrompt == nil and IsValid(carryWeapon) and
         carryWeapon.WOLumberShiftID == shift.id and workPlayer:GetActiveWeapon() == carryWeapon and
         WO.Professions.IsCarryingLumber(workPlayer),
-        "верная последовательность выдаёт и выбирает серверный SWEP связки брёвен")
+        "шесть правильных случайных нажатий выдают и выбирают серверный SWEP связки брёвен")
 
     if checkCarryRestrictions then
         local moveRestrictions = {}
@@ -1382,7 +1421,8 @@ local replayTask = replayShift.task
 workPlayer:SetPos(replayTask.pickupPos)
 MOCK.AdvanceTime(0.12)
 WO.Professions.HandleInput(workPlayer, replayShift.id, "pickup", true)
-for _, direction in ipairs(replayTask.sequence) do
+for _ = 1, replayTask.sequenceLength do
+    local direction = replayTask.sequencePrompt
     MOCK.AdvanceTime(0.12)
     WO.Professions.HandleInput(workPlayer, replayShift.id, direction, true)
 end

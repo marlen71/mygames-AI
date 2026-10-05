@@ -116,7 +116,7 @@ WO.Config.ProfessionWorksites.lumberjack = {
     pickupPos = Vector(-8878.8, 1141.9, -2802),
     deliveryPos = Vector(-7312.7, 1722.3, -2943.2),
     interactionRadius = 160,
-    sequenceLength = 4,
+    sequenceLength = 6,
     carryWeaponClass = "wo_lumber_logs",
     carryModel = "models/lumber/lumber.mdl",
 }

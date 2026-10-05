@@ -760,8 +760,8 @@ do
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
-                phase = "pickup", progress = 0, elapsed = 0, sequence = { "up", "left", "down", "right" },
-                sequenceIndex = 1, pickupPos = lumberPickup, deliveryPos = lumberDelivery,
+                phase = "pickup", progress = 0, elapsed = 0, sequenceIndex = 1,
+                sequenceLength = 6, pickupPos = lumberPickup, deliveryPos = lumberDelivery,
                 interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
                 requiredDistance = 1175, carriedDistance = 0,
             },
@@ -796,8 +796,9 @@ do
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
-                phase = "work", progress = 0.25, elapsed = 0,
-                sequence = { "up", "left", "down", "right" }, sequenceIndex = 2,
+                phase = "work", progress = 0, elapsed = 0,
+                sequenceIndex = 1, sequencePrompt = "up", sequenceCount = 0,
+                sequenceLength = 6,
                 pickupPos = lumberPickup, deliveryPos = lumberDelivery,
                 interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
                 requiredDistance = 1175, carriedDistance = 0,
@@ -807,11 +808,14 @@ do
     MOCK.drawnTextValues = {}
     hook.GetTable().HUDPaint.wo_professions_world_hud()
     local shownDirections = { W = false, A = false, S = false, D = false }
+    local lumberCountLabel = false
     for _, text in ipairs(MOCK.drawnTextValues) do
         if shownDirections[text] ~= nil then shownDirections[text] = true end
+        lumberCountLabel = lumberCountLabel or text == "0 / 6 верных нажатий"
     end
-    MOCK.Assert(shownDirections.W and shownDirections.A and shownDirections.S and shownDirections.D,
-        "мини-игра лесоруба показывает последовательность кнопок W/A/S/D на HUD")
+    MOCK.Assert(shownDirections.W and not shownDirections.A and not shownDirections.S and
+        not shownDirections.D and lumberCountLabel,
+        "HUD показывает только одну текущую клавишу W и счётчик 0/6, не раскрывая следующие")
 
     MOCK.TakeOutbox()
     MOCK.keysDown[KEY_W] = true
@@ -833,8 +837,40 @@ do
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
+                phase = "work", progress = 1 / 6, elapsed = 0,
+                sequenceIndex = 2, sequencePrompt = "left", sequenceCount = 1,
+                sequenceLength = 6, sequenceLastInputCorrect = true,
+                pickupPos = lumberPickup, deliveryPos = lumberDelivery,
+                interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
+                requiredDistance = 1175, carriedDistance = 0,
+            },
+        },
+    } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    shownDirections = { W = false, A = false, S = false, D = false }
+    lumberCountLabel = false
+    local correctFeedback = false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        if shownDirections[text] ~= nil then shownDirections[text] = true end
+        lumberCountLabel = lumberCountLabel or text == "1 / 6 верных нажатий"
+        correctFeedback = correctFeedback or text == "Верно! Следующая подсказка уже готова."
+    end
+    MOCK.Assert(shownDirections.A and not shownDirections.W and not shownDirections.S and
+        not shownDirections.D and lumberCountLabel and correctFeedback,
+        "после правильного нажатия HUD сменяет подсказку на A и обновляет прогресс 1/6")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 8, skills = {},
+        shift = {
+            id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
+            npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
+            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            task = {
+                orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
+                title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
                 phase = "carry", progress = 1, elapsed = 0,
-                sequence = { "up", "left", "down", "right" }, sequenceIndex = 5,
+                sequenceIndex = 7, sequenceCount = 6, sequenceLength = 6,
                 pickupPos = lumberPickup, deliveryPos = lumberDelivery,
                 interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
                 requiredDistance = 1175, carriedDistance = 0,
@@ -864,7 +900,7 @@ do
         "E у склада отправляет серверу запрос сдачи брёвен")
 
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
-        characterId = "active-test-character", revision = 8, skills = {}, shift = nil,
+        characterId = "active-test-character", revision = 9, skills = {}, shift = nil,
     } } }, 8, nil)
 end
 
