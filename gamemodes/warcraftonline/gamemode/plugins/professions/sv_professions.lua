@@ -375,12 +375,12 @@ local function Snapshot(char)
                 -- Keep the remaining randomized WASD prompts server-side. The client
                 -- sees only the current key, so later prompts are revealed in turn.
                 sequenceSnapshot = nil
+                sequenceLastInputCorrect = task.lastInputCorrect
 
                 if task.phase == "work" then
                     sequencePrompt = task.sequencePrompt
                     sequenceCount = math.max(0, (task.sequenceIndex or 1) - 1)
                     sequenceLength = tonumber(task.sequenceLength) or 0
-                    sequenceLastInputCorrect = task.lastInputCorrect
                 end
             end
 
@@ -673,8 +673,21 @@ function WO.Professions.HandleInput(ply, shiftId, action, value)
             task.sequencePrompt = task.sequenceIndex <= task.sequenceLength and
                 RandomLumberDirection() or nil
         else
-            -- Keep the same randomized prompt active; only correct presses count.
             task.badActions = (task.badActions or 0) + 1
+            task.phase = "pickup"
+            task.sequenceIndex = 1
+            task.sequencePrompt = nil
+            task.lastInputCorrect = false
+            task.progress = 0
+            task.totalActions = 0
+            task.goodActions = 0
+            task.carryStartPos = nil
+            task.carriedDistance = 0
+            task.nextSync = now
+            MarkRevision(char)
+            WO.Professions.Sync(ply)
+            WO.Notify(ply, "error", "Неверная клавиша. Мини-игра провалена — подойдите к штабелю и нажмите E, чтобы начать заново.")
+            return true
         end
 
         task.progress = math.Clamp(((task.sequenceIndex or 1) - 1) / task.sequenceLength, 0, 1)

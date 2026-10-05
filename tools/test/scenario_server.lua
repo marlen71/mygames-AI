@@ -267,9 +267,9 @@ local lumberWorksite = WO.Config.ProfessionWorksites and WO.Config.ProfessionWor
 local lumberjackSpawn = WO.Config.NPCSpawnPoints.work_lumberjack[1]
 MOCK.Assert(lumberWorksite and lumberWorksite.map == "rp_lordaeron" and
     isvector(lumberWorksite.pickupPos) and
-    math.abs(lumberWorksite.pickupPos.x - (-8878.8)) < 0.01 and
-    math.abs(lumberWorksite.pickupPos.y - 1141.9) < 0.01 and
-    math.abs(lumberWorksite.pickupPos.z - (-2802)) < 0.01 and
+    math.abs(lumberWorksite.pickupPos.x - (-8583.5)) < 0.01 and
+    math.abs(lumberWorksite.pickupPos.y - 1422.4) < 0.01 and
+    math.abs(lumberWorksite.pickupPos.z - (-2772)) < 0.01 and
     isvector(lumberWorksite.deliveryPos) and
     math.abs(lumberWorksite.deliveryPos.x - (-7312.7)) < 0.01 and
     math.abs(lumberWorksite.deliveryPos.y - 1722.3) < 0.01 and
@@ -283,9 +283,12 @@ MOCK.Assert(lumberWorksite and lumberWorksite.map == "rp_lordaeron" and
     "лесной участок использует заданные точки, модель и координаты работодателя")
 local lumberSWEP = weapons.GetStored("wo_lumber_logs")
 MOCK.Assert(lumberSWEP and lumberSWEP.WorldModel == "models/lumber/lumber.mdl" and
-    lumberSWEP.HoldType == "physgun" and lumberSWEP.CanDrop() == false and
-    lumberSWEP.ShouldDropOnDie() == false,
-    "связка регистрируется как невыпадающий SWEP с точной моделью и позой переноса")
+    lumberSWEP.HoldType == "shotgun" and isfunction(lumberSWEP.DrawWorldModel) and
+    lumberSWEP.WOLumberCarryForwardOffset == 18 and
+    lumberSWEP.WOLumberCarryHeightOffset == -8 and
+    lumberSWEP.WOLumberCarryYawOffset == 90 and
+    lumberSWEP.CanDrop() == false and lumberSWEP.ShouldDropOnDie() == false,
+    "связка сохраняет точную модель, держится двумя руками перед персонажем и не выпадает")
 local humanMageFire = WO.Spells.GetMagicBonus({ race = "human", class = "mage" }, "fire")
 local humanPriestFire = WO.Spells.GetMagicBonus({ race = "human", class = "priest" }, "fire")
 local draeneiPriestLife = WO.Spells.GetMagicBonus({ race = "draenei", class = "priest" }, "life")
@@ -1294,14 +1297,42 @@ local function CompleteLumberOrder(checkCarryRestrictions)
     MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
         shift.id, wrongDirection, true,
     } }, 8, workPlayer)
-    local incorrectMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
+    local failureOutbox = MOCK.TakeOutbox()
+    local incorrectMessages = MOCK.FindInbox(failureOutbox, "Profession.Sync")
     local incorrectTask = incorrectMessages[#incorrectMessages] and
         incorrectMessages[#incorrectMessages].args[1].shift.task
-    MOCK.Assert(task.sequenceIndex == 1 and task.progress == 0 and
-        task.lastInputCorrect == false and incorrectTask and
-        incorrectTask.sequence == nil and incorrectTask.sequencePrompt == firstDirection and
-        incorrectTask.sequenceCount == 0 and incorrectTask.sequenceLastInputCorrect == false,
-        "неверная WASD-кнопка не засчитывается, оставляет ту же подсказку и сохраняет счёт 0/6")
+    local failureNotifications = MOCK.FindInbox(failureOutbox, "Notify.Show")
+    local failureNoticeShown = false
+    for _, message in ipairs(failureNotifications) do
+        failureNoticeShown = failureNoticeShown or
+            tostring(message.args[2]):find("Мини-игра провалена", 1, true) ~= nil
+    end
+    MOCK.Assert(task.phase == "pickup" and task.sequenceIndex == 1 and
+        task.sequencePrompt == nil and task.progress == 0 and task.lastInputCorrect == false and
+        task.badActions == 1 and incorrectTask and incorrectTask.phase == "pickup" and
+        incorrectTask.sequence == nil and incorrectTask.sequencePrompt == nil and
+        incorrectTask.sequenceLastInputCorrect == false and failureNoticeShown and
+        not WO.Professions.IsCarryingLumber(workPlayer) and
+        not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass),
+        "одна неверная WASD-клавиша проваливает попытку, сбрасывает фазу и не выдаёт связку")
+
+    local directionWithoutRestart = WO.Professions.HandleInput(workPlayer, shift.id,
+        wrongDirection, true)
+    MOCK.Assert(directionWithoutRestart == false and task.phase == "pickup" and
+        task.sequencePrompt == nil,
+        "после ошибки WASD не перезапускает мини-игру без нового нажатия E")
+
+    MOCK.AdvanceTime(0.12)
+    local restarted = WO.Professions.HandleInput(workPlayer, shift.id, "pickup", true)
+    local restartMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
+    local restartTask = restartMessages[#restartMessages] and
+        restartMessages[#restartMessages].args[1].shift.task
+    MOCK.Assert(restarted and task.phase == "work" and task.sequenceIndex == 1 and
+        lumberPromptDirections[task.sequencePrompt] and task.lastInputCorrect == nil and
+        task.badActions == 0 and not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
+        restartTask and restartTask.phase == "work" and restartTask.sequenceCount == 0 and
+        restartTask.sequencePrompt == task.sequencePrompt,
+        "повторное E у штабеля начинает новую шестиклавишную попытку с нуля")
 
     for index = 1, task.sequenceLength do
         local direction = task.sequencePrompt

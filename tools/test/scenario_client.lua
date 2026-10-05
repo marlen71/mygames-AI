@@ -749,7 +749,7 @@ do
         herbInput[1].args[2] == "choice4" and herbInput[1].args[3] == true,
         "идентификация травы использует четвёртую клавишу и отправляет её серверу")
 
-    local lumberPickup = Vector(-8878.8, 1141.9, -2802)
+    local lumberPickup = Vector(-8583.5, 1422.4, -2772)
     local lumberDelivery = Vector(-7312.7, 1722.3, -2943.2)
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
         characterId = "active-test-character", revision = 5, skills = {},
@@ -769,13 +769,15 @@ do
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
     hook.GetTable().HUDPaint.wo_professions_world_hud()
-    local lumberPickupHud = false
+    local lumberPickupHud, lumberPickupMarker = false, false
     for _, text in ipairs(MOCK.drawnTextValues) do
         lumberPickupHud = lumberPickupHud or text:find("ЛЕСНАЯ ЗАГОТОВКА", 1, true) ~= nil
+        lumberPickupMarker = lumberPickupMarker or text == "ШТАБЕЛЬ БРЁВЕН"
     end
     local lumberBind = hook.GetTable().PlayerBindPress.wo_professions_world_bind
-    MOCK.Assert(lumberPickupHud and lumberBind(LocalPlayer(), "+use", true) == true,
-        "точка брёвен и E отображаются на стилизованном мировом HUD без общего меню")
+    MOCK.Assert(lumberPickupHud and lumberPickupMarker and
+        lumberBind(LocalPlayer(), "+use", true) == true,
+        "активная смена показывает метку штабеля и E на мировом HUD без общего меню")
 
     MOCK.TakeOutbox()
     MOCK.keysDown[KEY_E] = true
@@ -805,8 +807,17 @@ do
             },
         },
     } } }, 8, nil)
+    local lumberWorldHud = hook.GetTable().HUDPaint.wo_professions_world_hud
+    local lumberMinigameHud = hook.GetTable().HUDPaint.wo_professions_lumber_minigame_hud
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    lumberWorldHud()
+    local pickupMarkerDuringWork = false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        pickupMarkerDuringWork = pickupMarkerDuringWork or text == "ШТАБЕЛЬ БРЁВЕН"
+    end
+    MOCK.Assert(pickupMarkerDuringWork and isfunction(lumberMinigameHud),
+        "во время мини-игры метка штабеля остаётся видимой, а у мини-игры есть отдельный HUD hook")
+    lumberMinigameHud()
     local shownDirections = { W = false, A = false, S = false, D = false }
     local lumberCountLabel = false
     for _, text in ipairs(MOCK.drawnTextValues) do
@@ -815,8 +826,83 @@ do
     end
     MOCK.Assert(shownDirections.W and not shownDirections.A and not shownDirections.S and
         not shownDirections.D and lumberCountLabel,
-        "HUD показывает только одну текущую клавишу W и счётчик 0/6, не раскрывая следующие")
+        "отдельный HUD мини-игры показывает только текущую клавишу W и счёт 0/6")
 
+    MOCK.TakeOutbox()
+    MOCK.keysDown[KEY_A] = true
+    hook.GetTable().Think.wo_professions_world_input()
+    MOCK.keysDown[KEY_A] = false
+    hook.GetTable().Think.wo_professions_world_input()
+    local lumberWrongInput = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
+    MOCK.Assert(#lumberWrongInput == 1 and lumberWrongInput[1].args[2] == "left" and
+        lumberWrongInput[1].args[3] == true and
+        lumberBind(LocalPlayer(), "+moveleft", true) == true,
+        "A отправляет одиночное серверное действие, а управление персонажем заблокировано")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 7, skills = {},
+        shift = {
+            id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
+            npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
+            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            task = {
+                orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
+                title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
+                phase = "pickup", progress = 0, elapsed = 0,
+                sequenceIndex = 1, sequenceLastInputCorrect = false,
+                sequenceLength = 6, pickupPos = lumberPickup, deliveryPos = lumberDelivery,
+                interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
+                requiredDistance = 1175, carriedDistance = 0,
+            },
+        },
+    } } }, 8, nil)
+    LocalPlayer():SetPos(lumberPickup)
+    MOCK.drawnTextValues = {}
+    lumberWorldHud()
+    lumberMinigameHud()
+    local lumberFailureShown, lumberRestartHint, failurePickupMarker = false, false, false
+    local stalePromptShown = false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        lumberFailureShown = lumberFailureShown or text == "МИНИ-ИГРА ПРОВАЛЕНА"
+        lumberRestartHint = lumberRestartHint or text:find("начать заново", 1, true) ~= nil
+        failurePickupMarker = failurePickupMarker or text == "ШТАБЕЛЬ БРЁВЕН"
+        stalePromptShown = stalePromptShown or text == "W" or text == "A" or text == "S" or text == "D"
+    end
+    MOCK.Assert(lumberFailureShown and lumberRestartHint and failurePickupMarker and
+        not stalePromptShown,
+        "после ошибки HUD показывает провал и повторное E у штабеля, но скрывает WASD-подсказку")
+
+    MOCK.TakeOutbox()
+    MOCK.keysDown[KEY_E] = true
+    hook.GetTable().Think.wo_professions_world_input()
+    MOCK.keysDown[KEY_E] = false
+    hook.GetTable().Think.wo_professions_world_input()
+    local lumberRestartInput = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
+    MOCK.Assert(#lumberRestartInput == 1 and lumberRestartInput[1].args[2] == "pickup" and
+        lumberRestartInput[1].args[3] == true,
+        "после провала клиент требует отдельное нажатие E для повтора")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 8, skills = {},
+        shift = {
+            id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
+            npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
+            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            task = {
+                orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
+                title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
+                phase = "work", progress = 0, elapsed = 0,
+                sequenceIndex = 1, sequencePrompt = "up", sequenceCount = 0,
+                sequenceLength = 6, sequenceLastInputCorrect = nil,
+                pickupPos = lumberPickup, deliveryPos = lumberDelivery,
+                interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
+                requiredDistance = 1175, carriedDistance = 0,
+            },
+        },
+    } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    lumberWorldHud()
+    lumberMinigameHud()
     MOCK.TakeOutbox()
     MOCK.keysDown[KEY_W] = true
     hook.GetTable().Think.wo_professions_world_input()
@@ -826,10 +912,10 @@ do
     MOCK.Assert(#lumberDirectionInput == 1 and lumberDirectionInput[1].args[2] == "up" and
         lumberDirectionInput[1].args[3] == true and
         lumberBind(LocalPlayer(), "+forward", true) == true,
-        "W отправляет ожидаемое направление, а движение персонажа заблокировано на время ввода")
+        "после повторного E новая подсказка W отправляется серверу, а движение заблокировано")
 
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
-        characterId = "active-test-character", revision = 7, skills = {},
+        characterId = "active-test-character", revision = 9, skills = {},
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
@@ -847,7 +933,8 @@ do
         },
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    lumberWorldHud()
+    lumberMinigameHud()
     shownDirections = { W = false, A = false, S = false, D = false }
     lumberCountLabel = false
     local correctFeedback = false
@@ -861,7 +948,7 @@ do
         "после правильного нажатия HUD сменяет подсказку на A и обновляет прогресс 1/6")
 
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
-        characterId = "active-test-character", revision = 8, skills = {},
+        characterId = "active-test-character", revision = 10, skills = {},
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
@@ -900,7 +987,51 @@ do
         "E у склада отправляет серверу запрос сдачи брёвен")
 
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
-        characterId = "active-test-character", revision = 9, skills = {}, shift = nil,
+        characterId = "active-test-character", revision = 11, skills = {},
+        shift = {
+            id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
+            npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
+            completedOrders = 1, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            task = {
+                orderIndex = 2, mode = "lumber_delivery", engine = "lumber",
+                title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
+                phase = "pickup", progress = 0, sequenceLength = 6,
+                pickupPos = lumberPickup, deliveryPos = lumberDelivery,
+                interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
+                requiredDistance = 1175, carriedDistance = 0,
+            },
+        },
+    } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    lumberWorldHud()
+    local nextOrderPickupMarker, staleDeliveryMarker = false, false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        nextOrderPickupMarker = nextOrderPickupMarker or text == "ШТАБЕЛЬ БРЁВЕН"
+        staleDeliveryMarker = staleDeliveryMarker or text == "СКЛАД БРЁВЕН"
+    end
+    MOCK.Assert(nextOrderPickupMarker and not staleDeliveryMarker,
+        "после сдачи связки метка переносится со склада обратно к штабелю следующего заказа")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 12, skills = {},
+        shift = {
+            id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
+            npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
+            completedOrders = 3, requiredOrders = 3, status = "ready", basePay = 32, bonus = 0,
+        },
+    } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    lumberWorldHud()
+    local markerShownOutsideWork = false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        markerShownOutsideWork = markerShownOutsideWork or
+            text == "ШТАБЕЛЬ БРЁВЕН" or text == "СКЛАД БРЁВЕН"
+    end
+    MOCK.Assert(not markerShownOutsideWork,
+        "мировые метки лесоруба исчезают после завершения рабочих заказов")
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 13, skills = {}, shift = nil,
     } } }, 8, nil)
 end
 

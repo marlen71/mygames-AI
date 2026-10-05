@@ -535,10 +535,23 @@ local function DrawLumberDelivery(task, x, y, w)
 
     if task.phase == "pickup" then
         local distance = PlayerDistanceFrom(task.pickupPos)
-        DrawText("ЛЕСНАЯ ЗАГОТОВКА", "WO.Tiny", x + 26, y + 87, WO.UI.Colors.accent)
-        DrawText(distance and distance <= radius and "У штабеля — нажмите E, чтобы начать." or
-            ("До брёвен: " .. tostring(math.floor(distance or 0)) .. " ед."),
-            "WO.Body", x + 26, y + 116)
+        local atPickup = distance and distance <= radius
+        local failed = task.sequenceLastInputCorrect == false
+        local headline = failed and "МИНИ-ИГРА ПРОВАЛЕНА" or "ЛЕСНАЯ ЗАГОТОВКА"
+        local prompt
+        if atPickup then
+            prompt = failed and "У штабеля — нажмите E, чтобы начать заново." or
+                "У штабеля — нажмите E, чтобы начать."
+        elseif failed then
+            prompt = "Вернитесь к штабелю · E для повтора: " ..
+                tostring(math.floor(distance or 0)) .. " ед."
+        else
+            prompt = "Вернитесь к брёвнам: " .. tostring(math.floor(distance or 0)) .. " ед."
+        end
+        DrawText(headline, "WO.Tiny", x + 26, y + 87,
+            failed and WO.UI.Colors.bad or WO.UI.Colors.accent)
+        DrawText(prompt, "WO.Body", x + 26, y + 116,
+            failed and WO.UI.Colors.bad or WO.UI.Colors.text)
         DrawText(task.instruction or "", "WO.Small", x + 26, y + 157, WO.UI.Colors.textDim)
     elseif task.phase == "carry" then
         local distance = PlayerDistanceFrom(task.deliveryPos)
@@ -558,16 +571,34 @@ local function DrawLumberDelivery(task, x, y, w)
     end
 end
 
-local function DrawLumberWorldMarker(task)
+local function DrawLumberWorldMarker(task, shift)
+    if not shift or shift.status ~= "working" then return end
+
     local carrying = task.phase == "carry"
     local position = carrying and task.deliveryPos or task.pickupPos
     if not isvector(position) then return end
 
     local screen = position:ToScreen()
-    if not screen or screen.visible ~= true then return end
+    if not screen then return end
+
+    local x, y = tonumber(screen.x), tonumber(screen.y)
+    if screen.visible ~= true or not x or not y then
+        local ply = LocalPlayer()
+        if not IsValid(ply) or not isfunction(ply.EyePos) or not isfunction(ply.EyeAngles) then return end
+
+        local directionAngles = (position - ply:EyePos()):Angle()
+        local relativeYaw = ((directionAngles.y - ply:EyeAngles().y + 180) % 360) - 180
+        local radians = math.rad(relativeYaw)
+        local directionX, directionY = math.sin(radians), -math.cos(radians)
+        local halfWidth, halfHeight = ScrW() * 0.5, ScrH() * 0.5
+        local edgeX, edgeY = math.max(1, halfWidth - 48), math.max(1, halfHeight - 64)
+        local scale = math.min(edgeX / math.max(math.abs(directionX), 0.001),
+            edgeY / math.max(math.abs(directionY), 0.001))
+        x = halfWidth + directionX * scale
+        y = halfHeight + directionY * scale
+    end
 
     local label = carrying and "СКЛАД БРЁВЕН" or "ШТАБЕЛЬ БРЁВЕН"
-    local x, y = tonumber(screen.x) or 0, tonumber(screen.y) or 0
     draw.RoundedBox(6, x - 7, y - 7, 14, 14, WO.UI.Colors.accent)
     DrawText(label, "WO.Tiny", x, y + 12, WO.UI.Colors.accent,
         TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
@@ -583,12 +614,6 @@ local function DrawWorldShift()
     local task = shift.task
     local mode = task and WO.Professions.GetMiniGame(task.mode) or nil
     local rank = def.ranks[math.Clamp(tonumber(shift.rank) or 1, 1, 3)]
-
-    if shift.status == "working" and task and mode and mode.engine == "lumber" and
-        task.phase == "work" then
-        DrawLumberSequence(task, shift, def, rank)
-        return
-    end
 
     local w, h = math.min(470, ScrW() - 32), 246
     local x, y = 24, ScrH() - h - 28
@@ -645,13 +670,26 @@ local function DrawWorldShift()
         DrawDelivery(task, shift, x, y, w)
     elseif mode.engine == "lumber" then
         DrawLumberDelivery(task, x, y, w)
-        DrawLumberWorldMarker(task)
+        DrawLumberWorldMarker(task, shift)
     end
 
     if mode.controls and mode.controls ~= "" and mode.engine ~= "delivery" then
         DrawText(mode.controls, "WO.Tiny", x + 18, y + h - 24,
             WO.UI.Colors.textDim)
     end
+end
+
+local function DrawLumberMinigameHUD()
+    local shift = CurrentShift()
+    if not shift or shift.status ~= "working" then return end
+
+    local task = shift.task
+    local mode = task and WO.Professions.GetMiniGame(task.mode) or nil
+    if not task or task.phase ~= "work" or not mode or mode.engine ~= "lumber" then return end
+
+    local def = WO.Professions.Get(shift.professionId)
+    local rank = def and def.ranks[math.Clamp(tonumber(shift.rank) or 1, 1, 3)] or nil
+    DrawLumberSequence(task, shift, def, rank)
 end
 
 hook.Add("Think", "wo_professions_world_input", function()
@@ -683,6 +721,7 @@ hook.Add("Think", "wo_professions_world_input", function()
 end)
 
 hook.Add("HUDPaint", "wo_professions_world_hud", DrawWorldShift)
+hook.Add("HUDPaint", "wo_professions_lumber_minigame_hud", DrawLumberMinigameHUD)
 
 hook.Add("PlayerBindPress", "wo_professions_world_bind", function(ply, bind)
     if ply ~= LocalPlayer() then return end
