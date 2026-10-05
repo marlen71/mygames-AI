@@ -7,6 +7,8 @@
 WO.ProfessionsUI = WO.ProfessionsUI or {}
 
 local requestedCharacter = nil
+local nextSnapshotRequestAt = 0
+local nextNoShiftProbeAt = 0
 local inputContext = nil
 local previousKeys = {}
 local sentStates = {}
@@ -37,14 +39,29 @@ function WO.ProfessionsUI.GetCurrentShift()
     return CurrentShift()
 end
 
-local function RequestSnapshot()
+local function RequestSnapshot(force)
     local char = LocalCharacter()
     if not char or not isstring(char.id) or char.id == "" then return end
 
+    local data = WO.Professions.ClientData
+    if not force and istable(data) and data.characterId == char.id then
+        requestedCharacter = char.id
+        return
+    end
+
     if requestedCharacter ~= char.id then
         requestedCharacter = char.id
-        WO.Net.SendToServer("Profession.SyncRequest")
+        nextSnapshotRequestAt = 0
     end
+
+    local now = CurTime()
+    if now < nextSnapshotRequestAt then return end
+
+    -- Retry while the client has no snapshot for this character. A single
+    -- request can be lost during character selection/reconnect; the server's
+    -- rate limit is three requests per five seconds.
+    nextSnapshotRequestAt = now + 2.5
+    WO.Net.SendToServer("Profession.SyncRequest")
 end
 
 local function SendInput(shiftId, action, value)
@@ -87,6 +104,16 @@ local function ResetInputState()
     sentShiftId = nil
     inputContext = nil
 end
+
+local function ResetProfessionSyncState()
+    requestedCharacter = nil
+    nextSnapshotRequestAt = 0
+    nextNoShiftProbeAt = 0
+    WO.Professions.ClientData = nil
+    ResetInputState()
+end
+
+WO.Hook.Add("CharacterSynced", "professions_client_sync", ResetProfessionSyncState)
 
 local function GetInputContext(shift, task)
     return table.concat({ tostring(shift and shift.id or ""), tostring(shift and shift.status or ""),
@@ -477,6 +504,21 @@ local function PlayerDistanceFrom(position)
     return ply:GetPos():Distance(position)
 end
 
+local function IsNearLumberPickup()
+    local site = WO.Config and WO.Config.ProfessionWorksites and
+        WO.Config.ProfessionWorksites.lumberjack
+    local ply = LocalPlayer()
+
+    if not istable(site) or not isvector(site.pickupPos) or
+        not game or not isfunction(game.GetMap) or game.GetMap() ~= site.map or
+        not IsValid(ply) then
+        return false
+    end
+
+    local radius = math.max(1, tonumber(site.interactionRadius) or 160)
+    return ply:GetPos():Distance(site.pickupPos) <= radius
+end
+
 local function DrawLumberSequence(task, shift, def, rank)
     local keyLabels = { up = "W", left = "A", down = "S", right = "D" }
     local length = math.max(1, math.floor(tonumber(task.sequenceLength) or 6))
@@ -599,14 +641,55 @@ local function DrawLumberWorldMarker(task, shift)
     end
 
     local label = carrying and "СКЛАД БРЁВЕН" or "ШТАБЕЛЬ БРЁВЕН"
-    draw.RoundedBox(6, x - 7, y - 7, 14, 14, WO.UI.Colors.accent)
-    DrawText(label, "WO.Tiny", x, y + 12, WO.UI.Colors.accent,
-        TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+    draw.RoundedBox(12, x - 12, y - 12, 24, 24, Color(8, 12, 18, 245))
+    surface.SetDrawColor(212, 175, 55, 255)
+    surface.DrawOutlinedRect(x - 12, y - 12, 24, 24, 2)
+    draw.RoundedBox(6, x - 76, y + 17, 152, 24, Color(8, 12, 18, 238))
+    DrawText(label, "WO.Tiny", x, y + 29, WO.UI.Colors.accent,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+end
+
+local function DrawLumberWorksiteStatusHint()
+    local char = LocalCharacter()
+    local site = WO.Config and WO.Config.ProfessionWorksites and
+        WO.Config.ProfessionWorksites.lumberjack
+    local ply = LocalPlayer()
+
+    if not char or not istable(site) or not isvector(site.pickupPos) or
+        not game or not isfunction(game.GetMap) or game.GetMap() ~= site.map or
+        not IsValid(ply) then
+        return
+    end
+
+    local distance = ply:GetPos():Distance(site.pickupPos)
+    local radius = math.max(1, tonumber(site.interactionRadius) or 160)
+    if distance > radius then return end
+
+    local data = WO.Professions.ClientData
+    local hasMatchingSnapshot = istable(data) and data.characterId == char.id
+    if hasMatchingSnapshot and istable(data.shift) then return end
+
+    local title = hasMatchingSnapshot and "СМЕНА ЛЕСОРУБА НЕ НАЧАТА" or
+        "СИНХРОНИЗАЦИЯ СМЕНЫ"
+    local instruction = hasMatchingSnapshot and
+        "Возьмите смену у NPC «Лесоруб», затем нажмите E у штабеля." or
+        "Не получен статус профессии. Повторно запрашиваем его у сервера…"
+    local width, height = math.min(520, ScrW() - 32), 82
+    local x, y = (ScrW() - width) * 0.5, ScrH() - height - 24
+
+    draw.RoundedBox(10, x, y, width, height, Color(10, 15, 23, 238))
+    surface.SetDrawColor(196, 155, 75, 230)
+    surface.DrawOutlinedRect(x, y, width, height, 2)
+    DrawText(title, "WO.Subtitle", x + 18, y + 12, WO.UI.Colors.accent)
+    DrawText(instruction, "WO.Small", x + 18, y + 47, WO.UI.Colors.text)
 end
 
 local function DrawWorldShift()
     local shift = CurrentShift()
-    if not shift then return end
+    if not shift then
+        DrawLumberWorksiteStatusHint()
+        return
+    end
 
     local def = WO.Professions.Get(shift.professionId)
     if not def then return end
@@ -616,7 +699,7 @@ local function DrawWorldShift()
     local rank = def.ranks[math.Clamp(tonumber(shift.rank) or 1, 1, 3)]
 
     local w, h = math.min(470, ScrW() - 32), 246
-    local x, y = 24, ScrH() - h - 28
+    local x, y = 24, math.max(24, ScrH() - h - 150)
 
     draw.RoundedBox(10, x, y, w, h, Color(12, 17, 25, 232))
     surface.SetDrawColor(196, 155, 75, 235)
@@ -697,6 +780,12 @@ hook.Add("Think", "wo_professions_world_input", function()
     local shift = CurrentShift()
 
     if not shift then
+        local now = CurTime()
+        if KeyDown(KEY_E) and now >= nextNoShiftProbeAt and IsNearLumberPickup() then
+            nextNoShiftProbeAt = now + 2.5
+            RequestSnapshot(true)
+        end
+
         ResetInputState()
         return
     end
@@ -782,7 +871,7 @@ hook.Add("PlayerBindPress", "wo_professions_world_bind", function(ply, bind)
     end
 end)
 
-hook.Add("CharacterMenuOpening", "professions_reset_world_controls", ResetInputState)
+hook.Add("CharacterMenuOpening", "professions_reset_world_controls", ResetProfessionSyncState)
 
 WO.Hook.Add("ProfessionsSynced", "professions_world_ui", function()
     local shift = CurrentShift()

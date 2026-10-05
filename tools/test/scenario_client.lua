@@ -751,6 +751,42 @@ do
 
     local lumberPickup = Vector(-8583.5, 1422.4, -2772)
     local lumberDelivery = Vector(-7312.7, 1722.3, -2943.2)
+    local previousLumberTestMap = MOCK.mapName
+    MOCK.mapName = "rp_lordaeron"
+    LocalPlayer():SetPos(lumberPickup)
+
+    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
+        characterId = "active-test-character", revision = 4, skills = {}, shift = nil,
+    } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    local noShiftHint, falseMarker = false, false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        noShiftHint = noShiftHint or text == "СМЕНА ЛЕСОРУБА НЕ НАЧАТА"
+        falseMarker = falseMarker or text == "ШТАБЕЛЬ БРЁВЕН" or text == "СКЛАД БРЁВЕН"
+    end
+    MOCK.Assert(noShiftHint and not falseMarker,
+        "у штабеля без активной смены показывается объяснение, но не появляется метка")
+
+    MOCK.TakeOutbox()
+    MOCK.keysDown[KEY_E] = true
+    hook.GetTable().Think.wo_professions_world_input()
+    MOCK.keysDown[KEY_E] = false
+    hook.GetTable().Think.wo_professions_world_input()
+    local noShiftProbeRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.SyncRequest")
+    MOCK.Assert(#noShiftProbeRequest == 1,
+        "E у штабеля перепроверяет состояние смены даже при локальном снимке без работы")
+
+    hook.GetTable().CharacterMenuOpening.professions_reset_world_controls()
+    MOCK.TakeOutbox()
+    hook.GetTable().Think.wo_professions_world_input()
+    local initialSnapshotRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.SyncRequest")
+    MOCK.AdvanceTime(2.6)
+    hook.GetTable().Think.wo_professions_world_input()
+    local retriedSnapshotRequest = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.SyncRequest")
+    MOCK.Assert(#initialSnapshotRequest == 1 and #retriedSnapshotRequest == 1,
+        "если снимок профессии потерян, клиент повторно запрашивает его с rate-limit интервалом")
+
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
         characterId = "active-test-character", revision = 5, skills = {},
         shift = {
@@ -1033,6 +1069,7 @@ do
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
         characterId = "active-test-character", revision = 13, skills = {}, shift = nil,
     } } }, 8, nil)
+    MOCK.mapName = previousLumberTestMap
 end
 
 do
