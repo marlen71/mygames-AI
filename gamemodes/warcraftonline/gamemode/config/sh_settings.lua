@@ -107,6 +107,20 @@ WO.Config.ArcaneHands = {
 
 WO.Config.WorldMap = "rp_lordaeron"
 
+-- Рабочие точки — не точки появления работодателя. Профессия откроет смену
+-- только на rp_lordaeron; отдельные NPCSpawnPoints.work_* остаются пустыми,
+-- пока для каждого работодателя не будут заданы точные координаты.
+WO.Config.ProfessionWorksites = WO.Config.ProfessionWorksites or {}
+WO.Config.ProfessionWorksites.lumberjack = {
+    map = WO.Config.WorldMap,
+    pickupPos = Vector(-8878.8, 1141.9, -2802),
+    deliveryPos = Vector(-7312.7, 1722.3, -2943.2),
+    interactionRadius = 160,
+    sequenceLength = 4,
+    carryWeaponClass = "wo_lumber_logs",
+    carryModel = "models/lumber/lumber.mdl",
+}
+
 WO.Config.NPCSpawnPoints = {
     -- Пустые data-driven точки работодателей: добавьте сюда точные Vector/Angle
     -- конкретной карты, когда координаты будут готовы. До этого NPC не спавнятся.

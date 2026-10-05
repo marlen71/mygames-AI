@@ -6,8 +6,10 @@
 
 local ORDERS_PER_SHIFT = 3
 local DELIVERY_PICKUP_RADIUS = 120
+local LUMBER_MIN_CARRY_DISTANCE_FRACTION = 0.70
 local PROGRESS_SYNC_INTERVAL = 0.25
 local MAX_SAVED_XP = 10000000
+local warnedMissingLumberSWEP = false
 
 local function EnsureState(char)
     char.professions = istable(char.professions) and char.professions or {}
@@ -62,6 +64,105 @@ end
 
 local function GetRankData(def, rank)
     return def and def.ranks[math.Clamp(math.floor(tonumber(rank) or 1), 1, 3)] or nil
+end
+
+local function GetLumberWorksite()
+    local worksites = WO.Config and WO.Config.ProfessionWorksites
+    local site = istable(worksites) and worksites.lumberjack or nil
+
+    if not istable(site) or not isvector(site.pickupPos) or not isvector(site.deliveryPos) or
+        not isstring(site.map) or site.map == "" or not isstring(site.carryWeaponClass) or
+        site.carryWeaponClass == "" then
+        return nil
+    end
+
+    return site
+end
+
+local function IsLumberTask(task)
+    return istable(task) and task.mode == "lumber_delivery" and task.engine == "lumber"
+end
+
+function WO.Professions.IsCarryingLumber(ply)
+    if not IsValid(ply) or not isfunction(ply.HasCharacter) or not ply:HasCharacter() then
+        return false
+    end
+
+    local char = ply:GetCharacter()
+    local shift = char and char.activeProfessionShift
+    local task = shift and shift.task
+
+    return shift ~= nil and shift.professionId == "lumberjack" and IsLumberTask(task) and
+        task.phase == "carry"
+end
+
+local function GetLumberCarryWeapon(ply, shift)
+    local site = GetLumberWorksite()
+    if not site or not IsValid(ply) or not isfunction(ply.GetWeapon) or not istable(shift) then
+        return nil
+    end
+
+    local weapon = ply:GetWeapon(site.carryWeaponClass)
+
+    if IsValid(weapon) and weapon.WOLumberShiftID == shift.id then
+        return weapon
+    end
+
+    return nil
+end
+
+local function GiveLumberCarryWeapon(ply, shift)
+    local site = GetLumberWorksite()
+
+    if not site or not weapons or not isfunction(weapons.GetStored) or
+        not weapons.GetStored(site.carryWeaponClass) then
+        if not warnedMissingLumberSWEP then
+            warnedMissingLumberSWEP = true
+            WO.Warn("Lumberjack carry SWEP is not registered: " ..
+                tostring(site and site.carryWeaponClass or "<invalid worksite>"))
+        end
+        return nil
+    end
+
+    if not ply:HasWeapon(site.carryWeaponClass) then
+        ply:Give(site.carryWeaponClass)
+    end
+
+    local weapon = ply:GetWeapon(site.carryWeaponClass)
+
+    if not IsValid(weapon) then return nil end
+
+    weapon.WOLumberShiftID = shift.id
+    return weapon
+end
+
+local function RemoveLumberCarryWeapon(ply, shift)
+    local site = GetLumberWorksite()
+    local weapon = GetLumberCarryWeapon(ply, shift)
+
+    if not site or not IsValid(weapon) then return false end
+
+    local wasActive = isfunction(ply.GetActiveWeapon) and ply:GetActiveWeapon() == weapon
+    ply:StripWeapon(site.carryWeaponClass)
+
+    local handsClass = WO.Config.StartingWeaponClasses and WO.Config.StartingWeaponClasses.hands
+
+    if wasActive and isstring(handsClass) and ply:HasWeapon(handsClass) then
+        ply:SelectWeapon(handsClass)
+    end
+
+    return true
+end
+
+local function PlayLumberGesture(ply, gestureType)
+    if not IsValid(ply) or not isfunction(ply.DoAnimationEvent) then return end
+
+    local activity = gestureType == "pickup" and ACT_GMOD_GESTURE_ITEM_GIVE or
+        ACT_GMOD_GESTURE_ITEM_PLACE
+
+    if isnumber(activity) then
+        ply:DoAnimationEvent(activity)
+    end
 end
 
 local function ResetChoiceTarget(task)
@@ -131,6 +232,43 @@ local function BuildTask(ply, shift, orderIndex)
         task.requiredDistance = math.floor((tonumber(activity.deliveryDistance) or 520) *
             (1 - math.min(0.12, bonus * 0.3)))
         task.carriedDistance = 0
+        return task
+    elseif gameMode.engine == "lumber" then
+        local site = GetLumberWorksite()
+        local routeDistance = site and site.pickupPos:Distance(site.deliveryPos) or 0
+
+        if not site or not game or not isfunction(game.GetMap) or game.GetMap() ~= site.map or
+            routeDistance <= 0 or not weapons or not isfunction(weapons.GetStored) or
+            not weapons.GetStored(site.carryWeaponClass) then
+            return nil
+        end
+
+        task.phase = "pickup"
+        task.pickupPos = site.pickupPos
+        task.deliveryPos = site.deliveryPos
+        task.interactionRadius = math.Clamp(tonumber(site.interactionRadius) or 160, 64, 512)
+        task.routeDistance = routeDistance
+        task.requiredDistance = math.floor(routeDistance * LUMBER_MIN_CARRY_DISTANCE_FRACTION)
+        task.carryWeaponClass = site.carryWeaponClass
+        task.carriedDistance = 0
+        task.sequence = {}
+        task.sequenceIndex = 1
+
+        local sequenceLength = math.Clamp(math.floor(tonumber(site.sequenceLength) or 4), 3, 8)
+        local directions = { "up", "left", "down", "right" }
+        local previousDirection
+
+        for index = 1, sequenceLength do
+            local direction = directions[math.random(1, #directions)]
+
+            while direction == previousDirection do
+                direction = directions[math.random(1, #directions)]
+            end
+
+            task.sequence[index] = direction
+            previousDirection = direction
+        end
+
         return task
     end
 
@@ -250,6 +388,10 @@ local function Snapshot(char)
                 phaseOffset = task.phaseOffset,
                 requiredDistance = task.requiredDistance,
                 carriedDistance = task.carriedDistance or 0,
+                pickupPos = task.pickupPos,
+                deliveryPos = task.deliveryPos,
+                interactionRadius = task.interactionRadius,
+                routeDistance = task.routeDistance,
                 holding = task.holding == true,
                 cursorPosition = task.cursorPosition,
                 targetCenter = task.targetCenter,
@@ -379,21 +521,88 @@ function WO.Professions.HandleInput(ply, shiftId, action, value)
     local now = CurTime()
 
     if action == "pickup" then
-        if engine ~= "delivery" or task.phase ~= "pickup" then return false, "wrong_task" end
+        if not value then return false, "invalid_input" end
 
-        local pickupPosition = task.pickupPos
-        if not pickupPosition or ply:GetPos():Distance(pickupPosition) > DELIVERY_PICKUP_RADIUS then
-            return false, "too_far_from_pickup"
+        if engine == "delivery" and task.phase == "pickup" then
+            local pickupPosition = task.pickupPos
+            if not pickupPosition or ply:GetPos():Distance(pickupPosition) > DELIVERY_PICKUP_RADIUS then
+                return false, "too_far_from_pickup"
+            end
+
+            task.phase = "carry"
+            task.carryStartPos = ply:GetPos()
+            task.carriedDistance = 0
+            task.nextSync = now + PROGRESS_SYNC_INTERVAL
+            MarkRevision(char)
+            WO.Professions.Sync(ply)
+            WO.Notify(ply, "info", "Груз взят. Доставьте его, пройдя нужное расстояние.")
+            return true
         end
 
-        task.phase = "carry"
-        task.carryStartPos = ply:GetPos()
-        task.carriedDistance = 0
-        task.nextSync = now + PROGRESS_SYNC_INTERVAL
-        MarkRevision(char)
-        WO.Professions.Sync(ply)
-        WO.Notify(ply, "info", "Груз взят. Доставьте его, пройдя нужное расстояние.")
-        return true
+        if engine == "lumber" and task.phase == "pickup" then
+            local site = GetLumberWorksite()
+            if not site or not game or game.GetMap() ~= site.map then
+                return false, "wrong_worksite_map"
+            end
+
+            local radius = task.interactionRadius or DELIVERY_PICKUP_RADIUS
+            if not task.pickupPos or ply:GetPos():Distance(task.pickupPos) > radius then
+                return false, "too_far_from_pickup"
+            end
+
+            task.phase = "work"
+            task.sequenceIndex = 1
+            task.progress = 0
+            task.totalActions = 0
+            task.goodActions = 0
+            task.badActions = 0
+            task.lastActionAt = now - 1
+            task.startedAt = now
+            task.nextSync = now + PROGRESS_SYNC_INTERVAL
+            MarkRevision(char)
+            WO.Professions.Sync(ply)
+            WO.Notify(ply, "info", "Повторите последовательность WASD, чтобы поднять связку брёвен.")
+            return true
+        end
+
+        return false, "wrong_task"
+    end
+
+    if action == "drop" then
+        if not value or engine ~= "lumber" or task.phase ~= "carry" then
+            return false, "wrong_task"
+        end
+
+        local site = GetLumberWorksite()
+        if not site or not game or game.GetMap() ~= site.map then
+            return false, "wrong_worksite_map"
+        end
+
+        local deliveryPosition = task.deliveryPos
+        local radius = task.interactionRadius or DELIVERY_PICKUP_RADIUS
+        if not deliveryPosition or ply:GetPos():Distance(deliveryPosition) > radius then
+            return false, "too_far_from_delivery"
+        end
+
+        local carryWeapon = GetLumberCarryWeapon(ply, shift)
+        if not IsValid(carryWeapon) or not isvector(task.carryStartPos) then
+            return false, "lumber_bundle_missing"
+        end
+
+        task.carriedDistance = math.max(task.carriedDistance or 0,
+            ply:GetPos():Distance(task.carryStartPos))
+        if task.carriedDistance < (task.requiredDistance or math.huge) then
+            return false, "insufficient_carry_distance"
+        end
+
+        task.phase = "dropping"
+        PlayLumberGesture(ply, "drop")
+        if not RemoveLumberCarryWeapon(ply, shift) then
+            task.phase = "carry"
+            return false, "lumber_bundle_missing"
+        end
+
+        return CompleteOrder(ply, char, shift, task.quality or 0.8)
     end
 
     if action == "hold" then
@@ -415,6 +624,66 @@ function WO.Professions.HandleInput(ply, shiftId, action, value)
 
     local choice = ActionChoice(action)
     local isDirection = action == "left" or action == "right" or action == "up" or action == "down"
+
+    if isDirection and engine == "lumber" then
+        if task.phase ~= "work" or not istable(task.sequence) or #task.sequence < 1 then
+            return false, "wrong_task"
+        end
+
+        local site = GetLumberWorksite()
+        if not site or not game or game.GetMap() ~= site.map then
+            return false, "wrong_worksite_map"
+        end
+
+        local radius = task.interactionRadius or DELIVERY_PICKUP_RADIUS
+        if not task.pickupPos or ply:GetPos():Distance(task.pickupPos) > radius then
+            return false, "too_far_from_pickup"
+        end
+        if now - (task.lastActionAt or 0) < 0.10 then return false, "too_fast" end
+
+        task.lastActionAt = now
+        task.totalActions = (task.totalActions or 0) + 1
+        local expected = task.sequence[task.sequenceIndex or 1]
+
+        if action == expected then
+            task.sequenceIndex = (task.sequenceIndex or 1) + 1
+            task.goodActions = (task.goodActions or 0) + 1
+        else
+            task.badActions = (task.badActions or 0) + 1
+            task.sequenceIndex = action == task.sequence[1] and 2 or 1
+        end
+
+        task.progress = math.Clamp(((task.sequenceIndex or 1) - 1) / #task.sequence, 0, 1)
+
+        if task.sequenceIndex > #task.sequence then
+            local weapon = GiveLumberCarryWeapon(ply, shift)
+            if not IsValid(weapon) then
+                task.sequenceIndex = 1
+                task.progress = 0
+                task.nextSync = now
+                WO.Professions.Sync(ply)
+                return false, "lumber_weapon_unavailable"
+            end
+
+            task.quality = math.Clamp((task.goodActions or 0) /
+                math.max(1, task.totalActions or 1), 0.5, 1)
+            task.phase = "carry"
+            task.carryStartPos = ply:GetPos()
+            task.carriedDistance = 0
+            task.lastTick = now
+            task.nextSync = now + PROGRESS_SYNC_INTERVAL
+            PlayLumberGesture(ply, "pickup")
+            ply:SelectWeapon(task.carryWeaponClass)
+            MarkRevision(char)
+            WO.Professions.Sync(ply)
+            WO.Notify(ply, "success", "Связка поднята. Несите брёвна к отмеченному складу.")
+            return true
+        end
+
+        task.nextSync = now
+        WO.Professions.Sync(ply)
+        return true
+    end
 
     if isDirection and task.inputs then
         if engine == "steer" or engine == "adjust" or engine == "balance" or
@@ -599,6 +868,8 @@ function WO.Professions.TickPlayer(ply, now)
         if task.carriedDistance >= task.requiredDistance then
             return CompleteOrder(ply, char, shift, 1)
         end
+    elseif engine == "lumber" and task.phase == "carry" and task.carryStartPos then
+        task.carriedDistance = ply:GetPos():Distance(task.carryStartPos)
     elseif engine == "steer" or engine == "adjust" or engine == "balance" or engine == "sweep" then
         local dt = math.Clamp(now - (task.lastTick or now), 0, 0.20)
         task.lastTick = now
@@ -706,6 +977,7 @@ function WO.Professions.FinishShift(ply, shiftId)
 
     local newLevel = WO.Professions.GetLevelForXP(def.id, skill.xp)
     char.activeProfessionShift = nil
+    RemoveLumberCarryWeapon(ply, shift)
     MarkRevision(char)
 
     if WO.SaveQueue then WO.SaveQueue.MarkDirty(char) end
@@ -729,12 +1001,85 @@ function WO.Professions.CancelShift(ply, shiftId)
     if not char then return false, "no_active_shift" end
 
     char.activeProfessionShift = nil
+    RemoveLumberCarryWeapon(ply, shift)
     MarkRevision(char)
     WO.Professions.Sync(ply)
     WO.Notify(ply, "info", "Смена отменена. Зарплата и опыт выдаются только после полного завершения смены.")
     WO.Hook.Run("ProfessionShiftCancelled", char, shift)
     return true
 end
+
+hook.Add("SetupMove", "wo_professions_lumber_movement", function(ply, moveData)
+    if not IsValid(ply) or not isfunction(ply.HasCharacter) or not ply:HasCharacter() then return end
+
+    local char = ply:GetCharacter()
+    local shift = char and char.activeProfessionShift
+    local task = shift and shift.task
+
+    if not shift or shift.professionId ~= "lumberjack" or not IsLumberTask(task) then return end
+
+    if task.phase == "work" then
+        -- WASD is the mini-game input here, not character movement.
+        if isfunction(moveData.SetForwardSpeed) then moveData:SetForwardSpeed(0) end
+        if isfunction(moveData.SetSideSpeed) then moveData:SetSideSpeed(0) end
+        if isfunction(moveData.SetUpSpeed) then moveData:SetUpSpeed(0) end
+    elseif task.phase == "carry" and isfunction(moveData.RemoveKey) then
+        -- Server-side enforcement; client bind suppression is only a convenience.
+        if isnumber(IN_SPEED) then moveData:RemoveKey(IN_SPEED) end
+        if isnumber(IN_JUMP) then moveData:RemoveKey(IN_JUMP) end
+    end
+end)
+
+hook.Add("PlayerSwitchWeapon", "wo_professions_lumber_weapon_lock", function(ply, _, newWeapon)
+    if not WO.Professions.IsCarryingLumber(ply) then return end
+
+    local char = ply:GetCharacter()
+    local shift = char and char.activeProfessionShift
+    local carryWeapon = GetLumberCarryWeapon(ply, shift)
+
+    if IsValid(newWeapon) and newWeapon == carryWeapon then return end
+
+    return true
+end)
+
+hook.Add("PlayerCanDropWeapon", "wo_professions_lumber_no_drop", function(ply, weapon)
+    if not WO.Professions.IsCarryingLumber(ply) then return end
+
+    local char = ply:GetCharacter()
+    local shift = char and char.activeProfessionShift
+
+    if IsValid(weapon) and weapon == GetLumberCarryWeapon(ply, shift) then
+        return false
+    end
+end)
+
+hook.Add("PlayerDeath", "wo_professions_lumber_death", function(ply)
+    if not IsValid(ply) or not isfunction(ply.HasCharacter) or not ply:HasCharacter() then return end
+
+    local char = ply:GetCharacter()
+    local shift = char and char.activeProfessionShift
+    local task = shift and shift.task
+
+    if not shift or shift.professionId ~= "lumberjack" or not IsLumberTask(task) or
+        (task.phase ~= "work" and task.phase ~= "carry") then
+        return
+    end
+
+    task.phase = "pickup"
+    task.sequenceIndex = 1
+    task.progress = 0
+    task.goodActions = 0
+    task.badActions = 0
+    task.totalActions = 0
+    task.quality = nil
+    task.carryStartPos = nil
+    task.carriedDistance = 0
+    task.lastActionAt = CurTime() - 1
+    RemoveLumberCarryWeapon(ply, shift)
+    MarkRevision(char)
+    WO.Professions.Sync(ply)
+    WO.Notify(ply, "info", "Связка возвращена к штабелю. После возрождения начните перенос заново.")
+end)
 
 ---------------------------------------------------------------------------
 -- Character persistence: one compact row in the existing wo_skills table.
@@ -794,7 +1139,11 @@ WO.Hook.Add("CharacterSelected", "professions", function(_, ply)
     WO.Professions.Sync(ply)
 end)
 
-WO.Hook.Add("CharacterUnloaded", "professions_cancel_on_unload", function(char)
+WO.Hook.Add("CharacterUnloaded", "professions_cancel_on_unload", function(char, ply)
+    if IsValid(ply) and char then
+        RemoveLumberCarryWeapon(ply, char.activeProfessionShift)
+    end
+
     if char then char.activeProfessionShift = nil end
 end)
 

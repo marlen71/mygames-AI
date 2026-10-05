@@ -178,7 +178,7 @@ local expectedProfessionRanks = {
     builder = { "Землекоп", "Каменщик", "Кровельщик" },
 }
 local expectedProfessionModes = {
-    lumberjack = "chopping", miner = "mining", farmer = "sowing", herder = "herding",
+    lumberjack = "lumber_delivery", miner = "mining", farmer = "sowing", herder = "herding",
     fisher = "fishing", porter = "loading", blacksmith = "smithing", tailor = "sewing",
     baker = "baking", brewer = "brewing", alchemist = "alchemy", merchant = "haggling",
     cleaner = "sweeping", water_carrier = "balancing", carpenter = "sawing",
@@ -213,10 +213,15 @@ for professionID, expectedRanks in pairs(expectedProfessionRanks) do
                 #rank.activities >= 3 and rank.basePay > 0 and
                 (rankIndex == 1 or rank.basePay > profession.ranks[rankIndex - 1].basePay)
             local hasUniqueMinigame = false
+            local expectedRankMode = expectedProfessionModes[professionID]
+            if professionID == "lumberjack" and rankIndex > 1 then
+                expectedRankMode = "chopping"
+            end
+
             for _, activity in ipairs(rank.activities or {}) do
                 allProfessionsValid = allProfessionsValid and
-                    (activity.mode == expectedProfessionModes[professionID] or activity.mode == "delivery")
-                hasUniqueMinigame = hasUniqueMinigame or activity.mode == expectedProfessionModes[professionID]
+                    (activity.mode == expectedRankMode or activity.mode == "delivery")
+                hasUniqueMinigame = hasUniqueMinigame or activity.mode == expectedRankMode
             end
             allProfessionsValid = allProfessionsValid and hasUniqueMinigame
         end
@@ -257,6 +262,25 @@ end
 MOCK.Assert(allProfessionsValid and allProfessionNPCsValid and allProfessionModesUnique and
     allWorkBonusesValid and allMagicBonusesValid,
     "21 профессия имеет своего NPC, собственную уникальную механику, три ступени и валидные расовые/классовые специализации")
+local lumberWorksite = WO.Config.ProfessionWorksites and WO.Config.ProfessionWorksites.lumberjack
+MOCK.Assert(lumberWorksite and lumberWorksite.map == "rp_lordaeron" and
+    isvector(lumberWorksite.pickupPos) and
+    math.abs(lumberWorksite.pickupPos.x - (-8878.8)) < 0.01 and
+    math.abs(lumberWorksite.pickupPos.y - 1141.9) < 0.01 and
+    math.abs(lumberWorksite.pickupPos.z - (-2802)) < 0.01 and
+    isvector(lumberWorksite.deliveryPos) and
+    math.abs(lumberWorksite.deliveryPos.x - (-7312.7)) < 0.01 and
+    math.abs(lumberWorksite.deliveryPos.y - 1722.3) < 0.01 and
+    math.abs(lumberWorksite.deliveryPos.z - (-2943.2)) < 0.01 and
+    lumberWorksite.carryWeaponClass == "wo_lumber_logs" and
+    lumberWorksite.carryModel == "models/lumber/lumber.mdl" and
+    table.Count(WO.Config.NPCSpawnPoints.work_lumberjack) == 0,
+    "рабочий участок лесоруба использует обе заданные точки, точную модель и не задаёт NPC-spawn")
+local lumberSWEP = weapons.GetStored("wo_lumber_logs")
+MOCK.Assert(lumberSWEP and lumberSWEP.WorldModel == "models/lumber/lumber.mdl" and
+    lumberSWEP.HoldType == "physgun" and lumberSWEP.CanDrop() == false and
+    lumberSWEP.ShouldDropOnDie() == false,
+    "связка регистрируется как невыпадающий SWEP с точной моделью и позой переноса")
 local humanMageFire = WO.Spells.GetMagicBonus({ race = "human", class = "mage" }, "fire")
 local humanPriestFire = WO.Spells.GetMagicBonus({ race = "human", class = "priest" }, "fire")
 local draeneiPriestLife = WO.Spells.GetMagicBonus({ race = "draenei", class = "priest" }, "life")
@@ -1127,7 +1151,12 @@ MOCK.Assert(#orderedSpellIDs == 7 and everySpellUsesTheWeaponPath,
 end
 
 do
+local previousProfessionTestMap = MOCK.mapName
+MOCK.mapName = "rp_lordaeron"
+local lumberWorksite = WO.Config.ProfessionWorksites.lumberjack
 local workPlayer = MOCK.NewEntity("player")
+workPlayer:Give("drc_unarmed")
+workPlayer:SelectWeapon("drc_unarmed")
 local workCharacter = WO.Character.New({
     id = "profession-cycle-test", race = "worgen", class = "assassin", money = 40,
 })
@@ -1176,13 +1205,23 @@ end
 local lockedStart, lockedReason = WO.Professions.StartShift(workPlayer, "lumberjack", 2)
 MOCK.Assert(rankOneOption and lockedRankTwoOption and lockedStart == false and lockedReason == "rank_locked",
     "работодатель предлагает первую ступень, а вторая остаётся закрытой до нужного опыта")
+local worksiteMap = MOCK.mapName
+MOCK.mapName = "gm_flatgrass"
+local wrongMapStart, wrongMapReason = WO.Professions.StartShift(workPlayer, "lumberjack", 1)
+MOCK.mapName = worksiteMap
+MOCK.Assert(wrongMapStart == false and wrongMapReason == "invalid_profession_data" and
+    workCharacter.activeProfessionShift == nil,
+    "сервер не запускает лесной заказ на карте, отличной от настроенной rp_lordaeron")
 MOCK.Assert(ChooseWorkDialogueAction(workPlayer, "profession_rank:1"),
     "игрок нанимается на первую ступень только через диалог своего NPC")
 local shift = workCharacter.activeProfessionShift
 MOCK.Assert(shift and shift.npcId == workNPCDef.id and shift.status == "working" and
-    shift.rank == 1 and shift.task.mode == "chopping" and shift.task.engine == "strike" and
+    shift.rank == 1 and shift.task.mode == "lumber_delivery" and shift.task.engine == "lumber" and
+    shift.task.phase == "pickup" and shift.task.sequence and #shift.task.sequence == 4 and
+    shift.task.pickupPos == lumberWorksite.pickupPos and
+    shift.task.deliveryPos == lumberWorksite.deliveryPos and
     shift.bonus == lumberjackBonus,
-    "NPC запускает собственную мировую мини-игру рубки на выбранном ранге")
+    "NPC запускает перенос брёвен между точными рабочими точками на выбранной ступени")
 local firstShiftID = shift.id
 
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
@@ -1199,49 +1238,99 @@ MOCK.NetDeliver({ name = "Profession.WorkInput", args = { "forged-shift", "strik
 MOCK.Assert(shift.task.progress == 0,
     "поддельный идентификатор смены не меняет серверный прогресс")
 
-local function CompleteChoppingOrder()
-    local task = shift.task
-    MOCK.Assert(task and task.mode == "chopping" and task.engine == "strike",
-        "заказ лесоруба использует отдельную механику удара")
-    task.zoneCenter = 0.5
-    task.zoneWidth = 0.38
-    task.speed = 0.05
-    task.phaseOffset = 0
-    task.progressRate = 1
-    task.startedAt = CurTime()
-    task.lastActionAt = CurTime() - 1
-    local priorOrders = shift.completedOrders
+MOCK.AdvanceTime(1.1)
 
-    for _ = 1, 5 do
-        MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "strike", true } }, 8, workPlayer)
-        if shift.completedOrders > priorOrders then break end
-        MOCK.AdvanceTime(0.2)
+local function CompleteLumberOrder(checkCarryRestrictions)
+    local task = shift.task
+    MOCK.Assert(task and task.mode == "lumber_delivery" and task.engine == "lumber" and
+        task.phase == "pickup" and #task.sequence == 4,
+        "каждый заказ первой ступени лесоруба требует переноса связки брёвен")
+
+    workPlayer:SetPos(task.pickupPos + Vector(500, 0, 0))
+    MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", true } }, 8, workPlayer)
+    MOCK.Assert(task.phase == "pickup", "сервер не разрешает начать мини-игру вдали от штабеля")
+
+    workPlayer:SetPos(task.pickupPos)
+    MOCK.AdvanceTime(0.12)
+    MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", true } }, 8, workPlayer)
+    MOCK.Assert(task.phase == "work" and task.sequenceIndex == 1,
+        "E у точного штабеля запускает последовательность WASD")
+
+    local workMove = {
+        forward = 100, side = -50, up = 25,
+        SetForwardSpeed = function(self, value) self.forward = value end,
+        SetSideSpeed = function(self, value) self.side = value end,
+        SetUpSpeed = function(self, value) self.up = value end,
+    }
+    hook.GetTable().SetupMove.wo_professions_lumber_movement(workPlayer, workMove)
+    MOCK.Assert(workMove.forward == 0 and workMove.side == 0 and workMove.up == 0,
+        "WASD-мини-игра не сдвигает персонажа с точки заготовки")
+
+    local firstDirection = task.sequence[1]
+    local wrongDirection = firstDirection == "up" and "down" or "up"
+    MOCK.AdvanceTime(0.12)
+    MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
+        shift.id, wrongDirection, true,
+    } }, 8, workPlayer)
+    MOCK.Assert(task.sequenceIndex == 1 and task.progress == 0,
+        "неверная WASD-кнопка сбрасывает последовательность, не выдавая связку")
+
+    for _, direction in ipairs(task.sequence) do
+        MOCK.AdvanceTime(0.12)
+        MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, direction, true } }, 8, workPlayer)
     end
+
+    local carryWeapon = workPlayer:GetWeapon(lumberWorksite.carryWeaponClass)
+    MOCK.Assert(task.phase == "carry" and IsValid(carryWeapon) and
+        carryWeapon.WOLumberShiftID == shift.id and workPlayer:GetActiveWeapon() == carryWeapon and
+        WO.Professions.IsCarryingLumber(workPlayer),
+        "верная последовательность выдаёт и выбирает серверный SWEP связки брёвен")
+
+    if checkCarryRestrictions then
+        local moveRestrictions = {}
+        local carryMove = {
+            RemoveKey = function(_, key) moveRestrictions[key] = true end,
+        }
+        hook.GetTable().SetupMove.wo_professions_lumber_movement(workPlayer, carryMove)
+        local switchHook = hook.GetTable().PlayerSwitchWeapon.wo_professions_lumber_weapon_lock
+        local dropHook = hook.GetTable().PlayerCanDropWeapon.wo_professions_lumber_no_drop
+        MOCK.Assert(moveRestrictions[IN_SPEED] and moveRestrictions[IN_JUMP] and
+            switchHook(workPlayer, carryWeapon, workPlayer:GetWeapon("drc_unarmed")) == true and
+            switchHook(workPlayer, workPlayer:GetWeapon("drc_unarmed"), carryWeapon) == nil and
+            dropHook(workPlayer, carryWeapon) == false,
+            "сервер запрещает бег, прыжок, смену оружия и выбрасывание брёвен")
+    end
+
+    local priorOrders = shift.completedOrders
+    workPlayer:SetPos(task.deliveryPos + Vector(500, 0, 0))
+    MOCK.AdvanceTime(0.12)
+    MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "drop", true } }, 8, workPlayer)
+    MOCK.Assert(task.phase == "carry" and shift.completedOrders == priorOrders,
+        "E вне зоны склада не сдаёт связку")
+
+    workPlayer:SetPos(task.deliveryPos)
+    MOCK.AdvanceTime(0.12)
+    WO.Professions.TickPlayer(workPlayer, CurTime())
+    MOCK.Assert(task.phase == "carry" and shift.completedOrders == priorOrders,
+        "прибытие на склад само по себе не сдаёт заказ: требуется E")
+    MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "drop", true } }, 8, workPlayer)
+
+    MOCK.Assert(shift.completedOrders == priorOrders + 1 and
+        WO.Currency.Get(workPlayer) == initialMoney and
+        not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
+        workPlayer:GetActiveWeapon() == workPlayer:GetWeapon("drc_unarmed"),
+        "E у склада сдаёт один заказ, снимает SWEP и не выдаёт деньги до сдачи смены")
 end
 
-CompleteChoppingOrder()
-MOCK.Assert(shift.completedOrders == 1 and shift.task.mode == "delivery" and
-    WO.Currency.Get(workPlayer) == initialMoney,
-    "первый заказ сдан; смена продолжилась переносом, денег до сдачи нет")
-local deliveryTask = shift.task
-local pickupPos = deliveryTask.pickupPos
-workPlayer:SetPos(pickupPos + Vector(500, 0, 0))
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", true } }, 8, workPlayer)
-MOCK.Assert(deliveryTask.phase == "pickup",
-    "сервер отвергает попытку забрать груз вне точки выдачи")
-workPlayer:SetPos(pickupPos)
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", true } }, 8, workPlayer)
-MOCK.Assert(deliveryTask.phase == "carry", "сервер разрешает поднять груз только у точки выдачи")
-workPlayer:SetPos(pickupPos + Vector(deliveryTask.requiredDistance + 10, 0, 0))
-MOCK.AdvanceTime(0.1)
-WO.Professions.TickPlayer(workPlayer, CurTime())
-MOCK.Assert(shift.completedOrders == 2 and shift.task.mode == "chopping" and
-    WO.Currency.Get(workPlayer) == initialMoney,
-    "перенос проверяется по серверной позиции и сам сдаёт заказ без выплаты смены")
-CompleteChoppingOrder()
+CompleteLumberOrder(true)
+MOCK.Assert(shift.completedOrders == 1 and shift.task.mode == "lumber_delivery" and
+    shift.task.phase == "pickup" and WO.Currency.Get(workPlayer) == initialMoney,
+    "после сдачи первой связки начинается следующий цикл у того же штабеля")
+CompleteLumberOrder(false)
+CompleteLumberOrder(false)
 MOCK.Assert(shift.status == "ready" and shift.completedOrders == 3 and
     WO.Currency.Get(workPlayer) == initialMoney,
-    "последний заказ открывает сдачу смены, но зарплата ещё не начислена")
+    "последний перенос открывает сдачу смены, но зарплата ещё не начислена")
 
 local rejectedAnywhere = WO.Professions.FinishShift(workPlayer, firstShiftID)
 MOCK.Assert(rejectedAnywhere == false and WO.Currency.Get(workPlayer) == initialMoney,
@@ -1286,17 +1375,34 @@ MOCK.Assert(canRepeatRankOne and canChooseRankTwo,
 MOCK.Assert(ChooseWorkDialogueAction(workPlayer, "profession_rank:1"),
     "первая ступень остаётся доступной после открытия второй")
 local replayShift = workCharacter.activeProfessionShift
-MOCK.Assert(replayShift and replayShift.rank == 1,
+MOCK.Assert(replayShift and replayShift.rank == 1 and
+    replayShift.task.mode == "lumber_delivery",
     "работодатель запускает именно выбранный ранний ранг, а не автоматически максимальный")
+local replayTask = replayShift.task
+workPlayer:SetPos(replayTask.pickupPos)
+MOCK.AdvanceTime(0.12)
+WO.Professions.HandleInput(workPlayer, replayShift.id, "pickup", true)
+for _, direction in ipairs(replayTask.sequence) do
+    MOCK.AdvanceTime(0.12)
+    WO.Professions.HandleInput(workPlayer, replayShift.id, direction, true)
+end
+MOCK.Assert(WO.Professions.IsCarryingLumber(workPlayer) and
+    workPlayer:HasWeapon(lumberWorksite.carryWeaponClass),
+    "связка привязана к активной смене и выдаётся повторно только в фазе переноса")
 WO.Professions.CancelShift(workPlayer, replayShift.id)
+MOCK.Assert(not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
+    workPlayer:GetActiveWeapon() == workPlayer:GetWeapon("drc_unarmed"),
+    "отмена смены удаляет связку и возвращает руки персонажа")
 
+workPlayer:SetPos(workNPC:GetPos())
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
 MOCK.Assert(ChooseWorkDialogueAction(workPlayer, "profession_rank:2"),
     "второй ранг выбирается через того же работодателя после накопления опыта")
 local secondRankShift = workCharacter.activeProfessionShift
 MOCK.Assert(secondRankShift and secondRankShift.rank == 2 and
+    secondRankShift.task.mode == "chopping" and secondRankShift.task.engine == "strike" and
     secondRankShift.basePay > WO.Professions.GetBasePay("lumberjack", 1, 1),
-    "выбранная вторая ступень использует повышенную ставку")
+    "вторая ступень сохраняет рубку, а её выбранная ставка выше первой")
 local moneyBeforeCancel = WO.Currency.Get(workPlayer)
 WO.Professions.CancelShift(workPlayer, secondRankShift.id)
 MOCK.Assert(workCharacter.activeProfessionShift == nil and WO.Currency.Get(workPlayer) == moneyBeforeCancel,
@@ -1388,6 +1494,7 @@ MOCK.NetDeliver({ name = "Profession.WorkInput", args = { porterShift.id, rightL
 MOCK.Assert(porterTask.actionCount == 1 and porterTask.expectedInput ~= rightLift,
     "успешный подъём меняет сторону и учитывается сервером")
 WO.Professions.CancelShift(workPlayer, porterShift.id)
+MOCK.mapName = previousProfessionTestMap
 end
 
 local money = WO.Currency.Get(ply)

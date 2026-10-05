@@ -117,6 +117,28 @@ local function PollMiniGameInput(shift, task)
         local pickupPressed = KeyPressed("pickup", KEY_E)
         if pickupPressed and task.phase == "pickup" then SendInput(shift.id, "pickup", true) end
         return
+    elseif engine == "lumber" then
+        local usePressed = KeyPressed("lumber_use", KEY_E)
+
+        if usePressed and task.phase == "pickup" then
+            SendInput(shift.id, "pickup", true)
+        elseif usePressed and task.phase == "carry" then
+            SendInput(shift.id, "drop", true)
+        elseif task.phase == "work" then
+            local directions = {
+                { action = "up", key = KEY_W },
+                { action = "left", key = KEY_A },
+                { action = "down", key = KEY_S },
+                { action = "right", key = KEY_D },
+            }
+
+            for _, direction in ipairs(directions) do
+                local pressed = KeyPressed("lumber_" .. direction.action, direction.key)
+                if pressed then SendInput(shift.id, direction.action, true) end
+            end
+        end
+
+        return
     end
 
     if engine == "hold" then
@@ -449,6 +471,89 @@ local function DrawDelivery(task, shift, x, y, w)
     end
 end
 
+local function PlayerDistanceFrom(position)
+    local ply = LocalPlayer()
+    if not isvector(position) or not IsValid(ply) then return nil end
+    return ply:GetPos():Distance(position)
+end
+
+local function DrawLumberSequence(task, x, y, w)
+    local sequence = task.sequence or {}
+    local keyLabels = { up = "W", left = "A", down = "S", right = "D" }
+    local count = #sequence
+    if count < 1 then return end
+
+    local gap = 8
+    local boxWidth = math.max(34, math.min(64,
+        math.floor((w - 52 - gap * (count - 1)) / count)))
+    local rowWidth = count * boxWidth + (count - 1) * gap
+    local startX = x + (w - rowWidth) * 0.5
+    local boxY = y + 128
+    local current = math.Clamp(tonumber(task.sequenceIndex) or 1, 1, count + 1)
+
+    for index, direction in ipairs(sequence) do
+        local boxX = startX + (index - 1) * (boxWidth + gap)
+        local completed = index < current
+        local active = index == current
+        local fill = completed and WO.UI.Colors.good or
+            active and WO.UI.Colors.accent or Color(36, 47, 63, 245)
+        draw.RoundedBox(6, boxX, boxY, boxWidth, 40, fill)
+        DrawText(keyLabels[direction] or "?", "WO.Body", boxX + boxWidth * 0.5,
+            boxY + 20, WO.UI.Colors.text, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    end
+
+    DrawText("Повторите WASD по порядку", "WO.Small", x + 26, y + 102,
+        WO.UI.Colors.textDim)
+    DrawProgress(x + 26, y + 179, math.max(180, w - 52), 14, task.progress,
+        WO.UI.Colors.good)
+end
+
+local function DrawLumberDelivery(task, x, y, w)
+    local radius = math.max(1, tonumber(task.interactionRadius) or 160)
+
+    if task.phase == "pickup" then
+        local distance = PlayerDistanceFrom(task.pickupPos)
+        DrawText("ЛЕСНАЯ ЗАГОТОВКА", "WO.Tiny", x + 26, y + 87, WO.UI.Colors.accent)
+        DrawText(distance and distance <= radius and "У штабеля — нажмите E, чтобы начать." or
+            ("До брёвен: " .. tostring(math.floor(distance or 0)) .. " ед."),
+            "WO.Body", x + 26, y + 116)
+        DrawText(task.instruction or "", "WO.Small", x + 26, y + 157, WO.UI.Colors.textDim)
+    elseif task.phase == "work" then
+        DrawText("СОБЕРИТЕ СВЯЗКУ", "WO.Tiny", x + 26, y + 84, WO.UI.Colors.accent)
+        DrawLumberSequence(task, x, y, w)
+    elseif task.phase == "carry" then
+        local distance = PlayerDistanceFrom(task.deliveryPos)
+        local routeDistance = math.max(1, tonumber(task.routeDistance) or
+            tonumber(task.requiredDistance) or 1)
+        local remaining = distance or routeDistance
+        local progress = 1 - math.Clamp(remaining / routeDistance, 0, 1)
+
+        DrawText("СКЛАД БРЁВЕН", "WO.Tiny", x + 26, y + 83, WO.UI.Colors.accent)
+        DrawText(distance and distance <= radius and "У склада — нажмите E, чтобы сдать." or
+            ("До склада: " .. tostring(math.floor(remaining)) .. " ед."),
+            "WO.Body", x + 26, y + 110)
+        DrawProgress(x + 26, y + 148, math.max(180, w - 52), 16, progress,
+            WO.UI.Colors.accent)
+        DrawText("При переносе бег, прыжок и смена оружия заблокированы.",
+            "WO.Tiny", x + 26, y + 177, WO.UI.Colors.textDim)
+    end
+end
+
+local function DrawLumberWorldMarker(task)
+    local carrying = task.phase == "carry"
+    local position = carrying and task.deliveryPos or task.pickupPos
+    if not isvector(position) then return end
+
+    local screen = position:ToScreen()
+    if not screen or screen.visible ~= true then return end
+
+    local label = carrying and "СКЛАД БРЁВЕН" or "ШТАБЕЛЬ БРЁВЕН"
+    local x, y = tonumber(screen.x) or 0, tonumber(screen.y) or 0
+    draw.RoundedBox(6, x - 7, y - 7, 14, 14, WO.UI.Colors.accent)
+    DrawText(label, "WO.Tiny", x, y + 12, WO.UI.Colors.accent,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_TOP)
+end
+
 local function DrawWorldShift()
     local shift = CurrentShift()
     if not shift then return end
@@ -511,6 +616,9 @@ local function DrawWorldShift()
         DrawDodge(task, x, y)
     elseif mode.engine == "delivery" then
         DrawDelivery(task, shift, x, y, w)
+    elseif mode.engine == "lumber" then
+        DrawLumberDelivery(task, x, y, w)
+        DrawLumberWorldMarker(task)
     end
 
     if mode.controls and mode.controls ~= "" and mode.engine ~= "delivery" then
@@ -558,6 +666,27 @@ hook.Add("PlayerBindPress", "wo_professions_world_bind", function(ply, bind)
     local mode = task and WO.Professions.GetMiniGame(task.mode) or nil
     local engine = mode and mode.engine
     local lowerBind = string.lower(bind or "")
+
+    if engine == "lumber" then
+        if string.find(lowerBind, "+use", 1, true) then return true end
+
+        if task.phase == "work" and (string.find(lowerBind, "+forward", 1, true) or
+            string.find(lowerBind, "+back", 1, true) or
+            string.find(lowerBind, "+moveleft", 1, true) or
+            string.find(lowerBind, "+moveright", 1, true)) then
+            return true
+        end
+
+        if task.phase == "carry" then
+            if string.find(lowerBind, "+speed", 1, true) or
+                string.find(lowerBind, "+jump", 1, true) or
+                string.match(lowerBind, "^slot%d+$") or lowerBind == "lastinv" or
+                lowerBind == "invnext" or lowerBind == "invprev" or
+                lowerBind == "weapnext" or lowerBind == "weapprev" then
+                return true
+            end
+        end
+    end
 
     if (engine == "hold" or engine == "strike" or engine == "rhythm" or engine == "stack" or
         engine == "tap" or engine == "precision") and string.find(lowerBind, "+jump", 1, true) then

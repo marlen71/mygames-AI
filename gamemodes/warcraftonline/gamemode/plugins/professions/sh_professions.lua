@@ -43,7 +43,12 @@ WO.Professions.MiniGames = WO.Professions.MiniGames or {
     },
     masonry = { engine = "stack", label = "Кладка", controls = "Укладывайте камень ПРОБЕЛОМ, пока метка над швом." },
     delivery = { engine = "delivery", label = "Перенос груза", controls = "Заберите груз у точки и доставьте его, пройдя нужное расстояние." },
+    lumber_delivery = {
+        engine = "lumber", label = "Перенос брёвен",
+        controls = "E — взять/сдать брёвна · у штабеля повторите WASD-последовательность.",
+    },
     timing = { engine = "hold", label = "Рабочий ритм", controls = "Удерживайте ПРОБЕЛ в зелёной зоне." },
+
 }
 
 local DEFAULT_RANK_XP = { 0, 300, 900 }
@@ -234,9 +239,12 @@ WO.Net.Register("Profession.WorkInput", {
             hold = true, pickup = true, strike = true, tap = true, confirm = true,
             left = true, right = true, up = true, down = true,
             choice1 = true, choice2 = true, choice3 = true, choice4 = true,
+            drop = true,
         }
         if not allowed[action] then return false, "invalid_action" end
-        if action == "pickup" and not value then return false, "invalid_input" end
+        if (action == "pickup" or action == "drop") and not value then
+            return false, "invalid_input"
+        end
         return true
     end,
     handler = function(ply, shiftId, action, value)
