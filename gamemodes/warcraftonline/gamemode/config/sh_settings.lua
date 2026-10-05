@@ -107,9 +107,8 @@ WO.Config.ArcaneHands = {
 
 WO.Config.WorldMap = "rp_lordaeron"
 
--- Рабочие точки — не точки появления работодателя. Профессия откроет смену
--- только на rp_lordaeron; отдельные NPCSpawnPoints.work_* остаются пустыми,
--- пока для каждого работодателя не будут заданы точные координаты.
+-- Точки штабеля/склада отделены от мест появления работодателей.
+-- Работы лесоруба доступны только на настроенной карте rp_lordaeron.
 WO.Config.ProfessionWorksites = WO.Config.ProfessionWorksites or {}
 WO.Config.ProfessionWorksites.lumberjack = {
     map = WO.Config.WorldMap,
@@ -122,29 +121,70 @@ WO.Config.ProfessionWorksites.lumberjack = {
 }
 
 WO.Config.NPCSpawnPoints = {
-    -- Пустые data-driven точки работодателей: добавьте сюда точные Vector/Angle
-    -- конкретной карты, когда координаты будут готовы. До этого NPC не спавнятся.
-    work_lumberjack = {},
-    work_miner = {},
-    work_farmer = {},
-    work_herder = {},
-    work_fisher = {},
-    work_porter = {},
-    work_blacksmith = {},
-    work_tailor = {},
-    work_baker = {},
-    work_brewer = {},
-    work_alchemist = {},
-    work_merchant = {},
-    work_cleaner = {},
-    work_water_carrier = {},
-    work_carpenter = {},
-    work_weaponsmith = {},
-    work_jeweler = {},
-    work_dockworker = {},
-    work_beekeeper = {},
-    work_herbalist = {},
-    work_builder = {},
+    -- Работодатели спавнятся только по указанным координатам rp_lordaeron.
+    work_lumberjack = {
+        { map = WO.Config.WorldMap, pos = Vector(-7212.8, 1684.4, -2942.4), ang = Angle(-2, -143, 0) },
+    },
+    work_miner = {
+        { map = WO.Config.WorldMap, pos = Vector(-7898.3, 1848.8, -2896.8), ang = Angle(4, -52, 0) },
+    },
+    work_farmer = {
+        { map = WO.Config.WorldMap, pos = Vector(-3114.2, -4176.7, -3072), ang = Angle(0, -136, 0) },
+    },
+    work_herder = {
+        { map = WO.Config.WorldMap, pos = Vector(-5823.3, -5347.6, -3072), ang = Angle(0, 0, 0) },
+    },
+    work_fisher = {
+        { map = WO.Config.WorldMap, pos = Vector(-4211.7, -7101, -3072.7), ang = Angle(3, 8, 0) },
+    },
+    work_porter = {
+        { map = WO.Config.WorldMap, pos = Vector(-7321.9, 9852, -1572), ang = Angle(0, -175, 0) },
+    },
+    work_blacksmith = {
+        { map = WO.Config.WorldMap, pos = Vector(-4926.8, 9688.6, -1572), ang = Angle(0, -180, 0) },
+    },
+    work_tailor = {
+        --{ map = WO.Config.WorldMap, pos = Vector(), ang = Angle(0, 0, 0) },
+    },
+    work_baker = {
+        { map = WO.Config.WorldMap, pos = Vector(-5965.9, 7210.9, -1572), ang = Angle(0, 36, 0) },
+    },
+    work_brewer = {
+        { map = WO.Config.WorldMap, pos = Vector(-6257.3, 8075.1, -1558), ang = Angle(0, 90, 0) },
+    },
+    work_alchemist = {
+        { map = WO.Config.WorldMap, pos = Vector(-8680.7, 7593, -1489), ang = Angle(0, 90, 0) },
+    },
+    work_merchant = {
+        --{ map = WO.Config.WorldMap, pos = Vector(), ang = Angle(0, 0, 0) },
+    },
+    work_cleaner = {
+        { map = WO.Config.WorldMap, pos = Vector(-6034, 8606.4, -1572), ang = Angle(0, 0, 0) },
+    },
+    work_water_carrier = {
+        { map = WO.Config.WorldMap, pos = Vector(-8950.7, 8737.1, -1572), ang = Angle(0, 90, 0) },
+    },
+    work_carpenter = {
+        --{ map = WO.Config.WorldMap, pos = Vector(), ang = Angle(0, 0, 0) },
+    },
+    work_weaponsmith = {
+        --{ map = WO.Config.WorldMap, pos = Vector(), ang = Angle(0, 0, 0) },
+    },
+    work_jeweler = {
+        --{ map = WO.Config.WorldMap, pos = Vector(), ang = Angle(0, 0, 0) },
+    },
+    work_dockworker = {
+        --{ map = WO.Config.WorldMap, pos = Vector(), ang = Angle(0, 0, 0) },
+    },
+    work_beekeeper = {
+        { map = WO.Config.WorldMap, pos = Vector(-3046.5, -6456.3, -3072), ang = Angle(0, 180, 0) },
+    },
+    work_herbalist = {
+        { map = WO.Config.WorldMap, pos = Vector(-6111.5, -4552.5, -3072), ang = Angle(0, -90, 0) },
+    },
+    work_builder = {
+        --{ map = WO.Config.WorldMap, pos = Vector(), ang = Angle(0, 0, 0) },
+    },
 
     hunter_dyrne = {
         { map = WO.Config.WorldMap, pos = Vector(-5812.6, 7972.9, -1572), ang = Angle(0, 4, 0) },

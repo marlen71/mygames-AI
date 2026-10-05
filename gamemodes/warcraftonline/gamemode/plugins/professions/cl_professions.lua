@@ -477,14 +477,19 @@ local function PlayerDistanceFrom(position)
     return ply:GetPos():Distance(position)
 end
 
-local function DrawLumberSequence(task, x, y, w)
+local function DrawLumberSequence(task, shift, def, rank)
     local keyLabels = { up = "W", left = "A", down = "S", right = "D" }
     local length = math.max(1, math.floor(tonumber(task.sequenceLength) or 6))
     local completed = math.Clamp(math.floor(tonumber(task.sequenceCount) or
         ((tonumber(task.sequenceIndex) or 1) - 1)), 0, length)
     local prompt = keyLabels[task.sequencePrompt] or "?"
-    local centerX = x + w * 0.5
-    local promptY = y + 108
+    local screenWidth, screenHeight = ScrW(), ScrH()
+    local panelWidth = math.min(500, screenWidth - 32)
+    local panelHeight = 286
+    local panelX = (screenWidth - panelWidth) * 0.5
+    local panelY = math.max(16, screenHeight * 0.62 - panelHeight * 0.5)
+    local centerX = panelX + panelWidth * 0.5
+    local keyY = panelY + 103
     local feedback = "Нажмите показанную клавишу."
     local feedbackColor = WO.UI.Colors.textDim
 
@@ -496,19 +501,32 @@ local function DrawLumberSequence(task, x, y, w)
         feedbackColor = WO.UI.Colors.bad
     end
 
-    DrawText("ОДНА СЛУЧАЙНАЯ КЛАВИША ЗА РАЗ", "WO.Tiny", centerX, y + 84,
+    draw.RoundedBox(12, panelX, panelY, panelWidth, panelHeight, Color(9, 14, 23, 244))
+    surface.SetDrawColor(196, 155, 75, 245)
+    surface.DrawOutlinedRect(panelX, panelY, panelWidth, panelHeight, 2)
+    DrawText((def and def.name or "Лесоруб") .. " · " .. (rank and rank.name or "Дровосек"),
+        "WO.Subtitle", panelX + 22, panelY + 15, WO.UI.Colors.accent)
+    DrawText("ЗАКАЗ " .. tostring(math.min((shift.completedOrders or 0) + 1,
+        shift.requiredOrders or 3)) .. "/" .. tostring(shift.requiredOrders or 3),
+        "WO.Tiny", panelX + panelWidth - 22, panelY + 20, WO.UI.Colors.textDim,
+        TEXT_ALIGN_RIGHT)
+    DrawText("ЗАГОТОВКА БРЁВЕН", "WO.Subtitle", centerX, panelY + 48,
         WO.UI.Colors.accent, TEXT_ALIGN_CENTER)
-    draw.RoundedBox(8, centerX - 31, promptY, 62, 54, Color(36, 47, 63, 245))
-    surface.SetDrawColor(212, 175, 55, 235)
-    surface.DrawOutlinedRect(centerX - 31, promptY, 62, 54, 2)
-    DrawText(prompt, "WO.Title", centerX, promptY + 27, WO.UI.Colors.text,
+    DrawText("Нажмите показанную клавишу", "WO.Small", centerX, panelY + 77,
+        WO.UI.Colors.text, TEXT_ALIGN_CENTER)
+
+    draw.RoundedBox(10, centerX - 42, keyY, 84, 72, Color(37, 47, 64, 255))
+    surface.SetDrawColor(212, 175, 55, 255)
+    surface.DrawOutlinedRect(centerX - 42, keyY, 84, 72, 3)
+    DrawText(prompt, "WO.Title", centerX, keyY + 36, WO.UI.Colors.text,
         TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-    DrawText(tostring(completed) .. " / " .. tostring(length) .. " верных нажатий",
-        "WO.Tiny", centerX, y + 168, WO.UI.Colors.text,
-        TEXT_ALIGN_CENTER)
-    DrawProgress(x + 26, y + 187, math.max(180, w - 52), 12,
+    DrawText("Допустимые клавиши: W · A · S · D", "WO.Tiny", centerX, panelY + 181,
+        WO.UI.Colors.textDim, TEXT_ALIGN_CENTER)
+    DrawText("Правильные нажатия: " .. tostring(completed) .. " / " .. tostring(length),
+        "WO.Body", centerX, panelY + 202, WO.UI.Colors.text, TEXT_ALIGN_CENTER)
+    DrawProgress(panelX + 42, panelY + 229, panelWidth - 84, 14,
         tonumber(task.progress) or completed / length, WO.UI.Colors.good)
-    DrawText(feedback, "WO.Tiny", centerX, y + 205, feedbackColor,
+    DrawText(feedback, "WO.Tiny", centerX, panelY + 255, feedbackColor,
         TEXT_ALIGN_CENTER)
 end
 
@@ -522,9 +540,6 @@ local function DrawLumberDelivery(task, x, y, w)
             ("До брёвен: " .. tostring(math.floor(distance or 0)) .. " ед."),
             "WO.Body", x + 26, y + 116)
         DrawText(task.instruction or "", "WO.Small", x + 26, y + 157, WO.UI.Colors.textDim)
-    elseif task.phase == "work" then
-        DrawText("СОБЕРИТЕ СВЯЗКУ", "WO.Tiny", x + 26, y + 84, WO.UI.Colors.accent)
-        DrawLumberSequence(task, x, y, w)
     elseif task.phase == "carry" then
         local distance = PlayerDistanceFrom(task.deliveryPos)
         local routeDistance = math.max(1, tonumber(task.routeDistance) or
@@ -565,9 +580,18 @@ local function DrawWorldShift()
     local def = WO.Professions.Get(shift.professionId)
     if not def then return end
 
+    local task = shift.task
+    local mode = task and WO.Professions.GetMiniGame(task.mode) or nil
+    local rank = def.ranks[math.Clamp(tonumber(shift.rank) or 1, 1, 3)]
+
+    if shift.status == "working" and task and mode and mode.engine == "lumber" and
+        task.phase == "work" then
+        DrawLumberSequence(task, shift, def, rank)
+        return
+    end
+
     local w, h = math.min(470, ScrW() - 32), 246
     local x, y = 24, ScrH() - h - 28
-    local rank = def.ranks[math.Clamp(tonumber(shift.rank) or 1, 1, 3)]
 
     draw.RoundedBox(10, x, y, w, h, Color(12, 17, 25, 232))
     surface.SetDrawColor(196, 155, 75, 235)
@@ -593,9 +617,8 @@ local function DrawWorldShift()
     DrawText("X — отменить", "WO.Tiny", x + w - 18, y + 17,
         WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
 
-    local task = shift.task
     if not task then return end
-    local mode = WO.Professions.GetMiniGame(task.mode) or {}
+    mode = mode or WO.Professions.GetMiniGame(task.mode) or {}
     DrawText((mode.label or task.mode) .. " · " .. (task.title or "Заказ"),
         "WO.Small", x + 18, y + 66, WO.UI.Colors.text)
 

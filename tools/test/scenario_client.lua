@@ -811,7 +811,7 @@ do
     local lumberCountLabel = false
     for _, text in ipairs(MOCK.drawnTextValues) do
         if shownDirections[text] ~= nil then shownDirections[text] = true end
-        lumberCountLabel = lumberCountLabel or text == "0 / 6 верных нажатий"
+        lumberCountLabel = lumberCountLabel or text == "Правильные нажатия: 0 / 6"
     end
     MOCK.Assert(shownDirections.W and not shownDirections.A and not shownDirections.S and
         not shownDirections.D and lumberCountLabel,
@@ -853,7 +853,7 @@ do
     local correctFeedback = false
     for _, text in ipairs(MOCK.drawnTextValues) do
         if shownDirections[text] ~= nil then shownDirections[text] = true end
-        lumberCountLabel = lumberCountLabel or text == "1 / 6 верных нажатий"
+        lumberCountLabel = lumberCountLabel or text == "Правильные нажатия: 1 / 6"
         correctFeedback = correctFeedback or text == "Верно! Следующая подсказка уже готова."
     end
     MOCK.Assert(shownDirections.A and not shownDirections.W and not shownDirections.S and

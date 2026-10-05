@@ -200,12 +200,13 @@ end
 for professionID, expectedRanks in pairs(expectedProfessionRanks) do
     local profession = WO.Professions.Get(professionID)
     local employer = WO.NPCs.Get("work_" .. professionID)
+    local configuredSpawns = WO.Config.NPCSpawnPoints["work_" .. professionID] or {}
     allProfessionsValid = allProfessionsValid and profession ~= nil and
         isstring(profession.name) and #profession.ranks == 3 and
         WO.Professions.GetMiniGame(expectedProfessionModes[professionID]) ~= nil
     allProfessionNPCsValid = allProfessionNPCsValid and employer ~= nil and
         employer.professionId == professionID and employer.dialogue == "profession_work" and
-        #employer.spawns == 0
+        #employer.spawns == #configuredSpawns
 
     if profession then
         for rankIndex, rank in ipairs(profession.ranks) do
@@ -263,6 +264,7 @@ MOCK.Assert(allProfessionsValid and allProfessionNPCsValid and allProfessionMode
     allWorkBonusesValid and allMagicBonusesValid,
     "21 профессия имеет своего NPC, собственную уникальную механику, три ступени и валидные расовые/классовые специализации")
 local lumberWorksite = WO.Config.ProfessionWorksites and WO.Config.ProfessionWorksites.lumberjack
+local lumberjackSpawn = WO.Config.NPCSpawnPoints.work_lumberjack[1]
 MOCK.Assert(lumberWorksite and lumberWorksite.map == "rp_lordaeron" and
     isvector(lumberWorksite.pickupPos) and
     math.abs(lumberWorksite.pickupPos.x - (-8878.8)) < 0.01 and
@@ -274,8 +276,11 @@ MOCK.Assert(lumberWorksite and lumberWorksite.map == "rp_lordaeron" and
     math.abs(lumberWorksite.deliveryPos.z - (-2943.2)) < 0.01 and
     lumberWorksite.carryWeaponClass == "wo_lumber_logs" and
     lumberWorksite.carryModel == "models/lumber/lumber.mdl" and
-    table.Count(WO.Config.NPCSpawnPoints.work_lumberjack) == 0,
-    "рабочий участок лесоруба использует обе заданные точки, точную модель и не задаёт NPC-spawn")
+    lumberjackSpawn and lumberjackSpawn.map == "rp_lordaeron" and
+    lumberjackSpawn.pos.x == -7212.8 and lumberjackSpawn.pos.y == 1684.4 and
+    lumberjackSpawn.pos.z == -2942.4 and lumberjackSpawn.ang.p == -2 and
+    lumberjackSpawn.ang.y == -143,
+    "лесной участок использует заданные точки, модель и координаты работодателя")
 local lumberSWEP = weapons.GetStored("wo_lumber_logs")
 MOCK.Assert(lumberSWEP and lumberSWEP.WorldModel == "models/lumber/lumber.mdl" and
     lumberSWEP.HoldType == "physgun" and lumberSWEP.CanDrop() == false and
@@ -1266,6 +1271,8 @@ local function CompleteLumberOrder(checkCarryRestrictions)
     local promptTask = promptMessages[#promptMessages] and promptMessages[#promptMessages].args[1].shift.task
     MOCK.Assert(task.phase == "work" and task.sequenceIndex == 1 and task.sequence == nil and
         task.sequenceLength == 6 and lumberPromptDirections[task.sequencePrompt] and
+        not WO.Professions.IsCarryingLumber(workPlayer) and
+        not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
         promptTask and promptTask.sequence == nil and
         promptTask.sequencePrompt == task.sequencePrompt and promptTask.sequenceCount == 0 and
         promptTask.sequenceLength == 6,
@@ -1305,6 +1312,12 @@ local function CompleteLumberOrder(checkCarryRestrictions)
         MOCK.Assert(task.sequenceIndex == index + 1 and task.lastInputCorrect == true and
             task.sequence == nil,
             "каждая правильная случайная клавиша засчитывается ровно один раз")
+        if index < task.sequenceLength then
+            MOCK.Assert(task.phase == "work" and
+                not WO.Professions.IsCarryingLumber(workPlayer) and
+                not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass),
+                "связка не берётся до шестого правильного нажатия")
+        end
 
         if index == 1 then
             local nextPromptMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
@@ -1807,13 +1820,25 @@ MOCK.Assert(WO.Config.WorldMap == "rp_lordaeron" and
 -- Статические quest/vendor NPC размещаются только на своей подтверждённой карте.
 WO.NPCs.SpawnAll()
 
-MOCK.Assert(#WO.NPCs.Spawned == 9,
-    "пять статических NPC и четыре ambient-кабана заспавнены по своим точкам")
+MOCK.Assert(#WO.NPCs.Spawned == 23,
+    "14 работодателей, пять статических NPC и четыре ambient-кабана заспавнены по заданным точкам")
 
 local function FindNPC(id)
     for _, ent in ipairs(WO.NPCs.Spawned) do
         if IsValid(ent) and ent.npcDef and ent.npcDef.id == id then return ent end
     end
+end
+
+do
+    local lumberjackEmployer = FindNPC("work_lumberjack")
+    local lumberjackDefinition = WO.NPCs.Get("work_lumberjack")
+    local spawnPoint = WO.Config.NPCSpawnPoints.work_lumberjack[1]
+    MOCK.Assert(lumberjackEmployer and lumberjackDefinition and spawnPoint and
+        lumberjackEmployer:GetModel() == lumberjackDefinition.model and
+        lumberjackEmployer:GetPos().x == spawnPoint.pos.x and
+        lumberjackEmployer:GetPos().y == spawnPoint.pos.y and
+        lumberjackEmployer:GetPos().z == spawnPoint.pos.z,
+        "работодатель лесоруба появляется в указанной точке со своей заданной моделью")
 end
 
 local function FindNPCs(id)
