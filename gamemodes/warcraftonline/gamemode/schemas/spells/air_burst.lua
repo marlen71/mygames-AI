@@ -1,0 +1,18 @@
+WO.Spells.Register({
+    id = "air_burst",
+    name = "Порыв воздуха",
+    element = "Воздух",
+    elementType = "air",
+    scrollPrice = 4000,
+    type = "damage",
+    description = "Сгусток голубой энергии поражает цель на расстоянии.",
+    requiredLevel = 1,
+    maxRank = 5,
+    manaCost = 7,
+    range = 850,
+    cooldown = 1.0,
+    basePower = 18,
+    powerPerRank = 7,
+    spellPowerScale = 0.5,
+    damageType = WO.Enums.DamageType.NATURE,
+})

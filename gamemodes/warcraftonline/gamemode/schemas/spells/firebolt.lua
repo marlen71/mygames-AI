@@ -1,0 +1,18 @@
+WO.Spells.Register({
+    id = "firebolt",
+    name = "Огненный снаряд",
+    element = "Огонь",
+    elementType = "fire",
+    scrollPrice = 4500,
+    type = "damage",
+    description = "Красный огненный снаряд с уроном по цели.",
+    requiredLevel = 1,
+    maxRank = 5,
+    manaCost = 9,
+    range = 950,
+    cooldown = 1.25,
+    basePower = 24,
+    powerPerRank = 8,
+    spellPowerScale = 0.55,
+    damageType = WO.Enums.DamageType.FIRE,
+})

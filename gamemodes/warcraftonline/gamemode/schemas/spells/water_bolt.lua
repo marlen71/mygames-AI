@@ -1,0 +1,18 @@
+WO.Spells.Register({
+    id = "water_bolt",
+    name = "Водяной снаряд",
+    element = "Вода",
+    elementType = "water",
+    scrollPrice = 4000,
+    type = "damage",
+    description = "Снаряд водной стихии бьёт выбранную цель.",
+    requiredLevel = 1,
+    maxRank = 5,
+    manaCost = 7,
+    range = 850,
+    cooldown = 1.05,
+    basePower = 17,
+    powerPerRank = 7,
+    spellPowerScale = 0.5,
+    damageType = WO.Enums.DamageType.FROST,
+})

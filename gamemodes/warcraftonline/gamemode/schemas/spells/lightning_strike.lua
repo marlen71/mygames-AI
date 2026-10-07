@@ -1,0 +1,18 @@
+WO.Spells.Register({
+    id = "lightning_strike",
+    name = "Удар молнии",
+    element = "Молния",
+    elementType = "lightning",
+    scrollPrice = 6000,
+    type = "damage",
+    description = "Фиолетовый разряд бьёт цель сквозь дальний луч.",
+    requiredLevel = 1,
+    maxRank = 5,
+    manaCost = 11,
+    range = 1000,
+    cooldown = 1.5,
+    basePower = 28,
+    powerPerRank = 10,
+    spellPowerScale = 0.65,
+    damageType = WO.Enums.DamageType.NATURE,
+})

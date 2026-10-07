@@ -1,0 +1,17 @@
+WO.Spells.Register({
+    id = "healing_wave",
+    name = "Исцеляющая волна",
+    element = "Жизнь",
+    elementType = "life",
+    scrollPrice = 5500,
+    type = "heal",
+    description = "Лечит мага или союзника под прицелом в радиусе.",
+    requiredLevel = 1,
+    maxRank = 5,
+    manaCost = 8,
+    range = 750,
+    cooldown = 1.4,
+    basePower = 18,
+    powerPerRank = 12,
+    spellPowerScale = 0.6,
+})

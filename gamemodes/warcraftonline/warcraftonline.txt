@@ -1,0 +1,9 @@
+"warcraftonline"
+{
+	"base"		"base"
+	"title"		"Warcraft Online"
+	"maps"		"*"
+	"menusystem"	"1"
+	"category"	"Roleplay"
+	"workshopid"	""
+}

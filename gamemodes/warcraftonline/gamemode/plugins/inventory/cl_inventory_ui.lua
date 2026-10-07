@@ -1,0 +1,507 @@
+--[[
+    Warcraft Online — UI инвентаря (client).
+
+    Окно делится на две независимые панели:
+      1) предметы, ресурсы и сетка инвентаря;
+      2) 3D-модель персонажа и отдельные слоты экипировки.
+
+    Содержимое и все операции остаются серверно-авторитетными.
+]]
+
+WO.InventoryUI = WO.InventoryUI or {}
+
+local activeInventoryPanel = nil
+local nextInventoryWindowId = 0
+
+---------------------------------------------------------------------------
+-- Вспомогательные функции
+---------------------------------------------------------------------------
+
+local function GetItems()
+    return (WO.Inventory.ClientData and WO.Inventory.ClientData.items) or {}
+end
+
+local function GetItemDefinition(item)
+    return item and WO.Items.Get(item.class) or nil
+end
+
+local function GetItemSize(_)
+    -- Visual placement mirrors the server's fixed one-instance/one-cell rule.
+    return 1, 1
+end
+
+---------------------------------------------------------------------------
+-- Диалог разделения стака
+---------------------------------------------------------------------------
+
+local function OpenSplitDialog(item)
+    if not item or (item.amount or 1) <= 1 then return end
+
+    local dialog = WO.UI.Window(WO.Lang:Get("inventory.split"), 280, 140)
+    local slider = vgui.Create("DNumSlider", dialog)
+    slider:SetPos(20, 55)
+    slider:SetSize(240, 30)
+    slider:SetText("")
+    slider:SetMin(1)
+    slider:SetMax((item.amount or 1) - 1)
+    slider:SetDecimals(0)
+    slider:SetValue(math.floor((item.amount or 1) / 2))
+
+    local confirm = WO.UI.Button(dialog, WO.Lang:Get("ui.confirm"), function()
+        local amount = math.floor(slider:GetValue())
+
+        if amount >= 1 and amount < (item.amount or 1) then
+            WO.Net.SendToServer("Inventory.Split", item.uid, amount)
+        end
+
+        dialog:Close()
+    end)
+    confirm:SetPos(70, 95)
+    confirm:SetSize(140, 30)
+end
+
+---------------------------------------------------------------------------
+-- Контекстное меню предмета
+---------------------------------------------------------------------------
+
+local function OpenItemMenu(_, item)
+    if not item then return end
+
+    local def = GetItemDefinition(item)
+
+    if not def then return end
+
+    local menu = DermaMenu()
+
+    if def.equipment or def.consumable or isfunction(def.useHandler) then
+        local actionKey = def.equipment and "inventory.equip" or "inventory.use"
+        menu:AddOption(WO.Lang:Get(actionKey), function()
+            WO.Net.SendToServer("Inventory.Use", item.uid)
+        end)
+    end
+
+    if def.stackable and (item.amount or 1) > 1 then
+        menu:AddOption(WO.Lang:Get("inventory.split"), function()
+            OpenSplitDialog(item)
+        end)
+    end
+
+    menu:AddOption(WO.Lang:Get("inventory.drop"), function()
+        WO.Net.SendToServer("Inventory.Drop", item.uid, 0)
+    end)
+
+    menu:AddSpacer()
+
+    local destroy = menu:AddOption(WO.Lang:Get("inventory.destroy"), function()
+        WO.Net.SendToServer("Inventory.Destroy", item.uid)
+    end)
+    destroy:SetTextColor(WO.UI.Colors.bad)
+    menu:Open()
+end
+
+---------------------------------------------------------------------------
+-- Панель ресурсов
+---------------------------------------------------------------------------
+
+local function CreateResourcesPanel(parent)
+    local panel = vgui.Create("DPanel", parent)
+    panel:SetPos(12, 48)
+    panel:SetSize(parent:GetWide() - 24, 42)
+
+    panel.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panelDark, WO.UI.Colors.border)
+
+        local money = WO.Currency.ClientAmount or 0
+        local moneyText = WO.Currency.Format and WO.Currency.Format(money) or tostring(money)
+        local data = WO.Inventory.ClientData
+        local width = tonumber(data and data.width) or 0
+        local height = tonumber(data and data.height) or 0
+        local capacity = width * height
+        local overflowCount = 0
+
+        for _, item in ipairs(GetItems()) do
+            local x, y = tonumber(item.x), tonumber(item.y)
+
+            if not x or not y or x < 1 or y < 1 or x > width or y > height then
+                overflowCount = overflowCount + 1
+            end
+        end
+
+        local countText = WO.Lang:Get("inventory.items_count") .. ": " .. #GetItems() ..
+            "  /  " .. capacity
+        local countColor = WO.UI.Colors.textDim
+
+        if overflowCount > 0 then
+            countText = WO.Lang:Get("inventory.overflow_label") .. ": " .. overflowCount
+            countColor = WO.UI.Colors.bad
+        end
+
+        WO.UI.DrawTextFit(WO.Lang:Get("currency.name") .. ": " .. moneyText,
+            "WO.Small", 12, h / 2, WO.UI.Colors.accent,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, math.max(0, w * 0.48 - 12), h - 4)
+        WO.UI.DrawTextFit(countText, "WO.Small", w - 12, h / 2,
+            countColor, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER,
+            math.max(0, w * 0.48 - 12), h - 4)
+    end
+
+    return panel
+end
+
+---------------------------------------------------------------------------
+-- Сетка инвентаря
+---------------------------------------------------------------------------
+
+local function BuildGrid(parent)
+    local data = WO.Inventory.ClientData
+
+    if IsValid(parent.grid) then
+        parent.grid:Remove()
+    end
+
+    parent.grid = nil
+    parent.slots = {}
+    parent.itemPanels = {}
+
+    if not data then
+        local empty = vgui.Create("DPanel", parent)
+        empty:SetPos(12, 104)
+        empty:SetSize(parent:GetWide() - 24, math.max(60, parent:GetTall() - 160))
+        empty:SetPaintBackground(false)
+        empty.Paint = function(_, w, h)
+            WO.UI.DrawTextFit(WO.Lang:Get("inventory.loading"), "WO.Small",
+                w / 2, h / 2, WO.UI.Colors.textDim,
+                TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, w - 24, h - 8)
+        end
+        parent.emptyState = empty
+        return
+    end
+
+    if IsValid(parent.emptyState) then
+        parent.emptyState:Remove()
+        parent.emptyState = nil
+    end
+
+    local width = math.max(1, math.floor(tonumber(data.width) or WO.Config.InventoryWidth or 10))
+    local height = math.max(1, math.floor(tonumber(data.height) or WO.Config.InventoryHeight or 6))
+    local gap = WO.UI.Metrics.slotGap
+    local padding = 12
+    local maxSlot = WO.UI.Metrics.slotSize
+    local slotSize = math.floor((parent:GetWide() - padding * 2 - (width + 1) * gap) / width)
+    slotSize = math.max(20, math.min(maxSlot, slotSize))
+
+    local gridWidth = width * slotSize + (width + 1) * gap
+    local gridHeight = height * slotSize + (height + 1) * gap
+    local grid = vgui.Create("DPanel", parent)
+    grid:SetPos(math.floor((parent:GetWide() - gridWidth) / 2), 104)
+    grid:SetSize(gridWidth, gridHeight)
+    grid:SetPaintBackground(false)
+    grid.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panelDark, WO.UI.Colors.border)
+    end
+
+    parent.grid = grid
+    parent.gridSlotSize = slotSize
+    parent.gridGap = gap
+
+    for y = 1, height do
+        for x = 1, width do
+            local slot = vgui.Create("WO_ItemSlot", grid)
+            slot:SetPos(gap + (x - 1) * (slotSize + gap), gap + (y - 1) * (slotSize + gap))
+            slot:SetSize(slotSize, slotSize)
+            slot:SetDroppable(true)
+            slot.gridX = x
+            slot.gridY = y
+            slot.gridPitch = slotSize + gap
+
+            slot.CanDropItem = function(_, drag)
+                return drag ~= nil and drag.uid ~= nil
+            end
+
+            slot.OnItemDropped = function(selfSlot, drag)
+                local source = drag.source
+
+                if IsValid(source) and source.slotId then
+                    -- Снятие экипировки использует серверное авто-размещение,
+                    -- которое само проверяет свободную площадь.
+                    WO.Net.SendToServer("Equipment.Unequip", source.slotId)
+                    return
+                end
+
+                local targetX = selfSlot.gridX - (drag.offsetX or 0)
+                local targetY = selfSlot.gridY - (drag.offsetY or 0)
+
+                if targetX < 1 or targetY < 1 then
+                    WO.Notify.Show("error", WO.Lang:Get("inventory.invalid_drop_position"))
+                    return
+                end
+
+                WO.Net.SendToServer("Inventory.Move", drag.uid, targetX, targetY)
+            end
+
+            slot.OnContextMenu = OpenItemMenu
+            parent.slots[#parent.slots + 1] = slot
+        end
+    end
+
+    local function RefreshItems()
+        for _, slot in ipairs(parent.slots) do
+            if IsValid(slot) then
+                slot:SetItem(nil)
+            end
+        end
+
+        for _, itemPanel in ipairs(parent.itemPanels) do
+            if IsValid(itemPanel) then
+                itemPanel:Remove()
+            end
+        end
+        parent.itemPanels = {}
+
+        local cellPitch = slotSize + gap
+
+        for _, item in ipairs(GetItems()) do
+            local itemWidth, itemHeight = GetItemSize(item)
+            local x = math.floor(tonumber(item.x) or 0)
+            local y = math.floor(tonumber(item.y) or 0)
+
+            if x >= 1 and y >= 1 and x + itemWidth - 1 <= width and y + itemHeight - 1 <= height then
+                local itemPanel = vgui.Create("WO_ItemSlot", grid)
+                itemPanel:SetPos(gap + (x - 1) * cellPitch, gap + (y - 1) * cellPitch)
+                itemPanel:SetSize(itemWidth * slotSize + (itemWidth - 1) * gap,
+                    itemHeight * slotSize + (itemHeight - 1) * gap)
+                itemPanel:SetItem(item)
+                itemPanel:SetDroppable(false)
+                itemPanel.gridPitch = cellPitch
+                itemPanel.gridSlotSize = slotSize
+                itemPanel.itemWidth = itemWidth
+                itemPanel.itemHeight = itemHeight
+                itemPanel:SetZPos(2)
+                itemPanel.OnContextMenu = OpenItemMenu
+                parent.itemPanels[#parent.itemPanels + 1] = itemPanel
+            end
+        end
+    end
+
+    RefreshItems()
+    parent.RefreshItems = RefreshItems
+end
+
+---------------------------------------------------------------------------
+-- Сборка окна
+---------------------------------------------------------------------------
+
+local function ClearDrag()
+    if WO.UI.CancelDrag then
+        WO.UI.CancelDrag()
+    elseif WO.UI.Drag then
+        if IsValid(WO.UI.Drag.ghost) then
+            WO.UI.Drag.ghost:Remove()
+        end
+        WO.UI.Drag = nil
+    end
+end
+
+local function BelongsTo(panel, ancestor)
+    if not IsValid(panel) or not IsValid(ancestor) then return false end
+
+    local current = panel
+
+    while IsValid(current) do
+        if current == ancestor then return true end
+        current = current:GetParent()
+    end
+
+    return false
+end
+
+local function BuildInventoryPage(parent)
+    if not (WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()) then
+        local unavailable = WO.UI.Label(parent, WO.Lang:Get("menu.no_character"),
+            "WO.Body", WO.UI.Colors.textDim)
+        unavailable:Dock(TOP)
+        unavailable:SetTall(36)
+        return nil
+    end
+
+    WO.Net.SendToServer("Inventory.RequestSync")
+
+    local width = math.max(1, parent:GetWide())
+    local height = math.max(1, parent:GetTall())
+    local root = vgui.Create("DPanel", parent)
+    root:SetPos(0, 0)
+    root:SetSize(width, height)
+    root:SetPaintBackground(false)
+    root.woInventoryPage = true
+    activeInventoryPanel = root
+
+    local heading = vgui.Create("DPanel", root)
+    heading:SetPos(0, 0)
+    heading:SetSize(width, 48)
+    heading:SetPaintBackground(false)
+    heading.Paint = function(_, w, h)
+        WO.UI.DrawTextFit(WO.Lang:Get("inventory.title"), "WO.Title",
+            2, 20, WO.UI.Colors.accent, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 4, 30)
+        WO.UI.DrawTextFit(WO.Lang:Get("inventory.menu_hint"), "WO.Small",
+            2, 42, WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, w - 4, 20)
+    end
+
+    local scroll = WO.UI.Scroll(root)
+    scroll:SetPos(0, 56)
+    scroll:SetSize(width, math.max(1, height - 56))
+
+    local stacked = width < 820
+    local gap = 12
+    local inventoryWidth = stacked and width or math.floor((width - gap) * 0.62)
+    local equipmentWidth = stacked and width or math.max(1, width - gap - inventoryWidth)
+    local inventoryHeight = stacked and 500 or math.max(430, height - 56)
+    local equipmentHeight = stacked and 460 or math.max(430, height - 56)
+    local contentHeight = stacked and (inventoryHeight + gap + equipmentHeight) or
+        math.max(inventoryHeight, equipmentHeight)
+    local layout = vgui.Create("DPanel", scroll)
+    layout:SetPos(0, 0)
+    layout:SetSize(width, contentHeight)
+    layout:SetPaintBackground(false)
+
+    local inventoryPanel = vgui.Create("DPanel", layout)
+    inventoryPanel:SetPos(0, 0)
+    inventoryPanel:SetSize(inventoryWidth, inventoryHeight)
+    inventoryPanel.Paint = function(_, w, h)
+        WO.UI.DrawPanelOutlined(0, 0, w, h, WO.UI.Colors.panel,
+            WO.UI.Colors.border, WO.UI.Metrics.radius)
+        WO.UI.DrawTextFit(WO.Lang:Get("inventory.title"), "WO.Subtitle",
+            14, 22, WO.UI.Colors.accent, TEXT_ALIGN_LEFT,
+            TEXT_ALIGN_CENTER, w - 28, 26)
+    end
+
+    CreateResourcesPanel(inventoryPanel)
+    BuildGrid(inventoryPanel)
+
+    local sortButton = WO.UI.Button(inventoryPanel, WO.Lang:Get("inventory.sort"), function()
+        WO.Net.SendToServer("Inventory.Sort")
+    end)
+    sortButton:SetPos(12, inventoryHeight - 40)
+    sortButton:SetSize(math.min(180, inventoryWidth - 24), 30)
+
+    local equipmentX = stacked and 0 or inventoryWidth + gap
+    local equipmentY = stacked and inventoryHeight + gap or 0
+    local previewHeight = math.min(178, math.max(112, math.floor(equipmentWidth * 0.42)))
+    local equipmentPanel = WO.EquipmentUI and WO.EquipmentUI.CreatePanel and
+        WO.EquipmentUI.CreatePanel(layout, {
+            x = equipmentX,
+            y = equipmentY,
+            width = equipmentWidth,
+            height = equipmentHeight,
+            topInset = 42 + previewHeight,
+        }) or nil
+
+    local char = WO.Character.GetLocal()
+
+    if IsValid(equipmentPanel) and char then
+        local charModel = WO.UI.CreateCharacterModel(equipmentPanel, char.model)
+        local modelWidth = math.min(220, equipmentWidth - 30)
+        charModel:SetPos(math.floor((equipmentWidth - modelWidth) / 2), 38)
+        charModel:SetSize(modelWidth, previewHeight - 4)
+        charModel.spin = true
+
+        if char.customization then
+            charModel:ApplyCustomization(char.customization)
+        end
+    end
+
+    nextInventoryWindowId = nextInventoryWindowId + 1
+    local refreshHookId = "wo_inventory_ui_" .. tostring(nextInventoryWindowId)
+
+    WO.Hook.Add("InventoryChanged", refreshHookId, function()
+        if IsValid(root) and IsValid(inventoryPanel) and inventoryPanel.RefreshItems then
+            inventoryPanel:RefreshItems()
+        end
+    end)
+
+    WO.Hook.Add("InventorySynced", refreshHookId .. "_sync", function()
+        if IsValid(root) and IsValid(inventoryPanel) then
+            BuildGrid(inventoryPanel)
+        end
+    end)
+
+    root.OnRemove = function()
+        WO.Hook.Remove("InventoryChanged", refreshHookId)
+        WO.Hook.Remove("InventorySynced", refreshHookId .. "_sync")
+        WO.UI.HideTooltip()
+
+        if WO.UI.Drag and
+            (not IsValid(WO.UI.Drag.source) or BelongsTo(WO.UI.Drag.source, root)) then
+            ClearDrag()
+        end
+
+        if activeInventoryPanel == root then
+            activeInventoryPanel = nil
+        end
+    end
+
+    return root
+end
+
+function WO.InventoryUI.BuildPanel(parent)
+    if not IsValid(parent) then return nil end
+
+    return BuildInventoryPage(parent)
+end
+
+function WO.InventoryUI.Open()
+    if not (WO.Character and WO.Character.GetLocal and WO.Character.GetLocal()) then
+        WO.Notify.Show("info", WO.Lang:Get("menu.no_character"))
+        return
+    end
+
+    if WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() then
+        if WO.MenuUI.ActivatePage then WO.MenuUI.ActivatePage("inventory") end
+    elseif WO.MenuUI and WO.MenuUI.Show then
+        WO.MenuUI.Show("inventory")
+    end
+end
+
+function WO.InventoryUI.Close()
+    if WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() and
+        WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "inventory" and
+        WO.MenuUI.ActivatePage then
+        WO.MenuUI.ActivatePage("overview")
+    end
+
+    if IsValid(activeInventoryPanel) then
+        activeInventoryPanel:Remove()
+        activeInventoryPanel = nil
+    end
+
+    ClearDrag()
+end
+
+function WO.InventoryUI.Toggle()
+    if WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() and
+        WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "inventory" then
+        WO.MenuUI.ActivatePage("overview")
+        return
+    end
+
+    WO.InventoryUI.Open()
+end
+
+function WO.InventoryUI.IsOpen()
+    return IsValid(activeInventoryPanel) or
+        (WO.MenuUI and WO.MenuUI.IsOpen and WO.MenuUI.IsOpen() and
+            WO.MenuUI.GetPage and WO.MenuUI.GetPage() == "inventory")
+end
+
+---------------------------------------------------------------------------
+-- Клавиша I
+---------------------------------------------------------------------------
+
+WO.Hook.Add("CharacterMenuOpening", "inventory_ui_clear", function()
+    WO.InventoryUI.Close()
+    WO.Inventory.ClientData = nil
+end)
+
+WO.UI.BindKey(KEY_I, function()
+    if WO.Character.GetLocal() then
+        WO.InventoryUI.Toggle()
+    end
+end, "inventory_toggle", { allowWhenMenuOpen = true })

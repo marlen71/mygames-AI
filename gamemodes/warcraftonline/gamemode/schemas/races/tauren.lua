@@ -1,0 +1,15 @@
+--[[ Warcraft Online — раса: таурен. ]]
+WO.Races.Register({
+    id = "tauren",
+    name = WO.Lang:Get("race.tauren"),
+    description = "Крупный и выносливый народ степей.",
+    models = WO.Models.GetRace("tauren"),
+    genders = { "male", "female" },
+    modelScale = 1.12,
+    stats = { strength = 14, agility = 7, intelligence = 8, stamina = 14, spirit = 10 },
+    modifiers = {},
+    magicBonuses = { earth = 0.06, life = 0.05 },
+    professionBonuses = { herder = 0.12, farmer = 0.08, builder = 0.08 },
+    classes = {"warrior", "paladin", "ranger", "priest", "druid", "shaman", "monk", "runeknight", "alchemist"},
+    customization = { bodygroups = {} },
+})
