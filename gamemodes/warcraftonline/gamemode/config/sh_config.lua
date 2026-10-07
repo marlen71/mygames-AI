@@ -26,7 +26,7 @@ WO.Config.NameMinLength = 2
 WO.Config.NameMaxLength = 24
 WO.Config.AgeMin = 16
 WO.Config.AgeMax = 100
-WO.Config.StartingMoney = 50         -- Стартовые деньги (в медных монетах)
+WO.Config.StartingMoney = 5000       -- запасное значение; Economy.StartingBalance задаётся в sh_settings.lua
 
 -- Пол (расширяется: можно добавить новые значения)
 WO.Config.Genders = {

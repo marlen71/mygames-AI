@@ -3,7 +3,7 @@ WO.Spells.Register({
     name = "Огненный снаряд",
     element = "Огонь",
     elementType = "fire",
-    scrollPrice = 45,
+    scrollPrice = 4500,
     type = "damage",
     description = "Красный огненный снаряд с уроном по цели.",
     requiredLevel = 1,

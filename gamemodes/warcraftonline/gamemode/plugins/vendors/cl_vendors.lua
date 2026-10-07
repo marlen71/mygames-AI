@@ -14,11 +14,11 @@ end
 local function FormatMoney(amount)
     amount = tonumber(amount) or 0
 
-    if WO.Util and isfunction(WO.Util.FormatMoney) then
-        return WO.Util.FormatMoney(amount)
+    if WO.Currency and isfunction(WO.Currency.Format) then
+        return WO.Currency.Format(amount)
     end
 
-    return tostring(amount)
+    return tostring(amount) .. "c"
 end
 
 local function SetMouseInput(panel, enabled)
@@ -93,7 +93,7 @@ local function AddVendorCard(ui, item, kind)
     local actionName = tostring(item.name or item.class or WO.Lang:Get("vendor.unknown_item"))
     local itemName = actionName
     local price = tonumber(item.price) or 0
-    local detailText = FormatMoney(price) .. " " .. WO.Lang:Get("currency.name")
+    local detailText = FormatMoney(price)
 
     if kind == "buy" and tonumber(item.amount) and tonumber(item.amount) > 0 then
         detailText = detailText .. "  •  " ..

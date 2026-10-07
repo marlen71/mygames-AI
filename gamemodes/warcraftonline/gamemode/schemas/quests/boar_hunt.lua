@@ -27,7 +27,7 @@ WO.Quests.Register({
 
     rewards = {
         xp = 100,
-        money = 35,
+        money = 3500,
     },
 
     prerequisites = {},

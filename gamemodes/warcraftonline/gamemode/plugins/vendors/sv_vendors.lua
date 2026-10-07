@@ -58,7 +58,8 @@ local function SendSync(ply)
         npcId = def.id or "",
         npcName = def.name or "",
         money = WO.Currency.Get(ply),
-        sellRate = def.vendor and def.vendor.sellRate or 0.35,
+        sellRate = def.vendor and def.vendor.sellRate or
+            (WO.Config.Economy and WO.Config.Economy.VendorSellRate) or 0.50,
         buybackClasses = def.vendor and def.vendor.buybackClasses or nil,
         stock = stock,
     })
@@ -160,14 +161,14 @@ function WO.Vendors.Buy(ply, npcId, class, amount, deferSync)
         return true
     end
 
-    -- Деньги списываем ТОЛЬКО после успешной выдачи
-    local given = WO.Inventory.GiveItem(ply, class, amount)
+    local paid, payReason = WO.Currency.Take(ply, total, "vendor_buy:" .. class)
+    if not paid then return false, payReason or "not_enough_money" end
 
+    local given = WO.Inventory.GiveItem(ply, class, amount)
     if given == false then
+        WO.Currency.Add(ply, total, "vendor_buy_rollback:" .. class)
         return false, "inventory_full"
     end
-
-    WO.Currency.Take(ply, total, "vendor_buy:" .. class)
 
     if not deferSync then SendSync(ply) end
 
@@ -220,14 +221,14 @@ function WO.Vendors.Sell(ply, npcId, uid, amount, deferSync)
 
     local total = sellPrice * amount
 
-    -- Удаляем предмет, затем начисляем деньги (обратный порядок → дюп невозможен)
-    local removed = WO.Inventory.RemoveItem(ply, uid, amount)
+    local paid, payReason = WO.Currency.Add(ply, total, "vendor_sell:" .. instance.class)
+    if not paid then return false, payReason or "payment_failed" end
 
+    local removed = WO.Inventory.RemoveItem(ply, uid, amount)
     if removed == false then
+        WO.Currency.Take(ply, total, "vendor_sell_rollback:" .. instance.class)
         return false, "remove_failed"
     end
-
-    WO.Currency.Add(ply, total, "vendor_sell:" .. instance.class)
 
     if not deferSync then SendSync(ply) end
 

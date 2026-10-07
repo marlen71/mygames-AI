@@ -149,7 +149,9 @@ local function BuildRewardText(rewards)
     end
 
     if (tonumber(rewards.money) or 0) > 0 then
-        parts[#parts + 1] = "Монеты: " .. tostring(rewards.money)
+        local money = WO.Currency and WO.Currency.Format and WO.Currency.Format(rewards.money) or
+            (tostring(rewards.money) .. "c")
+        parts[#parts + 1] = "Монеты: " .. money
     end
 
     for _, item in ipairs(rewards.items or {}) do

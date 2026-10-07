@@ -30,6 +30,7 @@ WO.Net.Register("Character.List", {
             net.WriteString(entry.race or "")
             net.WriteString(entry.class or "")
             net.WriteString(entry.gender or "")
+            net.WriteString(entry.faction or "")
             net.WriteString(entry.model or "")
             WriteUInt32(entry.lastPlayed)
 
@@ -52,6 +53,7 @@ WO.Net.Register("Character.List", {
                 race = net.ReadString(),
                 class = net.ReadString(),
                 gender = net.ReadString(),
+                faction = net.ReadString(),
                 model = net.ReadString(),
                 lastPlayed = net.ReadUInt(32),
                 experience = net.ReadUInt(32),

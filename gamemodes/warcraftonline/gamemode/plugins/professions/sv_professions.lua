@@ -199,7 +199,11 @@ local function BuildTask(ply, shift, orderIndex)
     local char = ply:GetCharacter()
     local def = WO.Professions.Get(shift.professionId)
     local rank = GetRankData(def, shift.rank)
-    local activity = rank and rank.activities[orderIndex]
+    local activityIndex = orderIndex
+    if def and def.id == "lumberjack" and rank and #rank.activities > 0 then
+        activityIndex = ((math.max(1, orderIndex) - 1) % #rank.activities) + 1
+    end
+    local activity = rank and rank.activities[activityIndex]
     local gameMode = activity and WO.Professions.GetMiniGame(activity.mode)
 
     if not (def and rank and activity and gameMode) then return nil end
@@ -464,7 +468,8 @@ function WO.Professions.StartShift(ply, professionId, requestedRank)
 
     local unlockedRank = WO.Professions.GetLevelForXP(professionId, skill.xp)
     local rankIndex = requestedRank == nil and unlockedRank or tonumber(requestedRank)
-    if not rankIndex or rankIndex ~= math.floor(rankIndex) or rankIndex < 1 or rankIndex > 3 then
+    local maxRank = WO.Professions.GetMaxRank and WO.Professions.GetMaxRank(professionId) or 3
+    if not rankIndex or rankIndex ~= math.floor(rankIndex) or rankIndex < 1 or rankIndex > maxRank then
         return false, "invalid_rank"
     end
     rankIndex = math.floor(rankIndex)
@@ -478,7 +483,7 @@ function WO.Professions.StartShift(ply, professionId, requestedRank)
         npcId = session.npcDef.id,
         rank = rankIndex,
         completedOrders = 0,
-        requiredOrders = ORDERS_PER_SHIFT,
+        requiredOrders = professionId ~= "lumberjack" and ORDERS_PER_SHIFT or nil,
         qualityTotal = 0,
         status = "working",
         basePay = rank.basePay,
@@ -840,6 +845,16 @@ CompleteOrder = function(ply, char, shift, quality)
     shift.qualityTotal = shift.qualityTotal + math.Clamp(tonumber(quality) or 0.8, 0.5, 1)
     shift.completedOrders = shift.completedOrders + 1
 
+    if def.id == "lumberjack" then
+        shift.task = BuildTask(ply, shift, shift.completedOrders + 1)
+        MarkRevision(char)
+        WO.Professions.Sync(ply)
+        WO.Notify(ply, "success", "Связка брёвен №" .. shift.completedOrders ..
+            " доставлена. Новую можно взять у штабеля; расчёт доступен у работодателя.")
+        WO.Hook.Run("ProfessionOrderCompleted", char, def, shift.completedOrders)
+        return true
+    end
+
     if shift.completedOrders >= shift.requiredOrders then
         shift.completedOrders = shift.requiredOrders
         shift.status = "ready"
@@ -986,33 +1001,44 @@ function WO.Professions.FinishShift(ply, shiftId)
 
     local session = GetProfessionSession(ply, shift.professionId)
     if not session or session.npcDef.id ~= shift.npcId then return false, "wrong_employer" end
-    if shift.status ~= "ready" or shift.completedOrders ~= shift.requiredOrders then
-        return false, "orders_incomplete"
-    end
 
     local def = WO.Professions.Get(shift.professionId)
     local rank = GetRankData(def, shift.rank)
     if not (def and rank) then return false, "invalid_profession_data" end
 
-    local averageQuality = math.Clamp(shift.qualityTotal / shift.requiredOrders, 0.5, 1)
+    local isRepeatableLumberShift = def.id == "lumberjack"
+    local delivered = math.max(0, math.floor(tonumber(shift.completedOrders) or 0))
+
+    if isRepeatableLumberShift then
+        if shift.status ~= "working" then return false, "shift_not_working" end
+    elseif shift.status ~= "ready" or delivered ~= tonumber(shift.requiredOrders) then
+        return false, "orders_incomplete"
+    end
+
+    local qualityCount = isRepeatableLumberShift and delivered or tonumber(shift.requiredOrders) or 0
+    local averageQuality = qualityCount > 0 and
+        math.Clamp((tonumber(shift.qualityTotal) or 0) / qualityCount, 0.5, 1) or 1
     local qualityMultiplier = 0.75 + averageQuality * 0.5
     local currentBonus = WO.Professions.GetBonus(char, def.id)
-    local payout = math.max(1, math.floor(rank.basePay * shift.requiredOrders *
+    local payout = math.max(0, math.floor(rank.basePay * delivered *
         qualityMultiplier * (1 + currentBonus)))
+    local xpGain = math.max(0, math.floor(def.xpPerOrder * delivered))
 
-    -- Currency.Add is the only payout path. Never grant it on an order packet or
-    -- on a client-provided amount; the active shift is consumed after payment.
-    if not WO.Currency.Add(ply, payout, "profession_shift:" .. def.id) then
+    -- Only the server's count of bundles actually delivered contributes to
+    -- payout; any bundle still being carried or worked on is discarded.
+    if payout > 0 and not WO.Currency.Add(ply, payout, "profession_shift:" .. def.id) then
         return false, "payment_failed"
     end
 
     local state = EnsureState(char)
     local skill = state.skills[def.id] or { xp = 0, completedShifts = 0 }
     local oldLevel = WO.Professions.GetLevelForXP(def.id, skill.xp)
-    skill.xp = math.min(MAX_SAVED_XP, math.max(0, math.floor(tonumber(skill.xp) or 0)) +
-        def.xpPerOrder * shift.requiredOrders)
-    skill.completedShifts = math.max(0, math.floor(tonumber(skill.completedShifts) or 0)) + 1
-    state.skills[def.id] = skill
+
+    if xpGain > 0 then
+        skill.xp = math.min(MAX_SAVED_XP, math.max(0, math.floor(tonumber(skill.xp) or 0)) + xpGain)
+        skill.completedShifts = math.max(0, math.floor(tonumber(skill.completedShifts) or 0)) + 1
+        state.skills[def.id] = skill
+    end
 
     local newLevel = WO.Professions.GetLevelForXP(def.id, skill.xp)
     char.activeProfessionShift = nil
@@ -1021,8 +1047,9 @@ function WO.Professions.FinishShift(ply, shiftId)
 
     if WO.SaveQueue then WO.SaveQueue.MarkDirty(char) end
     WO.Professions.Sync(ply)
-    WO.Notify(ply, "success", "Смена завершена: зарплата " .. payout .. " монет, опыт ремесла +" ..
-        (def.xpPerOrder * ORDERS_PER_SHIFT) .. ".")
+    local formattedPayout = WO.Currency.Format and WO.Currency.Format(payout) or (tostring(payout) .. "c")
+    WO.Notify(ply, "success", "Смена сдана: доставлено связок — " .. delivered ..
+        ", зарплата — " .. formattedPayout .. ", опыт ремесла +" .. xpGain .. ".")
 
     if newLevel > oldLevel then
         local newRank = GetRankData(def, newLevel)
@@ -1038,6 +1065,7 @@ end
 function WO.Professions.CancelShift(ply, shiftId)
     local char, shift = GetActiveShift(ply, shiftId)
     if not char then return false, "no_active_shift" end
+    if shift.professionId == "lumberjack" then return false, "must_settle_at_employer" end
 
     char.activeProfessionShift = nil
     RemoveLumberCarryWeapon(ply, shift)

@@ -20,7 +20,7 @@ WO.Admin.CommandCatalog = {
     { id = "wo_setlevel", title = "Установить уровень", description = "Установить уровень активного персонажа.", permission = "character.edit", args = {
         { name = "Уровень", placeholder = "1" },
     } },
-    { id = "wo_setmoney", title = "Установить валюту", description = "Задать баланс активного персонажа.", permission = "money.give", args = {
+    { id = "wo_setmoney", title = "Установить валюту", description = "Задать баланс активного персонажа в медных монетах.", permission = "money.give", args = {
         { name = "Сумма", placeholder = "100" },
     } },
     { id = "wo_setstat", title = "Временный модификатор стата", description = "Добавить модификатор до перезапуска сервера.", permission = "debug", args = {

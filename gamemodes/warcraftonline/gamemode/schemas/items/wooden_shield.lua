@@ -33,7 +33,7 @@ WO.Items.Register({
     },
 
     price = {
-        buy = 80,
-        sell = 20,
+        buy = 8000,
+        sell = 2000,
     },
 })

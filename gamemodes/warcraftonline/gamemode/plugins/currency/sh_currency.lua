@@ -12,12 +12,27 @@
     @param amount number
     @return string
 ]]
+function WO.Currency.FromCoins(gold, silver, copper)
+    local economy = WO.Config and WO.Config.Economy or {}
+    local copperPerSilver = math.max(1, math.floor(tonumber(economy.CopperPerSilver) or 100))
+    local silverPerGold = math.max(1, math.floor(tonumber(economy.SilverPerGold) or 100))
+
+    return math.max(0,
+        math.floor(tonumber(gold) or 0) * copperPerSilver * silverPerGold +
+        math.floor(tonumber(silver) or 0) * copperPerSilver +
+        math.floor(tonumber(copper) or 0))
+end
+
 function WO.Currency.Format(amount)
     amount = math.max(0, math.floor(tonumber(amount) or 0))
 
-    local gold = math.floor(amount / 10000)
-    local silver = math.floor((amount % 10000) / 100)
-    local copper = amount % 100
+    local economy = WO.Config and WO.Config.Economy or {}
+    local copperPerSilver = math.max(1, math.floor(tonumber(economy.CopperPerSilver) or 100))
+    local silverPerGold = math.max(1, math.floor(tonumber(economy.SilverPerGold) or 100))
+    local copperPerGold = copperPerSilver * silverPerGold
+    local gold = math.floor(amount / copperPerGold)
+    local silver = math.floor((amount % copperPerGold) / copperPerSilver)
+    local copper = amount % copperPerSilver
 
     local parts = {}
 
@@ -41,7 +56,8 @@ end
 WO.Net.Register("Currency.Sync", {
     direction = "toclient",
     write = function(amount)
-        net.WriteUInt(math.max(0, math.floor(tonumber(amount) or 0)), 32)
+        local value = math.max(0, math.floor(tonumber(amount) or 0))
+        net.WriteUInt(math.min(value, 4294967295), 32)
     end,
     read = function()
         return net.ReadUInt(32)

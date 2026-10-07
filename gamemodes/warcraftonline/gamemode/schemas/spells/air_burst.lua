@@ -3,7 +3,7 @@ WO.Spells.Register({
     name = "Порыв воздуха",
     element = "Воздух",
     elementType = "air",
-    scrollPrice = 40,
+    scrollPrice = 4000,
     type = "damage",
     description = "Сгусток голубой энергии поражает цель на расстоянии.",
     requiredLevel = 1,

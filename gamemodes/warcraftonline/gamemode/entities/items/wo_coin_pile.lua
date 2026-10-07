@@ -20,7 +20,9 @@ function ENT:CanInteract(ply)
 end
 
 function ENT:GetInteractionText()
-    return "Подобрать монеты: " .. tostring(self:GetNW2Int("wo_coin_amount", 0))
+    local amount = self:GetNW2Int("wo_coin_amount", 0)
+    local formatted = WO.Currency and WO.Currency.Format and WO.Currency.Format(amount) or tostring(amount)
+    return "Подобрать монеты: " .. formatted
 end
 
 function ENT:Interact(ply)

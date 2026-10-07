@@ -12,5 +12,5 @@ WO.Items.Register({
     maxStack = 20,
     rarity = "common",
     description = "Острый клык. Торговка покупает такие трофеи.",
-    price = { buy = 3, sell = 2 },
+    price = { buy = 300, sell = 200 },
 })

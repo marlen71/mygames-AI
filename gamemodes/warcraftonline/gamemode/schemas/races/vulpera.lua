@@ -2,10 +2,10 @@
 WO.Races.Register({
     id = "vulpera",
     name = WO.Lang:Get("race.vulpera"),
+    special = true,
     description = "Находчивый народ пустынных странников и опытных торговцев.",
     models = WO.Models.GetRace("vulpera"),
     genders = { "male", "female" },
-    special = true,
     modelScale = 0.92,
     stats = { strength = 8, agility = 13, intelligence = 11, stamina = 8, spirit = 10 },
     modifiers = {},

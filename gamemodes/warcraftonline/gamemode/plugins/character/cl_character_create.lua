@@ -24,6 +24,7 @@ local createLayout = nil
 local function NewDraft()
     return {
         step = 1,
+        faction = nil,
         race = nil,
         gender = nil,
         age = 25,
@@ -47,6 +48,7 @@ local draft = NewDraft()
 ---------------------------------------------------------------------------
 
 local STEP_NAMES = {
+    "character.step.faction",
     "character.step.race",
     "character.step.gender",
     "character.step.age",
@@ -170,33 +172,42 @@ end
 ---------------------------------------------------------------------------
 
 local function ValidateStep(step)
-    if step == 1 and (not draft.race or #WO.Races.GetAvailableGenders(draft.race) == 0) then
-        return false, "character.race"
-    elseif step == 2 and (not draft.gender or
+    if step == 1 then
+        if not draft.faction or not WO.Config.FactionDefinitions[draft.faction] then
+            return false, "character.faction"
+        end
+    elseif step == 2 then
+        if not draft.race or not WO.Races.IsFactionAllowed(draft.race, draft.faction) or
+            #WO.Races.GetAvailableGenders(draft.race) == 0 then
+            return false, "character.race"
+        end
+    elseif step == 3 and (not draft.gender or
         not WO.Races.IsGenderAllowed(draft.race, draft.gender)) then
         return false, "character.gender"
-    elseif step == 3 then
+    elseif step == 4 then
         local age = tonumber(draft.age)
-
         if not age or age < WO.Config.AgeMin or age > WO.Config.AgeMax then
             return false, "character.age"
         end
-    elseif step == 4 then
+    elseif step == 5 then
         if not WO.Util.IsValidName(WO.Util.CleanString(draft.name)) then
             return false, "character.name"
         end
-    elseif step == 5 then
+    elseif step == 6 then
         if not WO.Util.IsValidName(WO.Util.CleanString(draft.surname)) then
             return false, "character.surname"
         end
-    elseif step == 6 then
+    elseif step == 7 then
         if not draft.model or
             not WO.Races.IsModelAllowed(draft.race, draft.gender, draft.model) then
             return false, "character.model_invalid"
         end
-    elseif step == 7 and not draft.class then
-        return false, "character.class"
-    elseif step == 8 and not draft.confirmed then
+    elseif step == 8 then
+        if not draft.class or
+            not WO.Classes.IsCharacterCreationAllowed(draft.class, draft.race) then
+            return false, "character.class"
+        end
+    elseif step == 9 and not draft.confirmed then
         return false, "character.confirm_required"
     end
 
@@ -209,8 +220,55 @@ end
 
 local stepBuilders = {}
 
+-- Step 1: choose one of the two original faction paths.
+stepBuilders[1] = function(parent)
+    local intro = WO.UI.Label(parent, WO.Lang:Get("character.faction_intro"),
+        "WO.Small", WO.UI.Colors.textDim)
+    intro:Dock(TOP)
+    intro:DockMargin(4, 10, 4, 12)
+    intro:SetTall(42)
+
+    for _, configuredFaction in ipairs(WO.Config.FactionOrder or {}) do
+        local factionId = configuredFaction
+        local faction = WO.Config.FactionDefinitions and WO.Config.FactionDefinitions[factionId]
+
+        if faction then
+            local accent = faction.color and Color(faction.color.r, faction.color.g, faction.color.b) or
+                WO.UI.Colors.accent
+            local title = WO.Lang:Get(faction.nameKey or ("faction." .. factionId))
+            local description = WO.Lang:Get("faction." .. factionId .. ".description")
+            local button = vgui.Create("DButton", parent)
+
+            button:Dock(TOP)
+            button:DockMargin(0, 0, 0, 10)
+            button:SetTall(82)
+            button:SetText("")
+            button.Paint = function(self, w, h)
+                local selected = draft.faction == factionId
+                local alpha = selected and 255 or 175
+                draw.RoundedBox(8, 0, 0, w, h,
+                    selected and Color(28, 36, 49, 255) or Color(13, 18, 27, 255))
+                surface.SetDrawColor(accent.r, accent.g, accent.b, alpha)
+                surface.DrawOutlinedRect(0, 0, w, h, selected and 3 or 1)
+                draw.SimpleText(title, "WO.Subtitle", 18, 23,
+                    Color(accent.r, accent.g, accent.b), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+                draw.SimpleText(description, "WO.Tiny", 19, 55,
+                    WO.UI.Colors.textDim, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+            end
+            button.DoClick = function()
+                draft.faction = factionId
+                draft.race = nil
+                draft.gender = nil
+                draft.class = nil
+                draft.model = nil
+                draft.modelIndex = 1
+            end
+        end
+    end
+end
+
 -- Шаг 1: раса. Показываем расы с явно настроенными путями моделей.
-stepBuilders[1] = function(parent, modelPanel)
+stepBuilders[2] = function(parent, modelPanel)
     local scroll = WO.UI.Scroll(parent)
 
     scroll:Dock(FILL)
@@ -219,7 +277,7 @@ stepBuilders[1] = function(parent, modelPanel)
     local raceButtons = {}
     local visibleRaces = 0
 
-    for _, raceId in ipairs(WO.Races.GetIDs()) do
+    for _, raceId in ipairs(WO.Races.GetFactionRaces(draft.faction, LocalPlayer())) do
         local race = WO.Races.Get(raceId)
 
         if race and #WO.Races.GetAvailableGenders(raceId) > 0 then
@@ -274,7 +332,7 @@ stepBuilders[1] = function(parent, modelPanel)
 end
 
 -- Шаг 2: полы, для которых путь модели явно описан в каталоге расы.
-stepBuilders[2] = function(parent, modelPanel)
+stepBuilders[3] = function(parent, modelPanel)
     local buttons = {}
 
     for _, gender in ipairs(WO.Races.GetAvailableGenders(draft.race)) do
@@ -301,7 +359,7 @@ stepBuilders[2] = function(parent, modelPanel)
 end
 
 -- Шаг 3: возраст
-stepBuilders[3] = function(parent)
+stepBuilders[4] = function(parent)
     local label = WO.UI.Label(parent, WO.Lang:Get("character.age") .. ": " .. draft.age, "WO.Subtitle")
 
     label:Dock(TOP)
@@ -372,16 +430,16 @@ local function BuildTextStep(parent, field, labelKey)
     hint:SetTall(16)
 end
 
-stepBuilders[4] = function(parent)
+stepBuilders[5] = function(parent)
     BuildTextStep(parent, "name", "character.name")
 end
 
-stepBuilders[5] = function(parent)
+stepBuilders[6] = function(parent)
     BuildTextStep(parent, "surname", "character.surname")
 end
 
 -- Шаг 6: кастомизация (модель, bodygroups, skin, цвет)
-stepBuilders[6] = function(parent, modelPanel)
+stepBuilders[7] = function(parent, modelPanel)
     -- Выбор модели
     local modelLabel = WO.UI.Label(parent, WO.Lang:Get("character.model"), "WO.Subtitle")
 
@@ -569,7 +627,7 @@ stepBuilders[6] = function(parent, modelPanel)
 end
 
 -- Шаг 7: класс
-stepBuilders[7] = function(parent)
+stepBuilders[8] = function(parent)
     local selectedLabel = WO.UI.Label(parent, "", "WO.Small", WO.UI.Colors.accent)
 
     selectedLabel:Dock(TOP)
@@ -590,30 +648,40 @@ stepBuilders[7] = function(parent)
     scroll:Dock(FILL)
     scroll:DockMargin(0, 4, 0, 0)
 
-    for _, classId in ipairs(WO.Classes.GetIDs()) do
+    local availableClasses = WO.Classes.GetCharacterCreationIDs(draft.race)
+    for _, classId in ipairs(availableClasses) do
         local class = WO.Classes.Get(classId)
-        local allowed = WO.Races.IsClassAllowed(draft.race, classId)
+        local allowed = WO.Classes.IsCharacterCreationAllowed(classId, draft.race)
 
-        local button = WO.UI.Button(scroll, (allowed and "" or "✖ ") .. class.name, function()
-            if not allowed then return end
+        if class and allowed then
+            local button = WO.UI.Button(scroll, class.name, function()
+                draft.class = classId
+                UpdateSelectedClass()
+            end)
 
-            draft.class = classId
-            UpdateSelectedClass()
-        end)
+            button:Dock(TOP)
+            button:DockMargin(0, 0, 0, 6)
+            button:SetTall(36)
+            button:SetAccent(draft.class == classId)
 
-        button:Dock(TOP)
-        button:DockMargin(0, 0, 0, 6)
-        button:SetTall(36)
-        button:SetEnabled(allowed)
+            if class.description then
+                local label = WO.UI.Label(scroll, class.description, "WO.Tiny", WO.UI.Colors.textDim)
 
-        if class.description then
-            local label = WO.UI.Label(scroll, class.description, "WO.Tiny", WO.UI.Colors.textDim)
-
-            label:Dock(TOP)
-            label:DockMargin(8, -4, 8, 6)
-            label:SetTall(30)
+                label:Dock(TOP)
+                label:DockMargin(8, -4, 8, 6)
+                label:SetTall(30)
+            end
         end
     end
+
+    if #availableClasses == 0 then
+        local unavailable = WO.UI.Label(scroll, WO.Lang:Get("character.no_classes_available"),
+            "WO.Body", WO.UI.Colors.warn)
+        unavailable:Dock(TOP)
+        unavailable:DockMargin(8, 18, 8, 0)
+        unavailable:SetTall(58)
+    end
+
 end
 
 local function SubmitDraft()
@@ -631,6 +699,7 @@ local function SubmitDraft()
         surname = draft.surname,
         age = draft.age,
         gender = draft.gender,
+        faction = draft.faction,
         race = draft.race,
         class = draft.class,
         model = draft.model,
@@ -639,15 +708,17 @@ local function SubmitDraft()
 end
 
 -- Шаг 8: итоговая карточка и явное подтверждение создания
-stepBuilders[8] = function(parent)
+stepBuilders[9] = function(parent)
     draft.confirmed = false
 
     local race = WO.Races.Get(draft.race)
     local class = WO.Classes.Get(draft.class)
+    local factionDef = WO.Config.FactionDefinitions and WO.Config.FactionDefinitions[draft.faction]
     local rows = {
         { key = "character.full_name", value = draft.name .. " " .. draft.surname },
         { key = "character.age", value = tostring(draft.age) },
         { key = "character.gender", value = WO.Lang:Get("gender." .. tostring(draft.gender)) },
+        { key = "character.faction", value = WO.Lang:Get(factionDef and factionDef.nameKey or "character.faction") },
         { key = "character.race", value = race and race.name or "—" },
         { key = "character.class", value = class and class.name or "—" },
         { key = "character.model", value = isstring(draft.model) and
@@ -723,7 +794,7 @@ local function BuildStep(parent, modelPanel)
     local primaryButton = IsValid(createFrame) and createFrame.primaryButton
 
     if IsValid(primaryButton) then
-        if draft.step == 8 then
+        if draft.step == 9 then
             primaryButton:SetDisplayText(WO.Lang:Get("character.create_confirm_action"))
             primaryButton:SetEnabled(draft.confirmed and not submitPending)
         else
@@ -806,18 +877,18 @@ function WO.CharacterUI.OpenCreate()
             return
         end
 
-        if draft.step == 8 then
+        if draft.step == 9 then
             SubmitDraft()
             return
         end
 
-        if draft.step < 8 then
+        if draft.step < 9 then
             draft.step = draft.step + 1
             BuildStep(stepPanel, modelPanel)
 
             -- Первый проход создаёт контролы bodygroups; второй обновляет их
             -- после того, как PreviewModel получил RebuildBodygroups callback.
-            if draft.step == 6 and modelPanel.UpdateBodygroups then
+            if draft.step == 7 and modelPanel.UpdateBodygroups then
                 BuildStep(stepPanel, modelPanel)
             end
         end

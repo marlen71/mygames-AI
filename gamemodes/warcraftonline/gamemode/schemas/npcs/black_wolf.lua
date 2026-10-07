@@ -24,7 +24,7 @@ WO.NPCs.Register({
     xpReward = 44,
     xpPerLevel = 5,
     loot = {
-        currency = { min = 2, max = 5, chance = 0.80, levelScale = 0.05 },
+        currency = { min = 200, max = 500, chance = 0.80, levelScale = 0.05 },
         themed = {
             chance = 0.82,
             levelScale = 0.015,

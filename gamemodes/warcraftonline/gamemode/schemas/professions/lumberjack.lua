@@ -1,14 +1,15 @@
--- Data-driven profession schema: three paid ranks and three server-validated orders per shift.
+-- The rank catalogue is retained for future release toggles; this build exposes
+-- only rank 1, whose shift can repeat deliveries until the worker settles.
 WO.Professions.Register({
     id = "lumberjack",
     name = "Лесоруб",
-    description = "Лесные работы и заготовка древесины. Оформите смену в три заказа.",
+    description = "Бесконечная смена переноски брёвен с добровольной сдачей работодателю.",
     xpPerOrder = 100,
     ranks = {
         {
             name = "Дровосек",
             requiredXP = 0,
-            basePay = 32,
+            basePay = WO.Config.Economy.LumberjackPayPerBundle,
             activities = {
                 {
                     name = "Перенести связку брёвен",
@@ -30,7 +31,7 @@ WO.Professions.Register({
         {
             name = "Кольщик дров",
             requiredXP = 300,
-            basePay = 55,
+            basePay = 5500,
             activities = {
                 {
                     name = "Расколоть чурбак",
@@ -59,7 +60,7 @@ WO.Professions.Register({
         {
             name = "Лесопильщик",
             requiredXP = 900,
-            basePay = 86,
+            basePay = 8600,
             activities = {
                 {
                     name = "Выставить бревно",

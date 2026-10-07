@@ -10,10 +10,18 @@ WO.Currency.Types = WO.Currency.Types or {
     copper = { nameKey = "currency.name", rate = 1 },
 }
 
--- Конвертация для отображения: 1 gold = 100 silver = 10000 copper
+-- Номиналы в медных монетах; одинаковы для экономики и форматирования.
+local economy = WO.Config and WO.Config.Economy or {}
+local COPPER_PER_SILVER = math.max(1, math.floor(tonumber(economy.CopperPerSilver) or 100))
+local SILVER_PER_GOLD = math.max(1, math.floor(tonumber(economy.SilverPerGold) or 100))
+local MAX_BALANCE = math.max(1, math.floor(tonumber(economy.MaxBalance) or 4294967295))
+local MAX_TRANSACTION = math.max(1, math.floor(tonumber(economy.MaxTransaction) or 100000000))
+
+WO.Currency.MAX_BALANCE = MAX_BALANCE
+WO.Currency.MAX_TRANSACTION = MAX_TRANSACTION
 WO.Currency.Display = {
-    gold = 10000,
-    silver = 100,
+    gold = COPPER_PER_SILVER * SILVER_PER_GOLD,
+    silver = COPPER_PER_SILVER,
     copper = 1,
 }
 
@@ -28,7 +36,7 @@ function WO.Currency.Get(ply)
 
     if not char then return 0 end
 
-    return char.money or 0
+    return math.Clamp(math.floor(tonumber(char.money) or 0), 0, MAX_BALANCE)
 end
 
 --[[
@@ -39,7 +47,8 @@ end
     @return boolean
 ]]
 function WO.Currency.CanAfford(ply, amount)
-    return WO.Currency.Get(ply) >= (tonumber(amount) or 0)
+    amount = tonumber(amount)
+    return amount ~= nil and amount >= 0 and WO.Currency.Get(ply) >= amount
 end
 
 --[[
@@ -61,13 +70,14 @@ function WO.Currency.Add(ply, amount, reason)
 
     if amount <= 0 then return false end
 
-    -- Защита от аномальных сумм
-    if amount > 100000000 then
+    -- Ограничения предотвращают переполнение сетевого UInt32/баланса персонажа.
+    local current = math.Clamp(math.floor(tonumber(char.money) or 0), 0, MAX_BALANCE)
+    if amount > MAX_TRANSACTION or amount > MAX_BALANCE - current then
         WO.Warn("Suspicious currency add from " .. ply:Nick() .. ": " .. amount)
         return false
     end
 
-    char.money = (char.money or 0) + amount
+    char.money = current + amount
 
     WO.SaveQueue.MarkDirty(char)
     WO.Currency.Sync(ply)
@@ -97,12 +107,14 @@ function WO.Currency.Take(ply, amount)
 
     if amount < 0 then return false, "invalid_amount" end
     if amount == 0 then return true end
+    if amount > MAX_TRANSACTION then return false, "transaction_limit" end
 
-    if (char.money or 0) < amount then
+    local current = math.Clamp(math.floor(tonumber(char.money) or 0), 0, MAX_BALANCE)
+    if current < amount then
         return false, "not_enough_money"
     end
 
-    char.money = char.money - amount
+    char.money = current - amount
 
     WO.SaveQueue.MarkDirty(char)
     WO.Currency.Sync(ply)
@@ -124,13 +136,20 @@ function WO.Currency.Transfer(from, to, amount)
 
     if amount <= 0 then return false, "invalid_amount" end
 
-    local ok, reason = WO.Currency.Take(from, amount)
-
-    if not ok then
-        return false, reason
+    local toChar = to:GetCharacter()
+    local toBalance = math.max(0, math.floor(tonumber(toChar and toChar.money) or 0))
+    if amount > MAX_TRANSACTION or amount > MAX_BALANCE - toBalance then
+        return false, "balance_limit"
     end
 
-    WO.Currency.Add(to, amount, "transfer")
+    local ok, reason = WO.Currency.Take(from, amount)
+    if not ok then return false, reason end
+
+    local added, addReason = WO.Currency.Add(to, amount, "transfer")
+    if not added then
+        WO.Currency.Add(from, amount, "transfer_rollback")
+        return false, addReason or "transfer_failed"
+    end
 
     return true
 end
@@ -146,7 +165,8 @@ function WO.Currency.Sync(ply)
 
     if not char then return end
 
-    WO.Net.Send("Currency.Sync", ply, char.money or 0)
+    WO.Net.Send("Currency.Sync", ply,
+        math.Clamp(math.floor(tonumber(char.money) or 0), 0, MAX_BALANCE))
 end
 
 WO.Hook.Add("CharacterSync", "currency", function(char, ply)
@@ -164,7 +184,7 @@ function WO.Currency.Set(ply, amount)
 
     if not char then return false end
 
-    char.money = math.max(0, math.floor(tonumber(amount) or 0))
+    char.money = math.Clamp(math.floor(tonumber(amount) or 0), 0, MAX_BALANCE)
 
     WO.SaveQueue.MarkDirty(char)
     WO.Currency.Sync(ply)

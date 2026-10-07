@@ -7,7 +7,7 @@
         wo_spawnitem <class>      — бросить предмет в мир
         wo_givexp <n>             — выдать опыт
         wo_setlevel <n>           — установить уровень
-        wo_setmoney <n>           — установить деньги
+        wo_setmoney <n>           — установить баланс (медные монеты)
         wo_setstat <stat> <n>     — установить модификатор стата (временно)
         wo_reloadconfig           — перезагрузить конфиги и схемы
         wo_reloadplugins          — перезагрузка контента (полная — через changelevel)
@@ -143,7 +143,7 @@ concommand.Add("wo_setlevel", function(ply, cmd, args)
 end)
 
 ---------------------------------------------------------------------------
--- wo_setmoney <amount>
+-- wo_setmoney <amount_in_copper>
 ---------------------------------------------------------------------------
 
 concommand.Add("wo_setmoney", function(ply, cmd, args)
@@ -153,7 +153,8 @@ concommand.Add("wo_setmoney", function(ply, cmd, args)
 
     WO.Currency.Set(ply, amount)
 
-    Reply(ply, "Деньги установлены: " .. amount)
+    Reply(ply, "Баланс установлен: " ..
+        (WO.Currency.Format and WO.Currency.Format(amount) or tostring(amount) .. "c"))
 end)
 
 ---------------------------------------------------------------------------
@@ -229,8 +230,9 @@ concommand.Add("wo_info", function(ply)
         " | Classes: " .. WO.Classes.Registry:Count())
 
     if char then
+        local formattedMoney = WO.Currency.Format and WO.Currency.Format(char.money) or tostring(char.money) .. "c"
         Reply(ply, "Character: " .. char:GetFullName() .. " | level " .. char:GetLevel() ..
-            " | money " .. char.money)
+            " | money " .. formattedMoney)
     end
 end)
 

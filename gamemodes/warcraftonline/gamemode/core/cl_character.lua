@@ -54,6 +54,9 @@ WO.Hook.Add("CharacterCreateResult", "core_cl_character", function(success, reas
     if not success then
         local reasonKeys = {
             race_unavailable = "character.race_unavailable",
+            faction_race_mismatch = "character.faction_race_mismatch",
+            class_not_allowed = "character.class_not_allowed",
+            class_unavailable = "character.class_unavailable",
             character_limit = "character.limit_reached",
         }
         local reasonKey = reasonKeys[reason]

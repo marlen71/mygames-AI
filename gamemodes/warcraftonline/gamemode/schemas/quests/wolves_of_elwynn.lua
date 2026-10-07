@@ -20,7 +20,7 @@ WO.Quests.Register({
 
     rewards = {
         xp = 80,
-        money = 25,
+        money = 2500,
         items = {
             { class = "wolf_pelt", amount = 1 },
         },

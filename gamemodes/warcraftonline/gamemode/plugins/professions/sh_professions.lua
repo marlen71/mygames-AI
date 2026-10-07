@@ -53,6 +53,18 @@ WO.Professions.MiniGames = WO.Professions.MiniGames or {
 
 local DEFAULT_RANK_XP = { 0, 300, 900 }
 
+function WO.Professions.IsEnabled(professionId)
+    local active = WO.Config and WO.Config.ActiveProfessions
+    if not istable(active) then return true end
+    return active[professionId] == true
+end
+
+function WO.Professions.GetMaxRank(professionId)
+    local maximums = WO.Config and WO.Config.ActiveProfessionMaxRanks
+    local maximum = istable(maximums) and maximums[professionId] or 3
+    return math.Clamp(math.floor(tonumber(maximum) or 3), 1, 3)
+end
+
 function WO.Professions.GetMiniGame(mode)
     return isstring(mode) and WO.Professions.MiniGames[mode] or nil
 end
@@ -62,6 +74,12 @@ function WO.Professions.Register(def)
         not string.match(def.id, "^[a-z0-9_]+$") then
         WO.Error("WO.Professions.Register: invalid profession definition")
         return false
+    end
+
+    if not WO.Professions.IsEnabled(def.id) then
+        WO.Professions.Registry:Remove(def.id)
+        WO.Debug("Profession schema retained but inactive: " .. def.id)
+        return true
     end
 
     if not isstring(def.name) or def.name == "" or not istable(def.ranks) or #def.ranks ~= 3 then
@@ -115,7 +133,7 @@ function WO.Professions.GetLevelForXP(professionOrId, experience)
 
     experience = math.max(0, math.floor(tonumber(experience) or 0))
 
-    for level = 3, 1, -1 do
+    for level = WO.Professions.GetMaxRank(def.id), 1, -1 do
         local rank = def.ranks[level]
         if experience >= (rank.requiredXP or DEFAULT_RANK_XP[level]) then
             return level
@@ -153,7 +171,7 @@ function WO.Professions.GetBasePay(professionId, level, orders)
     local def = WO.Professions.Get(professionId)
     if not def then return 0 end
 
-    level = math.Clamp(math.floor(tonumber(level) or 1), 1, 3)
+    level = math.Clamp(math.floor(tonumber(level) or 1), 1, WO.Professions.GetMaxRank(professionId))
     orders = math.Clamp(math.floor(tonumber(orders) or 3), 1, 3)
 
     return def.ranks[level].basePay * orders

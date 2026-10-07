@@ -24,5 +24,5 @@ WO.Items.Register({
         if not (WO.Mounts and WO.Mounts.Toggle) then return false, "mounts_unavailable" end
         return WO.Mounts.Toggle(ply, instance)
     end,
-    price = { buy = 500, sell = 0 },
+    price = { buy = 50000, sell = 0 },
 })

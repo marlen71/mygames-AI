@@ -69,6 +69,42 @@ function WO.Classes.GetIDs()
     return WO.Classes.Registry:GetIDs()
 end
 
+function WO.Classes.IsCharacterCreationAllowed(classId, raceId)
+    if not WO.Classes.Get(classId) then return false end
+
+    local order = WO.Config and WO.Config.CharacterCreationClassOrder
+    if istable(order) then
+        local found = false
+        for _, configuredId in ipairs(order) do
+            if configuredId == classId then
+                found = true
+                break
+            end
+        end
+        if not found then return false end
+    end
+
+    if raceId and WO.Races and WO.Races.IsClassAllowed and
+        not WO.Races.IsClassAllowed(raceId, classId) then
+        return false
+    end
+
+    return true
+end
+
+function WO.Classes.GetCharacterCreationIDs(raceId)
+    local out = {}
+    local order = WO.Config and WO.Config.CharacterCreationClassOrder or WO.Classes.GetIDs()
+
+    for _, classId in ipairs(order) do
+        if WO.Classes.IsCharacterCreationAllowed(classId, raceId) then
+            out[#out + 1] = classId
+        end
+    end
+
+    return out
+end
+
 --[[
     Базовые характеристики класса.
 

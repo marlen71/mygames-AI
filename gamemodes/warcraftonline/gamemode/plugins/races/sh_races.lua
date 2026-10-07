@@ -49,6 +49,14 @@ function WO.Races.Register(def)
     def.magicBonuses = istable(def.magicBonuses) and def.magicBonuses or {}
     def.modelScale = def.modelScale or 1
 
+    local configuredFactions = WO.Config and WO.Config.RaceFactions and WO.Config.RaceFactions[def.id]
+    if istable(configuredFactions) then def.factions = table.Copy(configuredFactions) end
+
+    local configuredClasses = WO.Config and WO.Config.RaceClassAllowlist and WO.Config.RaceClassAllowlist[def.id]
+    if istable(configuredClasses) then def.classes = table.Copy(configuredClasses) end
+
+    def.factions = istable(def.factions) and def.factions or {}
+
     return WO.Races.Registry:Register(def.id, def)
 end
 
@@ -65,6 +73,36 @@ end
 --- Список id рас.
 function WO.Races.GetIDs()
     return WO.Races.Registry:GetIDs()
+end
+
+function WO.Races.IsFactionAllowed(raceId, factionId)
+    local race = WO.Races.Get(raceId)
+    if not race or not isstring(factionId) then return false end
+
+    for _, allowedFaction in ipairs(race.factions or {}) do
+        if allowedFaction == factionId then return true end
+    end
+
+    return false
+end
+
+function WO.Races.GetDefaultFaction(raceId)
+    local race = WO.Races.Get(raceId)
+    return race and race.factions and race.factions[1] or nil
+end
+
+function WO.Races.GetFactionRaces(factionId, player)
+    local out = {}
+    local order = WO.Config and WO.Config.FactionRaceOrder and WO.Config.FactionRaceOrder[factionId]
+    local candidates = istable(order) and order or WO.Races.GetIDs()
+
+    for _, raceId in ipairs(candidates) do
+        if WO.Races.IsFactionAllowed(raceId, factionId) and WO.Races.CanCreate(raceId, player) then
+            out[#out + 1] = raceId
+        end
+    end
+
+    return out
 end
 
 --- Раса отмечена как особая и требует серверного допуска.

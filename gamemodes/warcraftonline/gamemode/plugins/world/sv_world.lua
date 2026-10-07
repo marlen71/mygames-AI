@@ -170,7 +170,8 @@ function WO.World.PickupCoins(ply, ent)
     ent.WOCoinAmount = 0
     ent:SetNW2Int("wo_coin_amount", 0)
     ent:Remove()
-    WO.Notify(ply, "item", "Подобраны монеты: " .. amount .. ".")
+    WO.Notify(ply, "item", "Подобраны монеты: " ..
+        (WO.Currency.Format and WO.Currency.Format(amount) or tostring(amount)) .. ".")
     return true
 end
 

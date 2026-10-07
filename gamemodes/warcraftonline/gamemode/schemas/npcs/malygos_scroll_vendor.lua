@@ -14,7 +14,7 @@ WO.NPCs.Register({
     vendor = {
         -- Stock is populated from the registered spell schemas after they load.
         stock = {},
-        sellRate = (WO.Config.MagicScrolls and WO.Config.MagicScrolls.sellRate) or 0.25,
+        sellRate = (WO.Config.MagicScrolls and WO.Config.MagicScrolls.sellRate) or 0.50,
         buybackClasses = {},
     },
     interactRange = WO.Config.InteractDistance,

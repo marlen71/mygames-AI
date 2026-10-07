@@ -3,7 +3,7 @@ WO.Spells.Register({
     name = "Водяной снаряд",
     element = "Вода",
     elementType = "water",
-    scrollPrice = 40,
+    scrollPrice = 4000,
     type = "damage",
     description = "Снаряд водной стихии бьёт выбранную цель.",
     requiredLevel = 1,

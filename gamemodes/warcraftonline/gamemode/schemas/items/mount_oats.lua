@@ -17,5 +17,5 @@ WO.Items.Register({
         if not (WO.Mounts and WO.Mounts.Feed) then return false, "mounts_unavailable" end
         return WO.Mounts.Feed(ply, instance)
     end,
-    price = { buy = 12, sell = 0 },
+    price = { buy = 1200, sell = 0 },
 })

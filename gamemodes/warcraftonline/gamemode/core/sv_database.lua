@@ -446,6 +446,77 @@ local function RegisterBaseMigrations()
             error(err or "could not migrate saved character positions")
         end
     end)
+
+    -- v4: сохраняем выбранную фракцию и переводим прежние coin-units в новую
+    -- copper шкалу. Маркер и UPDATE выполняются в одной транзакции, чтобы
+    -- повторный запуск после сбоя не умножал баланс дважды.
+    WO.Database:RegisterMigration(4, function()
+        local columns, err = driver.Query("PRAGMA table_info(wo_characters)")
+        if columns == false then error(err or "could not inspect wo_characters columns") end
+
+        local hasFaction = false
+        for _, column in ipairs(columns or {}) do
+            if column.name == "faction" then
+                hasFaction = true
+                break
+            end
+        end
+
+        local marker = driver.QueryValue(
+            "SELECT value FROM wo_meta WHERE key = 'economy_redeomination_v4'")
+        local factor = math.max(1, math.floor(tonumber(
+            WO.Config.Economy and WO.Config.Economy.BalanceMigrationFactor) or 100))
+        local maxBalance = math.max(1, math.floor(tonumber(
+            WO.Config.Economy and WO.Config.Economy.MaxBalance) or 4294967295))
+
+        local migrated = WO.Database:Transaction(function()
+            local result, queryError
+
+            if not hasFaction then
+                result, queryError = driver.Query(
+                    "ALTER TABLE wo_characters ADD COLUMN faction TEXT")
+                if result == false then error(queryError or "could not add faction column") end
+            end
+
+            if not marker then
+                local safeThreshold = math.floor(maxBalance / factor)
+                result, queryError = driver.Query(string.format([[
+                    UPDATE wo_characters
+                    SET money = CASE
+                        WHEN COALESCE(money, 0) < 0 THEN 0
+                        WHEN COALESCE(money, 0) > %d THEN %d
+                        ELSE COALESCE(money, 0) * %d
+                    END
+                ]], safeThreshold, maxBalance, factor))
+                if result == false then error(queryError or "could not migrate character balances") end
+
+                result, queryError = driver.Query([[
+                    INSERT OR REPLACE INTO wo_meta (key, value)
+                    VALUES ('economy_redeomination_v4', '1')
+                ]])
+                if result == false then error(queryError or "could not mark economy migration") end
+            end
+
+            result, queryError = driver.Query([[
+                UPDATE wo_characters
+                SET faction = CASE lower(COALESCE(race, ''))
+                    WHEN 'human' THEN 'alliance'
+                    WHEN 'dwarf' THEN 'alliance'
+                    WHEN 'elf' THEN 'alliance'
+                    WHEN 'gnome' THEN 'alliance'
+                    WHEN 'draenei' THEN 'alliance'
+                    WHEN 'worgen' THEN 'alliance'
+                    WHEN 'pandaren' THEN 'alliance'
+                    WHEN 'dracthyr' THEN 'alliance'
+                    ELSE 'horde'
+                END
+                WHERE faction IS NULL OR faction = ''
+            ]])
+            if result == false then error(queryError or "could not initialize legacy factions") end
+        end)
+
+        if migrated ~= true then error("could not apply faction/economy migration") end
+    end)
 end
 
 --- Инициализирует БД: создаёт таблицы, применяет миграции.

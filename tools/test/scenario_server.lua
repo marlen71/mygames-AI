@@ -33,6 +33,38 @@ for _, class in ipairs({ "drc_unarmed", "tfa_cso_coldsteelblade", "weapon_hpwr_s
     }, class)
 end
 
+-- Start from a populated v2 database so the social schema migration and v4
+-- faction/economy migration run against legacy character balances.
+sql.Query([[CREATE TABLE wo_meta (key TEXT PRIMARY KEY, value TEXT)]])
+sql.Query([[INSERT INTO wo_meta (key, value) VALUES ('schema_version', '2')]])
+sql.Query([[
+    CREATE TABLE wo_characters (
+        id TEXT PRIMARY KEY, steamid TEXT NOT NULL, steamid64 TEXT, name TEXT, surname TEXT,
+        age INTEGER, gender TEXT, race TEXT, class TEXT, model TEXT, level INTEGER DEFAULT 1,
+        experience INTEGER DEFAULT 0, money INTEGER DEFAULT 0, map TEXT,
+        pos_x REAL DEFAULT 0, pos_y REAL DEFAULT 0, pos_z REAL DEFAULT 0,
+        ang_p REAL DEFAULT 0, ang_y REAL DEFAULT 0, ang_r REAL DEFAULT 0,
+        customization TEXT, created_at INTEGER, last_played INTEGER,
+        position_saved INTEGER NOT NULL DEFAULT 0
+    )
+]])
+sql.Query([[CREATE INDEX idx_characters_steamid ON wo_characters (steamid)]])
+sql.Query([[CREATE TABLE wo_inventories (owner_id TEXT NOT NULL, container TEXT NOT NULL,
+    width INTEGER, height INTEGER, items TEXT, PRIMARY KEY (owner_id, container))]])
+sql.Query([[CREATE TABLE wo_equipment (owner_id TEXT PRIMARY KEY, slots TEXT)]])
+sql.Query([[CREATE TABLE wo_quests (owner_id TEXT NOT NULL, quest_id TEXT NOT NULL, data TEXT,
+    completed INTEGER DEFAULT 0, PRIMARY KEY (owner_id, quest_id))]])
+sql.Query([[CREATE TABLE wo_skills (owner_id TEXT NOT NULL, skill_id TEXT NOT NULL, level INTEGER DEFAULT 0,
+    data TEXT, PRIMARY KEY (owner_id, skill_id))]])
+sql.Query([[CREATE TABLE wo_abilities (owner_id TEXT NOT NULL, ability_id TEXT NOT NULL, data TEXT,
+    PRIMARY KEY (owner_id, ability_id))]])
+sql.Query([[CREATE TABLE wo_world_items (uid TEXT PRIMARY KEY, data TEXT, map TEXT,
+    pos_x REAL, pos_y REAL, pos_z REAL, created_at INTEGER)]])
+sql.Query([[INSERT INTO wo_characters (id, steamid, race, money) VALUES
+    ('migration-human', 'STEAM_0:0:90001', 'human', 42),
+    ('migration-orc', 'STEAM_0:0:90002', 'orc', -12),
+    ('migration-saturated', 'STEAM_0:0:90003', 'pandaren', 42949673)]])
+
 print("[scenario] loading gamemode (server)...")
 
 include("gamemodes/warcraftonline/gamemode/init.lua")
@@ -41,6 +73,36 @@ include("gamemodes/warcraftonline/gamemode/init.lua")
 hook.Run("Initialize")
 hook.Run("InitPostEntity")
 MOCK.RunTimers(0.1)
+
+do
+local migratedCharacters = WO.Database:Fetch(
+    "SELECT id, money, faction FROM wo_characters WHERE id LIKE 'migration-%'")
+local migratedBalances = {}
+for _, row in ipairs(migratedCharacters) do
+    migratedBalances[row.id] = { money = tonumber(row.money), faction = row.faction }
+end
+local economyMigrationMarker = WO.Database:FetchValue(
+    "SELECT value FROM wo_meta WHERE key = 'economy_redeomination_v4'")
+local schemaVersion = tonumber(WO.Database:FetchValue(
+    "SELECT value FROM wo_meta WHERE key = 'schema_version'"))
+local migrationRetrySucceeded = WO.Database.Migrations[4] and
+    pcall(WO.Database.Migrations[4]) == true
+local migrationRetryRows = WO.Database:Fetch(
+    "SELECT id, money FROM wo_characters WHERE id LIKE 'migration-%'")
+local retryBalances = {}
+for _, row in ipairs(migrationRetryRows) do retryBalances[row.id] = tonumber(row.money) end
+MOCK.Assert(schemaVersion == 4 and economyMigrationMarker == "1" and
+    migratedBalances["migration-human"] and migratedBalances["migration-human"].money == 4200 and
+    migratedBalances["migration-human"].faction == "alliance" and
+    migratedBalances["migration-orc"] and migratedBalances["migration-orc"].money == 0 and
+    migratedBalances["migration-orc"].faction == "horde" and
+    migratedBalances["migration-saturated"] and
+    migratedBalances["migration-saturated"].money == WO.Config.Economy.MaxBalance and
+    migratedBalances["migration-saturated"].faction == "alliance" and migrationRetrySucceeded and
+    retryBalances["migration-human"] == 4200 and
+    retryBalances["migration-saturated"] == WO.Config.Economy.MaxBalance,
+    "migration v4 масштабирует старые балансы один раз, ограничивает отрицательные/большие суммы и назначает фракции")
+end
 
 ---------------------------------------------------------------------------
 -- 1. Загрузка
@@ -83,6 +145,7 @@ MOCK.Assert(WO.Util.IsUUID(serverUUID), "UUID создаётся на серве
 end
 MOCK.Assert(WO.Races.GetIDs and #WO.Races.GetIDs() == 17, "все 17 рас зарегистрированы: " ..
     (WO.Races.GetIDs and #WO.Races.GetIDs() or 0))
+do
 local explicitHumanModel = "models/mailer/character/human/male/humanmale00_00.mdl"
 local discoveredHumanModel = "models/mailer/character/human/male/humanmale00_99.mdl"
 MOCK.mountedFiles[explicitHumanModel] = nil
@@ -97,7 +160,9 @@ MOCK.mountedFiles[explicitHumanModel] = true
 MOCK.Assert(WO.Classes.GetIDs and #WO.Classes.GetIDs() == 16,
     "зарегистрированы 13 исходных и три новых класса: " ..
         (WO.Classes.GetIDs and #WO.Classes.GetIDs() or 0))
+end
 
+do
 local expectedRaces = {
     "human", "elf", "orc", "dwarf", "gnome", "undead", "tauren", "troll", "goblin",
     "bloodelf", "dracthyr", "draenei", "pandaren", "worgen", "vulpera", "sethrak", "naga",
@@ -154,29 +219,88 @@ MOCK.Assert(allRaceSchemasValid and allClassesRegistered,
     "у всех рас есть русское имя, модели обоих полов, классы и расширенные русские имена/фамилии")
 
 do
-local expectedProfessionRanks = {
-    lumberjack = { "Дровосек", "Кольщик дров", "Лесопильщик" },
-    miner = { "Горняк", "Вагонетчик", "Дробильщик" },
-    farmer = { "Пахарь", "Сеятель", "Жнец" },
-    herder = { "Пастух", "Кормильщик", "Загонщик" },
-    fisher = { "Рыбак", "Сеточник", "Разделочник" },
-    porter = { "Складчик", "Развозчик", "Погрузчик" },
-    blacksmith = { "Горновой", "Молотобоец", "Точильщик" },
-    tailor = { "Закройщик", "Швея", "Бронник" },
-    baker = { "Месильщик", "Печник", "Кондитер" },
-    brewer = { "Солодовник", "Варщик", "Разливщик" },
-    alchemist = { "Сборщик трав", "Толкач", "Зельевар" },
-    merchant = { "Лавочник", "Закупщик", "Оценщик" },
-    cleaner = { "Дворник", "Подметальщик", "Мусорщик" },
-    water_carrier = { "Черпальщик", "Водонос", "Колодезник" },
-    carpenter = { "Досочник", "Столяр", "Строитель" },
-    weaponsmith = { "Лучник", "Стрелочник", "Арбалетчик" },
-    jeweler = { "Каменщик", "Огранщик", "Ювелир" },
-    dockworker = { "Грузчик", "Канатчик", "Причальщик" },
-    beekeeper = { "Пчеловод", "Медосборщик", "Воскодел" },
-    herbalist = { "Собиратель", "Сушильщик", "Сортировщик" },
-    builder = { "Землекоп", "Каменщик", "Кровельщик" },
-}
+local allianceRaces = WO.Races.GetFactionRaces("alliance")
+local hordeRaces = WO.Races.GetFactionRaces("horde")
+local function HasID(list, id)
+    return table.HasValue(list, id)
+end
+local humanClassIDs = WO.Classes.GetCharacterCreationIDs("human")
+MOCK.Assert(HasID(allianceRaces, "human") and not HasID(allianceRaces, "orc") and
+    HasID(hordeRaces, "orc") and not HasID(hordeRaces, "human") and
+    HasID(allianceRaces, "pandaren") and HasID(hordeRaces, "pandaren") and
+    WO.Races.IsFactionAllowed("pandaren", "alliance") and
+    WO.Races.IsFactionAllowed("pandaren", "horde"),
+    "списки выбора рас разделены по Альянсу/Орде, а Pandaren доступен обеим сторонам")
+MOCK.Assert(WO.Classes.IsCharacterCreationAllowed("paladin", "human") and
+    not WO.Classes.IsCharacterCreationAllowed("evoker", "human") and
+    HasID(humanClassIDs, "warrior") and not HasID(humanClassIDs, "evoker") and
+    not HasID(humanClassIDs, "alchemist"),
+    "список классов при создании учитывает матрицу совместимости и скрывает будущие классы")
+local wrongFactionValid, wrongFactionReason = WO.Character.Validate({
+    name = "Тест", surname = "Фракция", age = 25, gender = "male", faction = "horde",
+    race = "human", class = "warrior",
+    model = WO.Races.GetModels("human", "male")[1], customization = {},
+})
+local wrongRaceClassValid, wrongRaceClassReason = WO.Character.Validate({
+    name = "Тест", surname = "Класс", age = 25, gender = "male", faction = "alliance",
+    race = "human", class = "evoker",
+    model = WO.Races.GetModels("human", "male")[1], customization = {},
+})
+MOCK.Assert(not wrongFactionValid and wrongFactionReason == "faction_race_mismatch" and
+    not wrongRaceClassValid and wrongRaceClassReason == "class_not_allowed",
+    "серверная валидация отклоняет фракцию, не соответствующую расе, и несовместимый класс")
+end
+
+do
+local economy = WO.Config.Economy
+local function ValidCopperAmount(amount, allowZero)
+    return isnumber(amount) and amount == math.floor(amount) and
+        amount >= (allowZero and 0 or 1) and amount <= economy.MaxTransaction
+end
+local itemPriceCatalogValid = true
+for _, item in pairs(WO.Items.GetAll()) do
+    local price = item.price
+    if price then
+        for _, field in ipairs({ "buy", "sell" }) do
+            if price[field] ~= nil and not ValidCopperAmount(tonumber(price[field]), true) then
+                itemPriceCatalogValid = false
+            end
+        end
+    end
+end
+local vendorPriceCatalogValid = true
+for _, npc in pairs(WO.NPCs.GetAll()) do
+    for _, entry in ipairs((npc.vendor and npc.vendor.stock) or {}) do
+        vendorPriceCatalogValid = vendorPriceCatalogValid and WO.Items.Get(entry.class) ~= nil and
+            ValidCopperAmount(tonumber(entry.price), false) and
+            isnumber(entry.amount) and entry.amount >= 0
+    end
+end
+local questRewardCatalogValid = true
+for _, quest in pairs(WO.Quests.GetAll()) do
+    local reward = tonumber(quest.rewards and quest.rewards.money or 0)
+    questRewardCatalogValid = questRewardCatalogValid and ValidCopperAmount(reward, true)
+end
+local potionVendor = WO.NPCs.Get("trader_marla")
+local economyModelValid = economy.CopperPerSilver == 100 and economy.SilverPerGold == 100 and
+    economy.BalanceMigrationFactor == 100 and economy.StartingBalance == 5000 and
+    economy.MaxTransaction < economy.MaxBalance and WO.Currency.MAX_BALANCE == economy.MaxBalance and
+    WO.Currency.MAX_TRANSACTION == economy.MaxTransaction and
+    WO.Currency.FromCoins(1, 1, 1) == 10101 and WO.Currency.Format(10101) == "1g 1s 1c" and
+    WO.Currency.Format(economy.StartingBalance) == "50s 0c" and
+    WO.Vendors.GetBuyPrice(potionVendor, "health_potion") == 2500 and
+    WO.Vendors.GetSellPrice(potionVendor, "health_potion") == 300 and
+    WO.Vendors.GetBuyPrice(potionVendor, "bread") == 400 and
+    WO.Config.Economy.LumberjackPayPerBundle == 3200 and
+    WO.Quests.Get("wolves_of_elwynn").rewards.money == 2500 and
+    WO.Quests.Get("supplies_for_the_road").rewards.money == 6000
+MOCK.Assert(economyModelValid and itemPriceCatalogValid and vendorPriceCatalogValid and
+    questRewardCatalogValid,
+    "экономика согласована в copper: валютные номиналы, миграция, баланс, лимиты, товары, квесты и доход лесоруба")
+end
+
+do
+local expectedRanks = { "Дровосек", "Кольщик дров", "Лесопильщик" }
 local expectedProfessionModes = {
     lumberjack = "lumber_delivery", miner = "mining", farmer = "sowing", herder = "herding",
     fisher = "fishing", porter = "loading", blacksmith = "smithing", tailor = "sewing",
@@ -186,61 +310,48 @@ local expectedProfessionModes = {
     beekeeper = "beekeeping", herbalist = "herbcraft", builder = "masonry",
 }
 local professionIDs = WO.Professions.GetIDs()
-local allProfessionsValid = #professionIDs == 21
-local allProfessionNPCsValid = #professionIDs == 21
-local allProfessionModesUnique = true
-local usedProfessionModes = {}
-for _, mode in pairs(expectedProfessionModes) do
-    if usedProfessionModes[mode] then allProfessionModesUnique = false end
-    usedProfessionModes[mode] = true
-end
-for _, professionID in ipairs(professionIDs) do
-    allProfessionsValid = allProfessionsValid and expectedProfessionRanks[professionID] ~= nil
-end
-for professionID, expectedRanks in pairs(expectedProfessionRanks) do
-    local profession = WO.Professions.Get(professionID)
+local onlyLumberjackActive = #professionIDs == 1 and professionIDs[1] == "lumberjack" and
+    WO.Professions.Get("lumberjack") ~= nil and WO.Professions.Get("miner") == nil and
+    WO.Professions.Get("farmer") == nil and WO.Professions.Get("merchant") == nil and
+    WO.Professions.GetMaxRank("lumberjack") == 1 and
+    WO.Professions.GetLevelForXP("lumberjack", 100000) == 1
+local lumberjack = WO.Professions.Get("lumberjack")
+local lumberSchemaValid = lumberjack ~= nil and #lumberjack.ranks == 3 and
+    WO.Professions.GetMiniGame("lumber_delivery") ~= nil and
+    lumberjack.ranks[1].name == expectedRanks[1] and
+    lumberjack.ranks[1].basePay == WO.Config.Economy.LumberjackPayPerBundle and
+    lumberjack.ranks[2].name == expectedRanks[2] and
+    lumberjack.ranks[3].name == expectedRanks[3] and
+    lumberjack.ranks[2].basePay > lumberjack.ranks[1].basePay and
+    lumberjack.ranks[3].basePay > lumberjack.ranks[2].basePay
+
+local allEmployerSchemasRetained = true
+for professionID in pairs(expectedProfessionModes) do
     local employer = WO.NPCs.Get("work_" .. professionID)
     local configuredSpawns = WO.Config.NPCSpawnPoints["work_" .. professionID] or {}
-    allProfessionsValid = allProfessionsValid and profession ~= nil and
-        isstring(profession.name) and #profession.ranks == 3 and
-        WO.Professions.GetMiniGame(expectedProfessionModes[professionID]) ~= nil
-    allProfessionNPCsValid = allProfessionNPCsValid and employer ~= nil and
+    allEmployerSchemasRetained = allEmployerSchemasRetained and employer ~= nil and
         employer.professionId == professionID and employer.dialogue == "profession_work" and
-        #employer.spawns == #configuredSpawns
-
-    if profession then
-        for rankIndex, rank in ipairs(profession.ranks) do
-            allProfessionsValid = allProfessionsValid and rank.name == expectedRanks[rankIndex] and
-                #rank.activities >= 3 and rank.basePay > 0 and
-                (rankIndex == 1 or rank.basePay > profession.ranks[rankIndex - 1].basePay)
-            local hasUniqueMinigame = false
-            local expectedRankMode = expectedProfessionModes[professionID]
-            if professionID == "lumberjack" and rankIndex > 1 then
-                expectedRankMode = "chopping"
-            end
-
-            for _, activity in ipairs(rank.activities or {}) do
-                allProfessionsValid = allProfessionsValid and
-                    (activity.mode == expectedRankMode or activity.mode == "delivery")
-                hasUniqueMinigame = hasUniqueMinigame or activity.mode == expectedRankMode
-            end
-            allProfessionsValid = allProfessionsValid and hasUniqueMinigame
-        end
-    end
+        #employer.spawns == #configuredSpawns and
+        WO.Professions.GetMiniGame(expectedProfessionModes[professionID]) ~= nil
+end
+local futureEmployerPointsRemainEmpty = true
+for _, professionID in ipairs({ "tailor", "merchant", "carpenter", "weaponsmith",
+    "jeweler", "dockworker", "builder" }) do
+    local points = WO.Config.NPCSpawnPoints["work_" .. professionID]
+    futureEmployerPointsRemainEmpty = futureEmployerPointsRemainEmpty and
+        istable(points) and #points == 0
 end
 local allWorkBonusesValid = true
 for _, raceID in ipairs(expectedRaces) do
     for professionID, bonus in pairs(WO.Races.Get(raceID).professionBonuses or {}) do
-        if not WO.Professions.Get(professionID) or bonus < 0 or bonus > 0.35 then
-            allWorkBonusesValid = false
-        end
+        if WO.Professions.IsEnabled(professionID) and (not WO.Professions.Get(professionID) or
+            bonus < 0 or bonus > 0.35) then allWorkBonusesValid = false end
     end
 end
 for _, classID in ipairs(expectedClasses) do
     for professionID, bonus in pairs(WO.Classes.Get(classID).professionBonuses or {}) do
-        if not WO.Professions.Get(professionID) or bonus < 0 or bonus > 0.35 then
-            allWorkBonusesValid = false
-        end
+        if WO.Professions.IsEnabled(professionID) and (not WO.Professions.Get(professionID) or
+            bonus < 0 or bonus > 0.35) then allWorkBonusesValid = false end
     end
 end
 local magicElements = { air = true, earth = true, fire = true, frost = true,
@@ -248,21 +359,17 @@ local magicElements = { air = true, earth = true, fire = true, frost = true,
 local allMagicBonusesValid = true
 for _, raceID in ipairs(expectedRaces) do
     for element, bonus in pairs(WO.Races.Get(raceID).magicBonuses or {}) do
-        if not magicElements[element] or bonus < 0 or bonus > 0.35 then
-            allMagicBonusesValid = false
-        end
+        if not magicElements[element] or bonus < 0 or bonus > 0.35 then allMagicBonusesValid = false end
     end
 end
 for _, classID in ipairs(expectedClasses) do
     for element, bonus in pairs(WO.Classes.Get(classID).magicBonuses or {}) do
-        if not magicElements[element] or bonus < 0 or bonus > 0.35 then
-            allMagicBonusesValid = false
-        end
+        if not magicElements[element] or bonus < 0 or bonus > 0.35 then allMagicBonusesValid = false end
     end
 end
-MOCK.Assert(allProfessionsValid and allProfessionNPCsValid and allProfessionModesUnique and
-    allWorkBonusesValid and allMagicBonusesValid,
-    "21 профессия имеет своего NPC, собственную уникальную механику, три ступени и валидные расовые/классовые специализации")
+MOCK.Assert(onlyLumberjackActive and lumberSchemaValid and allEmployerSchemasRetained and
+    futureEmployerPointsRemainEmpty and allWorkBonusesValid and allMagicBonusesValid,
+    "в текущем процессе активен только лесоруб ранга 1; остальные схемы, работодатели и мини-игры сохранены")
 local lumberWorksite = WO.Config.ProfessionWorksites and WO.Config.ProfessionWorksites.lumberjack
 local lumberjackSpawn = WO.Config.NPCSpawnPoints.work_lumberjack[1]
 MOCK.Assert(lumberWorksite and lumberWorksite.map == "rp_lordaeron" and
@@ -330,6 +437,7 @@ adminSlotPlayer.__admin = true
 MOCK.Assert(WO.Character.GetMaxCharacters(ordinarySlotPlayer) == 2 and
     WO.Character.GetMaxCharacters(adminSlotPlayer) == 5,
     "серверный лимит слотов: 2 для обычного игрока и 5 для администратора")
+end
 
 MOCK.Assert(WO.Items.GetAll and table.Count(WO.Items.GetAll()) >= 12,
     "предметы зарегистрированы: " .. (WO.Items.GetAll and table.Count(WO.Items.GetAll()) or 0))
@@ -1205,14 +1313,16 @@ end
 local workNPC, workNPCDef = MakeWorkNPC("lumberjack")
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
 local rankOneOption = false
-local lockedRankTwoOption = false
+local rankTwoOption = false
 for _, option in ipairs(workPlayer.wo_dialogue.options or {}) do
     rankOneOption = rankOneOption or option.action == "profession_rank:1"
-    lockedRankTwoOption = lockedRankTwoOption or option.action == "profession_locked:2"
+    rankTwoOption = rankTwoOption or option.action == "profession_rank:2" or
+        option.action == "profession_locked:2"
 end
-local lockedStart, lockedReason = WO.Professions.StartShift(workPlayer, "lumberjack", 2)
-MOCK.Assert(rankOneOption and lockedRankTwoOption and lockedStart == false and lockedReason == "rank_locked",
-    "работодатель предлагает первую ступень, а вторая остаётся закрытой до нужного опыта")
+local disabledRankStart, disabledRankReason = WO.Professions.StartShift(workPlayer, "lumberjack", 2)
+MOCK.Assert(rankOneOption and not rankTwoOption and disabledRankStart == false and
+    disabledRankReason == "invalid_rank" and WO.Professions.GetMaxRank("lumberjack") == 1,
+    "работодатель показывает только ранг Дровосек и сервер отклоняет остальные ступени")
 local worksiteMap = MOCK.mapName
 MOCK.mapName = "gm_flatgrass"
 local wrongMapStart, wrongMapReason = WO.Professions.StartShift(workPlayer, "lumberjack", 1)
@@ -1257,10 +1367,6 @@ WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
 local duplicateStart, duplicateReason = WO.Professions.StartShift(workPlayer, "lumberjack", 1)
 MOCK.Assert(duplicateStart == false and duplicateReason == "shift_already_active",
     "нельзя открыть вторую параллельную смену у работодателя")
-local earlyFinish, earlyFinishReason = WO.Professions.FinishShift(workPlayer, firstShiftID)
-MOCK.Assert(earlyFinish == false and earlyFinishReason == "orders_incomplete" and
-    WO.Currency.Get(workPlayer) == initialMoney,
-    "смену нельзя сдать и оплатить до выполнения трёх заказов")
 WO.Dialogue.Close(workPlayer)
 
 MOCK.NetDeliver({ name = "Profession.WorkInput", args = { "forged-shift", "strike", true } }, 8, workPlayer)
@@ -1276,7 +1382,7 @@ local function CompleteLumberOrder(checkCarryRestrictions)
     MOCK.Assert(task and task.mode == "lumber_delivery" and task.engine == "lumber" and
         task.phase == "pickup" and task.sequence == nil and task.sequenceLength == 6 and
         task.sequencePrompt == nil,
-        "каждый заказ первой ступени лесоруба требует шесть случайных клавиш и перенос связки брёвен")
+        "каждая связка первой ступени запускает шесть случайных WASD-клавиш")
 
     workPlayer:SetPos(task.pickupPos + Vector(500, 0, 0))
     MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, "pickup", true } }, 8, workPlayer)
@@ -1294,7 +1400,7 @@ local function CompleteLumberOrder(checkCarryRestrictions)
         promptTask and promptTask.sequence == nil and
         promptTask.sequencePrompt == task.sequencePrompt and promptTask.sequenceCount == 0 and
         promptTask.sequenceLength == 6,
-        "E у штабеля генерирует и раскрывает только первую из шести случайных клавиш")
+        "E у штабеля раскрывает только первую из шести случайных клавиш")
 
     local workMove = {
         forward = 100, side = -50, up = 25,
@@ -1329,13 +1435,13 @@ local function CompleteLumberOrder(checkCarryRestrictions)
         incorrectTask.sequenceLastInputCorrect == false and failureNoticeShown and
         not WO.Professions.IsCarryingLumber(workPlayer) and
         not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass),
-        "одна неверная WASD-клавиша проваливает попытку, сбрасывает фазу и не выдаёт связку")
+        "неверная WASD-клавиша проваливает всю мини-игру и не выдаёт связку")
 
     local directionWithoutRestart = WO.Professions.HandleInput(workPlayer, shift.id,
         wrongDirection, true)
     MOCK.Assert(directionWithoutRestart == false and task.phase == "pickup" and
         task.sequencePrompt == nil,
-        "после ошибки WASD не перезапускает мини-игру без нового нажатия E")
+        "после ошибки WASD нельзя продолжать без нового нажатия E у штабеля")
 
     MOCK.AdvanceTime(0.12)
     local restarted = WO.Professions.HandleInput(workPlayer, shift.id, "pickup", true)
@@ -1347,17 +1453,17 @@ local function CompleteLumberOrder(checkCarryRestrictions)
         task.badActions == 0 and not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
         restartTask and restartTask.phase == "work" and restartTask.sequenceCount == 0 and
         restartTask.sequencePrompt == task.sequencePrompt,
-        "повторное E у штабеля начинает новую шестиклавишную попытку с нуля")
+        "новое E у штабеля запускает новую попытку с нуля")
 
     for index = 1, task.sequenceLength do
         local direction = task.sequencePrompt
         MOCK.Assert(lumberPromptDirections[direction],
-            "сервер хранит только одну из четырёх случайных клавиш текущей подсказки")
+            "сервер хранит только одну из четырёх клавиш текущей подсказки")
         MOCK.AdvanceTime(0.12)
         MOCK.NetDeliver({ name = "Profession.WorkInput", args = { shift.id, direction, true } }, 8, workPlayer)
         MOCK.Assert(task.sequenceIndex == index + 1 and task.lastInputCorrect == true and
             task.sequence == nil,
-            "каждая правильная случайная клавиша засчитывается ровно один раз")
+            "каждая правильная случайная клавиша засчитывается один раз")
         if index < task.sequenceLength then
             MOCK.Assert(task.phase == "work" and
                 not WO.Professions.IsCarryingLumber(workPlayer) and
@@ -1382,7 +1488,7 @@ local function CompleteLumberOrder(checkCarryRestrictions)
         task.sequencePrompt == nil and IsValid(carryWeapon) and
         carryWeapon.WOLumberShiftID == shift.id and workPlayer:GetActiveWeapon() == carryWeapon and
         WO.Professions.IsCarryingLumber(workPlayer),
-        "шесть правильных случайных нажатий выдают и выбирают серверный SWEP связки брёвен")
+        "шесть правильных нажатий выдают и выбирают серверный SWEP связки брёвен")
 
     if checkCarryRestrictions then
         local moveRestrictions = {}
@@ -1417,35 +1523,68 @@ local function CompleteLumberOrder(checkCarryRestrictions)
         WO.Currency.Get(workPlayer) == initialMoney and
         not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
         workPlayer:GetActiveWeapon() == workPlayer:GetWeapon("drc_unarmed"),
-        "E у склада сдаёт один заказ, снимает SWEP и не выдаёт деньги до сдачи смены")
+        "E у склада завершает одну связку, снимает SWEP, а расчёт остаётся у работодателя")
 end
 
 CompleteLumberOrder(true)
-MOCK.Assert(shift.completedOrders == 1 and shift.task.mode == "lumber_delivery" and
+MOCK.Assert(shift.completedOrders == 1 and shift.requiredOrders == nil and
+    shift.status == "working" and shift.task.mode == "lumber_delivery" and
     shift.task.phase == "pickup" and WO.Currency.Get(workPlayer) == initialMoney,
-    "после сдачи первой связки начинается следующий цикл у того же штабеля")
+    "после первой доставки без лимита заказов начинается новый цикл, деньги не начислены")
 CompleteLumberOrder(false)
-CompleteLumberOrder(false)
-MOCK.Assert(shift.status == "ready" and shift.completedOrders == 3 and
+MOCK.Assert(shift.completedOrders == 2 and shift.requiredOrders == nil and
+    shift.status == "working" and shift.task.phase == "pickup" and
     WO.Currency.Get(workPlayer) == initialMoney,
-    "последний перенос открывает сдачу смены, но зарплата ещё не начислена")
+    "несколько доставок не завершают бесконечную смену автоматически")
 
-local rejectedAnywhere = WO.Professions.FinishShift(workPlayer, firstShiftID)
-MOCK.Assert(rejectedAnywhere == false and WO.Currency.Get(workPlayer) == initialMoney,
-    "смену нельзя сдать из меню или на расстоянии от работодателя")
+-- Начинаем ещё одну связку, но сдаём смену до её доставки: она не оплачивается.
+local unfinishedTask = shift.task
+workPlayer:SetPos(unfinishedTask.pickupPos)
+MOCK.AdvanceTime(0.12)
+MOCK.Assert(WO.Professions.HandleInput(workPlayer, shift.id, "pickup", true),
+    "третья связка запускает WASD-мини-игру")
+for _ = 1, unfinishedTask.sequenceLength do
+    local direction = unfinishedTask.sequencePrompt
+    MOCK.AdvanceTime(0.12)
+    MOCK.Assert(WO.Professions.HandleInput(workPlayer, shift.id, direction, true),
+        "подсказки незавершённой связки принимаются сервером")
+end
+MOCK.Assert(unfinishedTask.phase == "carry" and shift.completedOrders == 2 and
+    WO.Professions.IsCarryingLumber(workPlayer),
+    "недоставленная связка остаётся незавершённой и не увеличивает число оплачиваемых доставок")
+local cancelLumber, cancelLumberReason = WO.Professions.CancelShift(workPlayer, shift.id)
+MOCK.Assert(cancelLumber == false and cancelLumberReason == "must_settle_at_employer" and
+    workCharacter.activeProfessionShift == shift and WO.Professions.IsCarryingLumber(workPlayer),
+    "лесную смену нельзя бросить или получить оплату без работодателя")
+
+workPlayer:SetPos(unfinishedTask.pickupPos)
+local wrongEmployerFinish, wrongEmployerReason = WO.Professions.FinishShift(workPlayer, firstShiftID)
+MOCK.Assert(wrongEmployerFinish == false and wrongEmployerReason == "wrong_employer" and
+    WO.Currency.Get(workPlayer) == initialMoney and workCharacter.activeProfessionShift == shift,
+    "смену можно сдать только лично работодателю, а доставленные связки до сдачи не оплачиваются")
+
 workPlayer:SetPos(workNPC:GetPos())
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
-MOCK.Assert(ChooseWorkDialogueAction(workPlayer, "profession_finish"),
-    "готовая смена сдаётся только через своего NPC")
+local finishOptionText, continueOption = nil, false
+for _, option in ipairs(workPlayer.wo_dialogue.options or {}) do
+    if option.action == "profession_finish" then finishOptionText = option.text end
+    continueOption = continueOption or option.action == "close"
+end
+MOCK.Assert(finishOptionText == "Сдать смену · 2 связок доставлено" and continueOption and
+    ChooseWorkDialogueAction(workPlayer, "profession_finish"),
+    "у работодателя сдача добровольная и показывает число уже доставленных связок")
+local expectedLumberPayout = math.floor(shift.basePay * shift.completedOrders *
+    (0.75 + (shift.qualityTotal / shift.completedOrders) * 0.5) *
+    (1 + WO.Professions.GetBonus(workCharacter, "lumberjack")))
 local firstShiftPay = WO.Currency.Get(workPlayer) - initialMoney
 local lumberjackSkill = WO.Professions.GetSkillData(workCharacter, "lumberjack")
-MOCK.Assert(firstShiftPay > 0 and workCharacter.activeProfessionShift == nil and
-    lumberjackSkill.xp == 300 and lumberjackSkill.level == 2 and
+MOCK.Assert(firstShiftPay == expectedLumberPayout and expectedLumberPayout > 0 and
+    workCharacter.activeProfessionShift == nil and
+    not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
+    workPlayer:GetActiveWeapon() == workPlayer:GetWeapon("drc_unarmed") and
+    lumberjackSkill.xp == 200 and lumberjackSkill.level == 1 and
     lumberjackSkill.completedShifts == 1,
-    "NPC выдаёт зарплату и XP только после сдачи; 300 опыта открывают вторую ступень")
-MOCK.Assert(WO.Professions.GetBasePay("lumberjack", 2, 3) >
-    WO.Professions.GetBasePay("lumberjack", 1, 3),
-    "базовая зарплата второй ступени выше первой")
+    "расчёт добровольно оплачивает две сданные связки, сохраняет XP ранга 1 и удаляет незаконченный груз")
 
 WO.Hook.Run("CharacterSave", workCharacter)
 local savedProfessionRows = WO.Database:Fetch(
@@ -1457,142 +1596,40 @@ local reloadedProfessionCharacter = WO.Character.New({
     id = workCharacter.id, race = "worgen", class = "assassin",
 })
 WO.Hook.Run("CharacterLoad", reloadedProfessionCharacter)
-MOCK.Assert(savedProfessionData and savedProfessionData.skills.lumberjack.xp == 300 and
-    WO.Professions.GetSkillData(reloadedProfessionCharacter, "lumberjack").level == 2,
-    "опыт и открытая ступень профессии сохраняются и восстанавливаются")
+local reloadedLumberSkill = WO.Professions.GetSkillData(reloadedProfessionCharacter, "lumberjack")
+MOCK.Assert(savedProfessionData and savedProfessionData.skills.lumberjack.xp == 200 and
+    reloadedLumberSkill.xp == 200 and reloadedLumberSkill.level == 1,
+    "опыт лесоруба сохраняется при недоступности следующих рангов")
 
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
 local canRepeatRankOne = false
 local canChooseRankTwo = false
 for _, option in ipairs(workPlayer.wo_dialogue.options or {}) do
     canRepeatRankOne = canRepeatRankOne or option.action == "profession_rank:1"
-    canChooseRankTwo = canChooseRankTwo or option.action == "profession_rank:2"
+    canChooseRankTwo = canChooseRankTwo or option.action == "profession_rank:2" or
+        option.action == "profession_locked:2"
 end
-MOCK.Assert(canRepeatRankOne and canChooseRankTwo,
-    "после открытия второй ступени игрок может снова выбрать первую или работать на второй")
-MOCK.Assert(ChooseWorkDialogueAction(workPlayer, "profession_rank:1"),
-    "первая ступень остаётся доступной после открытия второй")
+MOCK.Assert(canRepeatRankOne and not canChooseRankTwo and
+    ChooseWorkDialogueAction(workPlayer, "profession_rank:1"),
+    "после расчёта игрок может начать новую смену, но будущие ранги не отображаются")
 local replayShift = workCharacter.activeProfessionShift
-MOCK.Assert(replayShift and replayShift.rank == 1 and
+MOCK.Assert(replayShift and replayShift.rank == 1 and replayShift.completedOrders == 0 and
+    replayShift.requiredOrders == nil and replayShift.status == "working" and
     replayShift.task.mode == "lumber_delivery",
-    "работодатель запускает именно выбранный ранний ранг, а не автоматически максимальный")
-local replayTask = replayShift.task
-workPlayer:SetPos(replayTask.pickupPos)
-MOCK.AdvanceTime(0.12)
-WO.Professions.HandleInput(workPlayer, replayShift.id, "pickup", true)
-for _ = 1, replayTask.sequenceLength do
-    local direction = replayTask.sequencePrompt
-    MOCK.AdvanceTime(0.12)
-    WO.Professions.HandleInput(workPlayer, replayShift.id, direction, true)
-end
-MOCK.Assert(WO.Professions.IsCarryingLumber(workPlayer) and
-    workPlayer:HasWeapon(lumberWorksite.carryWeaponClass),
-    "связка привязана к активной смене и выдаётся повторно только в фазе переноса")
-WO.Professions.CancelShift(workPlayer, replayShift.id)
-MOCK.Assert(not workPlayer:HasWeapon(lumberWorksite.carryWeaponClass) and
-    workPlayer:GetActiveWeapon() == workPlayer:GetWeapon("drc_unarmed"),
-    "отмена смены удаляет связку и возвращает руки персонажа")
-
-workPlayer:SetPos(workNPC:GetPos())
+    "повторная смена снова начинается с первого ранга без фиксированного числа доставок")
+local moneyBeforeEmptyFinish = WO.Currency.Get(workPlayer)
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
-MOCK.Assert(ChooseWorkDialogueAction(workPlayer, "profession_rank:2"),
-    "второй ранг выбирается через того же работодателя после накопления опыта")
-local secondRankShift = workCharacter.activeProfessionShift
-MOCK.Assert(secondRankShift and secondRankShift.rank == 2 and
-    secondRankShift.task.mode == "chopping" and secondRankShift.task.engine == "strike" and
-    secondRankShift.basePay > WO.Professions.GetBasePay("lumberjack", 1, 1),
-    "вторая ступень сохраняет рубку, а её выбранная ставка выше первой")
-local moneyBeforeCancel = WO.Currency.Get(workPlayer)
-WO.Professions.CancelShift(workPlayer, secondRankShift.id)
-MOCK.Assert(workCharacter.activeProfessionShift == nil and WO.Currency.Get(workPlayer) == moneyBeforeCancel,
-    "отменённая смена не выдаёт зарплату")
+local finishEmptyOption = false
+for _, option in ipairs(workPlayer.wo_dialogue.options or {}) do
+    finishEmptyOption = finishEmptyOption or
+        option.action == "profession_finish" and option.text == "Завершить смену без доставок"
+end
+MOCK.Assert(finishEmptyOption and ChooseWorkDialogueAction(workPlayer, "profession_finish") and
+    workCharacter.activeProfessionShift == nil and
+    WO.Currency.Get(workPlayer) == moneyBeforeEmptyFinish and
+    WO.Professions.GetSkillData(workCharacter, "lumberjack").xp == 200,
+    "смену можно завершить и без доставок, не выдавая зарплату или XP")
 
-local farmerNPC, farmerNPCDef = MakeWorkNPC("farmer")
-workPlayer:SetPos(farmerNPC:GetPos())
-WO.Dialogue.Open(workPlayer, farmerNPCDef, farmerNPC)
-local startedFarmer, farmerShift = WO.Professions.StartShift(workPlayer, "farmer", 1)
-MOCK.Assert(startedFarmer and farmerShift.task.engine == "sequence" and
-    farmerShift.task.mode == "sowing" and #farmerShift.task.sequence >= 4,
-    "посев запускает самостоятельную последовательность нажатий, а не рыболовный тайминг")
-WO.Dialogue.Close(workPlayer)
-local expectedSeedInput = farmerShift.task.sequence[1]
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
-    farmerShift.id, expectedSeedInput, true,
-} }, 8, workPlayer)
-MOCK.Assert(farmerShift.task.sequenceIndex == 2 and farmerShift.task.progress > 0,
-    "сервер принимает только ожидаемый шаг последовательности для земледельца")
-WO.Professions.CancelShift(workPlayer, farmerShift.id)
-
-local merchantNPC, merchantNPCDef = MakeWorkNPC("merchant")
-workPlayer:SetPos(merchantNPC:GetPos())
-WO.Dialogue.Open(workPlayer, merchantNPCDef, merchantNPC)
-local startedMerchant, merchantShift = WO.Professions.StartShift(workPlayer, "merchant", 1)
-local merchantTask = merchantShift and merchantShift.task
-MOCK.Assert(startedMerchant and merchantTask.engine == "choice" and
-    merchantTask.mode == "haggling" and #merchantTask.choiceOptions == 3 and
-    merchantTask.targetPrice >= 10 and merchantTask.targetPrice <= 90 and
-    string.find(merchantTask.choiceTarget, tostring(merchantTask.targetPrice), 1, true) ~= nil,
-    "торговец получает отдельную мини-игру оценки предложения, а не универсальный тайминг")
-WO.Dialogue.Close(workPlayer)
-local incorrectPriceChoice = merchantTask.correctChoice % #merchantTask.choiceOptions + 1
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
-    merchantShift.id, "choice" .. incorrectPriceChoice, true,
-} }, 8, workPlayer)
-MOCK.Assert(merchantTask.choiceCount == 0,
-    "неверная оценка цены не увеличивает счётчик правильных предложений")
-MOCK.AdvanceTime(0.21)
-local correctPriceChoice = merchantTask.correctChoice
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
-    merchantShift.id, "choice" .. correctPriceChoice, true,
-} }, 8, workPlayer)
-MOCK.Assert(merchantTask.choiceCount == 1 and merchantTask.progress > 0,
-    "сервер принимает выбранную ближайшую цену и продвигает торговую мини-игру")
-WO.Professions.CancelShift(workPlayer, merchantShift.id)
-
-local herbalistNPC, herbalistNPCDef = MakeWorkNPC("herbalist")
-workPlayer:SetPos(herbalistNPC:GetPos())
-WO.Dialogue.Open(workPlayer, herbalistNPCDef, herbalistNPC)
-local startedHerbalist, herbalistShift = WO.Professions.StartShift(workPlayer, "herbalist", 1)
-local herbTask = herbalistShift and herbalistShift.task
-MOCK.Assert(startedHerbalist and herbTask.engine == "identify" and
-    herbTask.mode == "herbcraft" and #herbTask.choiceOptions == 4 and
-    string.find(herbTask.choiceTarget, herbTask.choiceOptions[herbTask.correctChoice], 1, true) ~= nil,
-    "травник распознаёт названное растение среди четырёх вариантов")
-WO.Dialogue.Close(workPlayer)
-local wrongHerbChoice = herbTask.correctChoice % #herbTask.choiceOptions + 1
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
-    herbalistShift.id, "choice" .. wrongHerbChoice, true,
-} }, 8, workPlayer)
-MOCK.Assert(herbTask.choiceCount == 0,
-    "ошибочная идентификация травы не даёт прогресс")
-MOCK.AdvanceTime(0.21)
-local rightHerbChoice = herbTask.correctChoice
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = {
-    herbalistShift.id, "choice" .. rightHerbChoice, true,
-} }, 8, workPlayer)
-MOCK.Assert(herbTask.choiceCount == 1 and herbTask.progress > 0,
-    "верно названная трава засчитывается сервером")
-WO.Professions.CancelShift(workPlayer, herbalistShift.id)
-
-local porterNPC, porterNPCDef = MakeWorkNPC("porter")
-workPlayer:SetPos(porterNPC:GetPos())
-WO.Dialogue.Open(workPlayer, porterNPCDef, porterNPC)
-local startedPorter, porterShift = WO.Professions.StartShift(workPlayer, "porter", 1)
-local porterTask = porterShift and porterShift.task
-MOCK.Assert(startedPorter and porterTask.engine == "alternate" and
-    porterTask.mode == "loading" and porterTask.requiredActions >= 8,
-    "грузчик вручную балансирует ящики чередованием направлений")
-WO.Dialogue.Close(workPlayer)
-local wrongLift = porterTask.expectedInput == "left" and "right" or "left"
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = { porterShift.id, wrongLift, true } }, 8, workPlayer)
-MOCK.Assert(porterTask.actionCount == 0,
-    "несбалансированный подъём не увеличивает счётчик погрузки")
-MOCK.AdvanceTime(0.21)
-local rightLift = porterTask.expectedInput
-MOCK.NetDeliver({ name = "Profession.WorkInput", args = { porterShift.id, rightLift, true } }, 8, workPlayer)
-MOCK.Assert(porterTask.actionCount == 1 and porterTask.expectedInput ~= rightLift,
-    "успешный подъём меняет сторону и учитывается сервером")
-WO.Professions.CancelShift(workPlayer, porterShift.id)
 MOCK.mapName = previousProfessionTestMap
 end
 
@@ -1604,7 +1641,9 @@ MOCK.Assert(WO.Inventory.GiveItem(ply, "health_potion", 2) ~= false, "выдач
 MOCK.Assert(WO.Currency.Add(ply, 100) ~= false, "начисление денег")
 MOCK.Assert(WO.Currency.Get(ply) == money + 100, "баланс после начисления")
 MOCK.Assert(WO.Currency.Take(ply, 50) ~= false, "списание денег")
-MOCK.Assert(WO.Currency.CanAfford(ply, 1000) == false, "нельзя потратить больше, чем есть")
+MOCK.Assert(WO.Currency.CanAfford(ply, 1000) == true and
+    WO.Currency.CanAfford(ply, WO.Currency.Get(ply) + 1) == false,
+    "баланс в copper покрывает доступную цену, но отклоняет сумму выше кошелька")
 
 print("[scenario] inventory/currency OK: items=" .. itemCount .. " money=" .. WO.Currency.Get(ply))
 
@@ -2023,7 +2062,7 @@ local supplyOfferMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Dialogue.QuestOff
 MOCK.Assert(#supplyOfferMessages == 1 and
     supplyOfferMessages[1].args[1].name == "Припасы в дорогу" and
     #supplyOfferMessages[1].args[1].objectives == 1 and
-    supplyOfferMessages[1].args[1].rewards.money == 60,
+    supplyOfferMessages[1].args[1].rewards.money == 6000,
     "сервер присылает карточку с целью и наградой из схемы")
 MOCK.NetDeliver({ name = "Dialogue.QuestResponse", args = { "wolves_of_elwynn", true } }, 8, ply)
 MOCK.Assert(ply:GetCharacter().quests["supplies_for_the_road"] == nil and
@@ -2037,7 +2076,7 @@ MOCK.Assert(ChooseDialogueAction(ply, "quest:supplies_for_the_road"),
     "одно действие сдаёт готовое хлебное поручение")
 MOCK.Assert(suppliesQuest.status == "completed" and
     breadContainer:CountItem("bread") == breadBeforeTurnIn - 3 and
-    WO.Currency.Get(ply) == moneyBeforeSupplies + 60 and
+    WO.Currency.Get(ply) == moneyBeforeSupplies + 6000 and
     ply:GetCharacter().quests["boar_hunt"] == nil,
     "хлеб сдаётся независимо от охотничьей цепочки")
 local repeatReady, repeatRemaining = WO.Quests.GetRepeatAvailability(
@@ -2074,9 +2113,10 @@ MOCK.Assert(ply:GetCharacter().quests["meet_the_trader"].status == "completed",
     "старый активный talk-квест завершается при разговоре после обновления диалога")
 MOCK.Assert(ChooseDialogueAction(ply, "vendor"), "кнопка торговца открывает витрину")
 local vendorMoneyBefore = WO.Currency.Get(ply)
+local potionBuyPrice = WO.Vendors.GetBuyPrice(marla.npcDef, "health_potion")
 MOCK.NetDeliver({ name = "Vendor.Buy", args = { "trader_marla", "health_potion", 2, 321 } }, 8, ply)
-MOCK.Assert(WO.Currency.Get(ply) == vendorMoneyBefore - 50,
-    "покупка у торговца валидирует stock и списывает серверную цену")
+MOCK.Assert(WO.Currency.Get(ply) == vendorMoneyBefore - potionBuyPrice * 2,
+    "покупка у торговца валидирует stock и списывает полную copper-цену двух предметов")
 local vendorActionOutbox = MOCK.TakeOutbox()
 local vendorActionResults = MOCK.FindInbox(vendorActionOutbox, "Vendor.ActionResult")
 MOCK.Assert(#vendorActionResults == 1 and vendorActionResults[1].args[1].success == true and
@@ -2482,7 +2522,8 @@ MOCK.Assert(wolfQuest.status == "completed" and char.quests["boar_hunt"].status 
     "маршал принимает отчёт об охоте на волков только после prerequisite")
 
 -- Mount vendor uses the exact horse class and the unique, reusable stone item.
-WO.Currency.Add(ply, 10000, "mount-test-funds")
+local mountStonePrice = WO.Vendors.GetBuyPrice(mountVendor.npcDef, "mount_stone")
+WO.Currency.Add(ply, mountStonePrice, "mount-test-funds")
 ply:SetPos(mountVendor:GetPos())
 mountVendor:Use(ply, ply)
 MOCK.NetDeliver({ name = "Dialogue.Choose", args = { "mount_vendor", "start", 1 } }, 8, ply)
@@ -2493,8 +2534,9 @@ local mountUID, mountInstance
 for uid, instance in pairs(mountStone) do
     if instance.class == "mount_stone" then mountUID, mountInstance = uid, instance break end
 end
-MOCK.Assert(mountUID and mountInstance and WO.Currency.Get(ply) == moneyBeforeMountBuy - 500 and
-    WO.Inventory.GiveItem(ply, "mount_stone", 1) == false,
+MOCK.Assert(mountUID and mountInstance and
+    WO.Currency.Get(ply) == moneyBeforeMountBuy - mountStonePrice and
+    mountStonePrice == 50000 and WO.Inventory.GiveItem(ply, "mount_stone", 1) == false,
     "покупка списывает верную цену, выдаёт один бесконечно используемый unique stone")
 MOCK.Assert(WO.Inventory.UseItem(ply, mountUID) == true and
     WO.Inventory.GetContainer(char):CountItem("mount_stone") == 1 and

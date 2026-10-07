@@ -4,20 +4,20 @@
     Схема квеста (schemas/quests/<id>.lua):
         WO.Quests.Register({
             id = "wolves_of_elwynn",
-            name = "Волки Элвинна",
-            description = "Серые волки терзают путников...",
-            level = 2,
+            name = "Волки у дороги",
+            description = "Победите четырёх волков и вернитесь к маршалу за наградой.",
+            level = 1,
             giver = "marshal_dughal",
+            turnInGiver = "marshal_dughal",
             steps = {
-                { type = "kill",    target = "black_wolf", amount = 3, text = "Победите волков" },
-                { type = "collect", class = "wolf_pelt",   amount = 2, text = "Соберите шкуры" },
+                { type = "kill", target = "black_wolf", amount = 4, text = "Победите волков" },
             },
             rewards = {
-                xp = 250,
-                money = 120,
-                items = { { class = "health_potion", amount = 2 } },
+                xp = 80,
+                money = 2500,
+                items = { { class = "wolf_pelt", amount = 1 } },
             },
-            prerequisites = {},   -- id других квестов, которые надо завершить
+            prerequisites = { "boar_hunt" },
         })
 
     Состояния квеста у персонажа (char.quests[questId]):

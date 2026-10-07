@@ -3,7 +3,7 @@ WO.Spells.Register({
     name = "Удар молнии",
     element = "Молния",
     elementType = "lightning",
-    scrollPrice = 60,
+    scrollPrice = 6000,
     type = "damage",
     description = "Фиолетовый разряд бьёт цель сквозь дальний луч.",
     requiredLevel = 1,

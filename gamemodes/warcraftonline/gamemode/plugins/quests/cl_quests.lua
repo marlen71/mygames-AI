@@ -537,7 +537,9 @@ WO.Hook.Add("QuestEvent", "quest_ui", function(data)
             end
 
             if (data.rewards.money or 0) > 0 then
-                parts[#parts + 1] = data.rewards.money .. " " .. WO.Lang:Get("currency.coins")
+                local money = WO.Currency and WO.Currency.Format and WO.Currency.Format(data.rewards.money) or
+                    (tostring(data.rewards.money) .. "c")
+                parts[#parts + 1] = money
             end
 
             rewardText = table.concat(parts, ", ")

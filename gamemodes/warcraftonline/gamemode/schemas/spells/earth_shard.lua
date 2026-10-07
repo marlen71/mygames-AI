@@ -3,7 +3,7 @@ WO.Spells.Register({
     name = "Каменный осколок",
     element = "Земля",
     elementType = "earth",
-    scrollPrice = 42,
+    scrollPrice = 4200,
     type = "damage",
     description = "Поднимает кислотный сгусток земли и наносит урон.",
     requiredLevel = 1,

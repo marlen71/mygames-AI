@@ -192,6 +192,18 @@ local function BuildProfessionOptions(ply, npcDef)
     local activeShift = char and char.activeProfessionShift
 
     if istable(activeShift) then
+        if activeShift.npcId == npcDef.id and activeShift.professionId == "lumberjack" then
+            local delivered = math.max(0, math.floor(tonumber(activeShift.completedOrders) or 0))
+            local settleText = delivered > 0 and
+                ("Сдать смену · " .. delivered .. " связок доставлено") or
+                "Завершить смену без доставок"
+
+            return {
+                { text = settleText, action = "profession_finish" },
+                { text = "Продолжить переноску", action = "close" },
+            }, "Расчёт добровольный: оплачиваются только уже доставленные связки. Незаконченная переноска не засчитывается."
+        end
+
         if activeShift.npcId == npcDef.id and activeShift.status == "ready" then
             return {
                 { text = "Сдать смену и получить зарплату", action = "profession_finish" },
@@ -213,31 +225,40 @@ local function BuildProfessionOptions(ply, npcDef)
     local skill = WO.Professions.GetSkillData(char, professionId)
     local options = {}
 
-    for rankIndex, rank in ipairs(profession.ranks or {}) do
-        local basePay = WO.Professions.GetBasePay(professionId, rankIndex, 3)
+    local maxRank = WO.Professions.GetMaxRank and WO.Professions.GetMaxRank(professionId) or 3
 
-        if rankIndex <= skill.level then
-            options[#options + 1] = {
-                text = "Работать: " .. rank.name .. " · базовая ставка за смену " .. basePay .. " монет",
-                action = "profession_rank:" .. rankIndex,
-            }
-        else
-            local missingXP = math.max(0, (rank.requiredXP or 0) - skill.xp)
-            options[#options + 1] = {
-                text = "Закрыто: " .. rank.name .. " · ещё " .. missingXP .. " опыта",
-                action = "profession_locked:" .. rankIndex,
-            }
+    for rankIndex, rank in ipairs(profession.ranks or {}) do
+        if rankIndex <= maxRank then
+            local amount = professionId == "lumberjack" and rank.basePay or
+                WO.Professions.GetBasePay(professionId, rankIndex, 3)
+            local formatted = WO.Currency and WO.Currency.Format and WO.Currency.Format(amount) or
+                (tostring(amount) .. "c")
+
+            if rankIndex <= skill.level then
+                local rateText = professionId == "lumberjack" and
+                    (formatted .. " за доставленную связку") or (formatted .. " за смену")
+                options[#options + 1] = {
+                    text = "Работать: " .. rank.name .. " · " .. rateText,
+                    action = "profession_rank:" .. rankIndex,
+                }
+            else
+                local missingXP = math.max(0, (rank.requiredXP or 0) - skill.xp)
+                options[#options + 1] = {
+                    text = "Закрыто: " .. rank.name .. " · ещё " .. missingXP .. " опыта",
+                    action = "profession_locked:" .. rankIndex,
+                }
+            end
         end
     end
 
     options[#options + 1] = { text = "Пока не работать", action = "close" }
-    local nextRank = profession.ranks[skill.level + 1]
+    local nextRank = skill.level < maxRank and profession.ranks[skill.level + 1] or nil
     local nextText = nextRank and
         (" До следующей ступени «" .. nextRank.name .. "» нужно ещё " ..
-            math.max(0, nextRank.requiredXP - skill.xp) .. " опыта.") or " Максимальная ступень открыта."
+            math.max(0, nextRank.requiredXP - skill.xp) .. " опыта.") or " Максимальная доступная ступень открыта."
 
     return options, "Опыт ремесла: " .. skill.xp .. ". Открыты ступени 1–" ..
-        skill.level .. "/3. Выберите, за кого работать." .. nextText
+        skill.level .. "/" .. maxRank .. ". Выберите, за кого работать." .. nextText
 end
 
 --- Отправляет узел диалога с вариантами, вычисленными на сервере.

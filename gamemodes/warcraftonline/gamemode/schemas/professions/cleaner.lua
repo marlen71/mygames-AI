@@ -8,7 +8,7 @@ WO.Professions.Register({
         {
             name = "Дворник",
             requiredXP = 0,
-            basePay = 25,
+            basePay = 2500,
             activities = {
                 {
                     name = "Собрать мусор",
@@ -35,7 +35,7 @@ WO.Professions.Register({
         {
             name = "Подметальщик",
             requiredXP = 300,
-            basePay = 42,
+            basePay = 4200,
             activities = {
                 {
                     name = "Очистить проход",
@@ -64,7 +64,7 @@ WO.Professions.Register({
         {
             name = "Мусорщик",
             requiredXP = 900,
-            basePay = 66,
+            basePay = 6600,
             activities = {
                 {
                     name = "Отсортировать отходы",

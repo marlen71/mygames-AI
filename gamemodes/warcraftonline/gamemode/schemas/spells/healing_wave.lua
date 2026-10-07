@@ -3,7 +3,7 @@ WO.Spells.Register({
     name = "Исцеляющая волна",
     element = "Жизнь",
     elementType = "life",
-    scrollPrice = 55,
+    scrollPrice = 5500,
     type = "heal",
     description = "Лечит мага или союзника под прицелом в радиусе.",
     requiredLevel = 1,

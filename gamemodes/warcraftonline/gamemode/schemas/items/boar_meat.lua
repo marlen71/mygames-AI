@@ -13,5 +13,5 @@ WO.Items.Register({
     rarity = "common",
     description = "Сырое мясо с охотничьего трофея. Торговка покупает его.",
     consumable = { heal = 8 },
-    price = { buy = 4, sell = 3 },
+    price = { buy = 400, sell = 300 },
 })

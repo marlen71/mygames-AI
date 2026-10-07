@@ -8,7 +8,7 @@ WO.Professions.Register({
         {
             name = "Пастух",
             requiredXP = 0,
-            basePay = 30,
+            basePay = 3000,
             activities = {
                 {
                     name = "Собрать стадо",
@@ -35,7 +35,7 @@ WO.Professions.Register({
         {
             name = "Кормильщик",
             requiredXP = 300,
-            basePay = 50,
+            basePay = 5000,
             activities = {
                 {
                     name = "Подготовить корм",
@@ -64,7 +64,7 @@ WO.Professions.Register({
         {
             name = "Загонщик",
             requiredXP = 900,
-            basePay = 78,
+            basePay = 7800,
             activities = {
                 {
                     name = "Открыть проход",

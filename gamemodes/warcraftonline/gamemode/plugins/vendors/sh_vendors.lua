@@ -7,10 +7,10 @@
             type = "vendor",
             vendor = {
                 stock = {
-                    { class = "bread",          price = 4,  amount = 20 },
-                    { class = "health_potion",  price = 25, amount = 10 },
+                    { class = "bread",          price = 500,  amount = 20 },
+                    { class = "health_potion",  price = 2500, amount = 10 },
                 },
-                sellRate = 0.35,   -- цена продажи = sell цены предмета * sellRate
+                sellRate = 0.50,   -- коэффициент к базовой цене продажи
             },
         })
 
@@ -72,8 +72,16 @@ function WO.Vendors.GetSellPrice(npcDef, class)
         if not accepted then return nil end
     end
 
-    local base = tonumber(def.price.sell) or math.floor((tonumber(def.price.buy) or 0) * 0.4)
-    local rate = tonumber(npcDef and npcDef.vendor and npcDef.vendor.sellRate) or 0.35
+    local base = tonumber(def.price.sell)
+    if base == nil then
+        base = math.floor((tonumber(def.price.buy) or 0) * 0.5)
+    end
+    if base <= 0 then return nil end
+
+    local economy = WO.Config and WO.Config.Economy or {}
+    local rate = tonumber(npcDef and npcDef.vendor and npcDef.vendor.sellRate)
+    if rate == nil then rate = tonumber(economy.VendorSellRate) or 0.50 end
+    if rate <= 0 then return nil end
 
     return math.max(1, math.floor(base * rate))
 end

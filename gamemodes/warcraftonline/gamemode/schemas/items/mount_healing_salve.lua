@@ -16,5 +16,5 @@ WO.Items.Register({
         if not (WO.Mounts and WO.Mounts.Heal) then return false, "mounts_unavailable" end
         return WO.Mounts.Heal(ply, instance)
     end,
-    price = { buy = 35, sell = 0 },
+    price = { buy = 3500, sell = 0 },
 })

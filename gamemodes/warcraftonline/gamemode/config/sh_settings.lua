@@ -52,7 +52,7 @@ WO.Config.InventoryWidth = 10
 WO.Config.InventoryHeight = 6
 -- Items with this schema price (buy or sell) and above are considered valuable
 -- for the optional server-authoritative auto-collect setting.
-WO.Config.AutoCollectValueThreshold = 15
+WO.Config.AutoCollectValueThreshold = 1500
 -- Aim-trace range used only to recognize an NPC for the HUD nameplate/halo.
 WO.Config.NPCHoverTraceRange = 1800
 
@@ -106,6 +106,82 @@ WO.Config.ArcaneHands = {
 ---------------------------------------------------------------------------
 
 WO.Config.WorldMap = "rp_lordaeron"
+
+---------------------------------------------------------------------------
+-- Активный контент: профессии, экономика и создание персонажа.
+-- Все суммы после реденоминации задаются в медных монетах:
+-- 100c = 1s, 100s = 1g. Migration v4 переводит существующие балансы ×100,
+-- а фиксированные цены/награды ниже хранятся в новой шкале.
+---------------------------------------------------------------------------
+
+WO.Config.ActiveProfessions = {
+    lumberjack = true,
+}
+
+WO.Config.ActiveProfessionMaxRanks = {
+    lumberjack = 1,
+}
+
+WO.Config.Economy = {
+    CopperPerSilver = 100,
+    SilverPerGold = 100,
+    BalanceMigrationFactor = 100,
+    StartingBalance = 5000, -- 50s
+    VendorSellRate = 0.50,
+    MaxBalance = 4294967295,
+    MaxTransaction = 100000000,
+    LumberjackPayPerBundle = 3200, -- прежняя ставка 32 единицы переоценена в 32s за доставку
+}
+
+WO.Config.StartingMoney = WO.Config.Economy.StartingBalance
+
+WO.Config.FactionOrder = { "alliance", "horde" }
+WO.Config.FactionDefinitions = {
+    alliance = { nameKey = "faction.alliance", color = { r = 71, g = 126, b = 190 } },
+    horde = { nameKey = "faction.horde", color = { r = 171, g = 59, b = 49 } },
+}
+
+WO.Config.RaceFactions = {
+    human = { "alliance" }, dwarf = { "alliance" }, elf = { "alliance" },
+    gnome = { "alliance" }, draenei = { "alliance" }, worgen = { "alliance" },
+    orc = { "horde" }, undead = { "horde" }, tauren = { "horde" }, troll = { "horde" },
+    bloodelf = { "horde" }, goblin = { "horde" }, vulpera = { "horde" },
+    naga = { "horde" }, sethrak = { "horde" },
+    pandaren = { "alliance", "horde" }, dracthyr = { "alliance", "horde" },
+}
+
+WO.Config.FactionRaceOrder = {
+    alliance = { "human", "dwarf", "elf", "gnome", "draenei", "worgen", "pandaren", "dracthyr" },
+    horde = { "orc", "undead", "tauren", "troll", "bloodelf", "goblin", "vulpera",
+        "naga", "sethrak", "pandaren", "dracthyr" },
+}
+
+-- "ranger" is the gamemode's Hunter class. Custom future classes remain
+-- registered but are intentionally absent from the character-creation catalog.
+WO.Config.CharacterCreationClassOrder = {
+    "warrior", "ranger", "mage", "rogue", "priest", "warlock", "paladin",
+    "druid", "shaman", "monk", "deathknight", "demonhunter", "evoker",
+}
+
+WO.Config.RaceClassAllowlist = {
+    human = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "paladin", "deathknight", "monk" },
+    dwarf = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "paladin", "shaman", "deathknight", "monk" },
+    elf = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "druid", "deathknight", "demonhunter", "monk" },
+    gnome = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "deathknight", "monk" },
+    draenei = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "paladin", "shaman", "deathknight", "monk" },
+    worgen = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "druid", "deathknight" },
+    orc = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "shaman", "deathknight", "monk" },
+    undead = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "deathknight", "monk" },
+    tauren = { "warrior", "ranger", "priest", "druid", "shaman", "paladin", "deathknight", "monk" },
+    troll = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "druid", "shaman", "deathknight", "monk" },
+    goblin = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "shaman", "deathknight", "monk" },
+    bloodelf = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "paladin", "deathknight", "demonhunter", "monk" },
+    vulpera = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "shaman", "monk" },
+    pandaren = { "warrior", "ranger", "mage", "rogue", "priest", "shaman", "monk" },
+    dracthyr = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "evoker" },
+    naga = { "warrior", "ranger", "mage", "rogue", "priest", "warlock", "shaman", "druid" },
+    sethrak = { "warrior", "ranger", "rogue", "priest", "shaman", "druid" },
+}
 
 -- Точки штабеля/склада отделены от мест появления работодателей.
 -- Работы лесоруба доступны только на настроенной карте rp_lordaeron.
@@ -230,9 +306,9 @@ WO.Config.NPCSpawnPoints = {
 }
 
 WO.Config.MagicScrolls = {
-    sellRate = 0.25,
+    sellRate = 0.50,
     stackSize = 20,
-    learningPrice = 40,
+    learningPrice = 4000,
     rankPriceMultiplier = 1.5,
     rankPriceStep = 0.5,
     vendorStockAmount = 20,

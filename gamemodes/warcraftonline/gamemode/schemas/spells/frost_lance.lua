@@ -3,7 +3,7 @@ WO.Spells.Register({
     name = "Ледяное копьё",
     element = "Лёд",
     elementType = "frost",
-    scrollPrice = 48,
+    scrollPrice = 4800,
     type = "damage",
     description = "Ледяной луч поражает цель на большом расстоянии.",
     requiredLevel = 1,

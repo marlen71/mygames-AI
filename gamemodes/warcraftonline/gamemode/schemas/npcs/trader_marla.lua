@@ -15,13 +15,13 @@ WO.NPCs.Register({
     quests = {}, -- торговка не выдаёт задания; отправляет к охотнику и маршалу
     vendor = {
         stock = {
-            { class = "bread", price = 4, amount = 20 },
-            { class = "health_potion", price = 25, amount = 10 },
-            { class = "wolf_pelt", price = 12, amount = 5 },
-            { class = "leather_helmet", price = 60, amount = 2 },
-            { class = "wooden_shield", price = 45, amount = 2 },
+            { class = "bread", price = 400, amount = 20 },
+            { class = "health_potion", price = 2500, amount = 10 },
+            { class = "wolf_pelt", price = 1200, amount = 5 },
+            { class = "leather_helmet", price = 6000, amount = 2 },
+            { class = "wooden_shield", price = 4500, amount = 2 },
         },
-        sellRate = 0.65,
+        sellRate = 0.50,
         buybackClasses = { "wolf_pelt", "wolf_fang", "boar_tusk", "boar_meat" },
     },
     interactRange = WO.Config.InteractDistance,

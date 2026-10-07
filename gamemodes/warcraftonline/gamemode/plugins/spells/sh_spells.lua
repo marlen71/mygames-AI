@@ -64,7 +64,7 @@ function WO.Spells.Register(def)
     def.spellPowerScale = math.max(0, tonumber(def.spellPowerScale) or 0)
     def.elementType = isstring(def.elementType) and def.elementType or "life"
     def.scrollPrice = math.max(1, math.floor(tonumber(def.scrollPrice) or
-        (WO.Config.MagicScrolls and WO.Config.MagicScrolls.learningPrice) or 40))
+        (WO.Config.MagicScrolls and WO.Config.MagicScrolls.learningPrice) or 4000))
 
     WO.Spells.Registry[def.id] = def
     return true
@@ -156,7 +156,7 @@ function WO.Spells.BuildScrollCatalog()
     if vendor and istable(vendor.vendor) then
         vendor.vendor.stock = stock
         vendor.vendor.buybackClasses = buyback
-        vendor.vendor.sellRate = math.Clamp(tonumber(config.sellRate) or 0.25, 0, 1)
+        vendor.vendor.sellRate = math.Clamp(tonumber(config.sellRate) or 0.50, 0, 1)
     end
 
     WO.Spells.ScrollCatalogReady = true

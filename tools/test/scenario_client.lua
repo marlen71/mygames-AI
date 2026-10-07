@@ -400,21 +400,72 @@ local function ClickWizardNext()
     nextButton:DoClick()
 end
 
+local creationFrame = FindLatestLiveFrame()
+local factionStep = creationFrame and creationFrame.woControls and creationFrame.woControls.step
+local function FindFactionCards()
+    local cards = {}
+    for _, panel in ipairs((factionStep and factionStep.__children) or {}) do
+        if rawget(panel, "__class") == "DButton" and panel.GetText and panel:GetText() == "" and
+            isfunction(panel.Paint) and isfunction(panel.DoClick) then
+            cards[#cards + 1] = panel
+        end
+    end
+    return cards
+end
+
+local normalHordeRaces
+LocalPlayer().__admin = false
+normalHordeRaces = WO.Races.GetFactionRaces("horde", LocalPlayer())
+MOCK.Assert(not table.HasValue(normalHordeRaces, "human") and
+    not table.HasValue(normalHordeRaces, "bloodelf") and
+    not table.HasValue(normalHordeRaces, "vulpera") and
+    not table.HasValue(normalHordeRaces, "dracthyr"),
+    "список Орды не смешивает Альянс и скрывает особые расы от обычного игрока")
+LocalPlayer().__admin = true
+
+local factionCards = FindFactionCards()
+MOCK.Assert(#factionCards == 2 and WO.Config.FactionOrder[1] == "alliance" and
+    WO.Config.FactionOrder[2] == "horde",
+    "первый шаг мастера показывает две отдельные фракции WoW")
+MOCK.drawnTextValues = {}
+for _, card in ipairs(factionCards) do card:Paint(360, 82) end
+local allianceFactionPainted, hordeFactionPainted = false, false
+for _, text in ipairs(MOCK.drawnTextValues) do
+    allianceFactionPainted = allianceFactionPainted or text == WO.Lang:Get("faction.alliance")
+    hordeFactionPainted = hordeFactionPainted or text == WO.Lang:Get("faction.horde")
+end
+MOCK.Assert(allianceFactionPainted and hordeFactionPainted,
+    "карточки фракций рисуют контрастные визуально различимые заголовки")
+factionCards[2]:DoClick()
+ClickWizardNext()
+
+local hordeRaceButton = MOCK.FindPanelByText(WO.Races.Get("orc").name)
 local specialRace = WO.Races.Get("bloodelf")
 local specialRaceLabel = specialRace.name .. " · " .. WO.Lang:Get("race.special")
 local specialRaceButton = MOCK.FindPanelByText(specialRaceLabel)
-MOCK.Assert(specialRaceButton ~= nil and specialRaceButton:IsEnabled(),
-    "особая раса помечена ровно нейтральной меткой без клиентского admin gate")
+MOCK.Assert(hordeRaceButton ~= nil and specialRaceButton ~= nil and
+    MOCK.FindPanelByText(WO.Races.Get("human").name) == nil,
+    "после выбора Орды UI показывает только её расы, включая доступную админу особую расу")
 specialRaceButton:DoClick()
 MOCK.Assert(WO.CharacterUI.PreviewModel.requestedModel == specialRace.models.male[1] and
     WO.CharacterUI.PreviewModel.__lastSetModelPath == specialRace.models.male[1],
-    "особая раса передаёт точный путь в preview, а создание отдельно защищает сервер")
+    "выбор особой расы передаёт точный путь модели в 3D-превью")
+
+local backToFaction = MOCK.FindPanelByText(WO.Lang:Get("ui.back"))
+MOCK.Assert(backToFaction ~= nil, "можно вернуться к выбору фракции")
+backToFaction:DoClick()
+factionCards = FindFactionCards()
+MOCK.Assert(#factionCards == 2, "повторный выбор фракции перестраивает карточки")
+factionCards[1]:DoClick()
+LocalPlayer().__admin = false
+ClickWizardNext()
 
 local selectedRace = WO.Races.Get("human")
 MOCK.Assert(selectedRace and #WO.Races.GetAvailableGenders("human") > 0,
     "test fixture mounts at least one WoW race")
 local raceButton = MOCK.FindPanelByText(selectedRace.name)
-MOCK.Assert(raceButton ~= nil, "первый шаг содержит варианты рас")
+MOCK.Assert(raceButton ~= nil and MOCK.FindPanelByText(WO.Races.Get("orc").name) == nil,
+    "после смены на Альянс список рас обновляется без представителей Орды")
 raceButton:DoClick()
 MOCK.Assert(WO.CharacterUI.PreviewModel.woModelAvailable == true and
     IsValid(WO.CharacterUI.PreviewModel.Entity) and
@@ -477,16 +528,18 @@ MOCK.Assert(MOCK.FindPanelByText(WO.Lang:Get("character.model")) ~= nil,
     "шаг кастомизации содержит выбор модели")
 ClickWizardNext() -- класс
 
+local availableHumanClasses = WO.Classes.GetCharacterCreationIDs(selectedRace.id)
 local allowedClass
-for _, classId in ipairs(WO.Classes.GetIDs()) do
-    if WO.Races.IsClassAllowed(selectedRace.id, classId) then
-        allowedClass = WO.Classes.Get(classId)
-        break
-    end
+for _, classId in ipairs(availableHumanClasses) do
+    allowedClass = WO.Classes.Get(classId)
+    break
 end
-MOCK.Assert(allowedClass ~= nil, "у выбранной расы есть доступный класс")
+MOCK.Assert(allowedClass ~= nil and not table.HasValue(availableHumanClasses, "evoker") and
+    not table.HasValue(availableHumanClasses, "alchemist"),
+    "список классов человека включает только совместимые классы создания персонажа")
 local classButton = MOCK.FindPanelByText(allowedClass.name)
-MOCK.Assert(classButton ~= nil, "шаг класса показывает варианты классов")
+MOCK.Assert(classButton ~= nil and MOCK.FindPanelByText(WO.Classes.Get("evoker").name) == nil,
+    "шаг класса не предлагает класс, несовместимый с выбранной расой")
 classButton:DoClick()
 ClickWizardNext() -- итоговая карточка
 
@@ -523,14 +576,16 @@ local firstSavedCharacterID = "11111111-1111-4111-8111-111111111111"
 local secondSavedCharacterID = "22222222-2222-4222-8222-222222222222"
 MOCK.NetDeliver({ name = "Character.List", args = {
     2,
-    firstSavedCharacterID, "Тест", "Герой", 3, "human", "warrior", "male",
+    firstSavedCharacterID, "Тест", "Герой", 3, "human", "warrior", "male", "alliance",
     "models/mailer/character/human/male/humanmale00_00.mdl", 1700000000, 150, 600,
-    secondSavedCharacterID, "Ария", "Буря", 5, "human", "mage", "female",
+    secondSavedCharacterID, "Ария", "Буря", 5, "human", "mage", "female", "alliance",
     "models/mailer/character/human/female/humanfemale00_00.mdl", 1700000123, 240, 700,
 } }, 8, nil)
 MOCK.Assert(#WO.Character.GetList() == 2 and
     WO.Character.GetList()[1].id == firstSavedCharacterID and
     WO.Character.GetList()[2].id == secondSavedCharacterID and
+    WO.Character.GetList()[1].faction == "alliance" and
+    WO.Character.GetList()[2].faction == "alliance" and
     WO.Util.IsUUID(WO.Character.GetList()[2].id) and
     WO.Character.GetList()[1].experience == 150 and
     WO.Character.GetList()[1].needed == 600 and
@@ -636,118 +691,19 @@ LocalPlayer():SetNW2String("wo_class", "warrior")
 LocalPlayer():SetNW2Int("wo_level", 3)
 
 do
-    MOCK.Assert(WO.Plugins.IsLoaded("professions") and #WO.Professions.GetIDs() == 21 and
+    local activeProfessionIDs = WO.Professions.GetIDs()
+    MOCK.Assert(WO.Plugins.IsLoaded("professions") and #activeProfessionIDs == 1 and
+        activeProfessionIDs[1] == "lumberjack" and WO.Professions.Get("fisher") == nil and
+        WO.Professions.Get("merchant") == nil and WO.Professions.Get("herbalist") == nil and
+        WO.Professions.GetMiniGame("fishing") ~= nil and WO.Professions.GetMiniGame("haggling") ~= nil and
         WO.ProfessionsUI and WO.ProfessionsUI.GetCurrentShift and
         WO.ProfessionsUI.BuildPanel == nil,
-        "клиент зарегистрировал ремёсла, но не строит их внутри общего меню")
+        "клиент активирует только лесоруба, сохраняя схемы будущих профессий и мини-игр")
 
     WO.MenuUI.Show("overview")
     MOCK.Assert(MOCK.FindPanelByText("Ремёсла") == nil,
         "страницы или вкладки ремёсел нет в главном меню")
     WO.MenuUI.Close()
-
-    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
-        characterId = "active-test-character",
-        revision = 1,
-        skills = { fisher = { xp = 0, level = 1, completedShifts = 0 } },
-        shift = {
-            id = "client-work-shift", professionId = "fisher", professionName = "Рыбак",
-            npcId = "work_fisher", npcName = "Рыбак", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 33, bonus = 0,
-            task = {
-                orderIndex = 1, mode = "fishing", engine = "hold", title = "Подсечь рыбу",
-                instruction = "Рыба клюёт.", phase = "working", progress = 0.25, elapsed = 0,
-                zoneCenter = 0.5, zoneWidth = 0.2, speed = 1, phaseOffset = 0,
-            },
-        },
-    } } }, 8, nil)
-
-    local fishPolygonsBefore = MOCK.surfacePolyCalls or 0
-    MOCK.drawnTextValues = {}
-    WO.ProfessionsUI.DrawWorldShift()
-    local fishHudVisible = false
-    for _, text in ipairs(MOCK.drawnTextValues) do
-        if text:find("Рыбалка", 1, true) then fishHudVisible = true end
-    end
-    MOCK.Assert(fishHudVisible and (MOCK.surfacePolyCalls or 0) >= fishPolygonsBefore + 2,
-        "рыбалка рисуется поверх живого мира отдельной вертикальной шкалой с иконкой рыбы")
-
-    MOCK.TakeOutbox()
-    MOCK.keysDown[KEY_SPACE] = true
-    hook.GetTable().Think.wo_professions_world_input()
-    MOCK.keysDown[KEY_SPACE] = false
-    hook.GetTable().Think.wo_professions_world_input()
-    local workInputMessages = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
-    MOCK.Assert(#workInputMessages == 2 and workInputMessages[1].args[1] == "client-work-shift" and
-        workInputMessages[1].args[2] == "hold" and workInputMessages[1].args[3] == true and
-        workInputMessages[2].args[3] == false,
-        "рыбацкая мини-игра принимает удержание/отпускание пробела без открытия меню")
-
-    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
-        characterId = "active-test-character", revision = 2, skills = {},
-        shift = {
-            id = "client-merchant-shift", professionId = "merchant", professionName = "Торговец",
-            npcId = "work_merchant", npcName = "Торговец", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 36, bonus = 0,
-            task = {
-                orderIndex = 1, mode = "haggling", engine = "choice", title = "Оценить партию",
-                instruction = "Сверьте цель сделки.", phase = "working", progress = 0.25,
-                choiceOptions = { "10 монет", "50 монет", "90 монет" },
-                choiceTarget = "Цель сделки — 60 монет. Выберите ближайшую цену.",
-            },
-        },
-    } } }, 8, nil)
-    MOCK.drawnTextValues = {}
-    WO.ProfessionsUI.DrawWorldShift()
-    local merchantTargetVisible, merchantPriceVisible = false, false
-    for _, text in ipairs(MOCK.drawnTextValues) do
-        merchantTargetVisible = merchantTargetVisible or text:find("60 монет", 1, true) ~= nil
-        merchantPriceVisible = merchantPriceVisible or text:find("50 монет", 1, true) ~= nil
-    end
-    MOCK.Assert(merchantTargetVisible and merchantPriceVisible,
-        "торговая мини-игра выводит на игровой HUD рыночную цель и выбор цен")
-    MOCK.TakeOutbox()
-    MOCK.keysDown[KEY_1] = true
-    hook.GetTable().Think.wo_professions_world_input()
-    MOCK.keysDown[KEY_1] = false
-    hook.GetTable().Think.wo_professions_world_input()
-    local merchantInput = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
-    MOCK.Assert(#merchantInput == 1 and merchantInput[1].args[1] == "client-merchant-shift" and
-        merchantInput[1].args[2] == "choice1" and merchantInput[1].args[3] == true,
-        "клавиши выбора цены отправляют действие напрямую серверу, не открывая меню")
-
-    MOCK.NetDeliver({ name = "Profession.Sync", args = { {
-        characterId = "active-test-character", revision = 3, skills = {},
-        shift = {
-            id = "client-herbalist-shift", professionId = "herbalist", professionName = "Травник",
-            npcId = "work_herbalist", npcName = "Травник", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 33, bonus = 0,
-            task = {
-                orderIndex = 1, mode = "herbcraft", engine = "identify", title = "Найти растение",
-                instruction = "Найдите заказанную траву.", phase = "working", progress = 0.25,
-                choiceOptions = { "Мята", "Чабрец", "Лаванда", "Полынь" },
-                choiceTarget = "Найдите заказанное растение: Полынь",
-            },
-        },
-    } } }, 8, nil)
-    MOCK.drawnTextValues = {}
-    WO.ProfessionsUI.DrawWorldShift()
-    local herbTargetVisible, herbOptionVisible = false, false
-    for _, text in ipairs(MOCK.drawnTextValues) do
-        herbTargetVisible = herbTargetVisible or text:find("Полынь", 1, true) ~= nil
-        herbOptionVisible = herbOptionVisible or text:find("Мята", 1, true) ~= nil
-    end
-    MOCK.Assert(herbTargetVisible and herbOptionVisible,
-        "мини-игра травника отображает опознание растения среди четырёх названий")
-    MOCK.TakeOutbox()
-    MOCK.keysDown[KEY_4] = true
-    hook.GetTable().Think.wo_professions_world_input()
-    MOCK.keysDown[KEY_4] = false
-    hook.GetTable().Think.wo_professions_world_input()
-    local herbInput = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.WorkInput")
-    MOCK.Assert(#herbInput == 1 and herbInput[1].args[1] == "client-herbalist-shift" and
-        herbInput[1].args[2] == "choice4" and herbInput[1].args[3] == true,
-        "идентификация травы использует четвёртую клавишу и отправляет её серверу")
 
     local lumberPickup = Vector(-8583.5, 1422.4, -2772)
     local lumberDelivery = Vector(-7312.7, 1722.3, -2943.2)
@@ -759,12 +715,8 @@ do
     WO.Character.Local = nil
     MOCK.drawnTextValues = {}
     WO.ProfessionsUI.DrawHUD()
-    local missingCharacterHint = false
-    for _, text in ipairs(MOCK.drawnTextValues) do
-        missingCharacterHint = missingCharacterHint or text == "ПЕРСОНАЖ НЕ СИНХРОНИЗИРОВАН"
-    end
-    MOCK.Assert(missingCharacterHint,
-        "слой профессий canvas показывает диагностику у штабеля даже до синхронизации персонажа")
+    MOCK.Assert(#MOCK.drawnTextValues == 0,
+        "до синхронизации персонажа возле штабеля не появляется idle-плашка или подсказка")
     WO.Character.Local = savedLocalCharacter
 
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
@@ -772,13 +724,13 @@ do
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
     WO.ProfessionsUI.DrawHUD()
-    local noShiftHint, falseMarker = false, false
+    local idleWorldText = false
     for _, text in ipairs(MOCK.drawnTextValues) do
-        noShiftHint = noShiftHint or text == "СМЕНА ЛЕСОРУБА НЕ НАЧАТА"
-        falseMarker = falseMarker or text == "ШТАБЕЛЬ БРЁВЕН" or text == "СКЛАД БРЁВЕН"
+        idleWorldText = idleWorldText or text == "СМЕНА ЛЕСОРУБА НЕ НАЧАТА" or
+            text == "ШТАБЕЛЬ БРЁВЕН" or text == "СКЛАД БРЁВЕН"
     end
-    MOCK.Assert(noShiftHint and not falseMarker,
-        "у штабеля без активной смены показывается объяснение, но не появляется метка")
+    MOCK.Assert(not idleWorldText,
+        "без активной смены у штабеля нет подсказки, статусной таблички или мирового маркера")
 
     MOCK.TakeOutbox()
     MOCK.keysDown[KEY_E] = true
@@ -804,7 +756,7 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            completedOrders = 0, requiredOrders = nil, status = "working", basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
@@ -842,7 +794,7 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            completedOrders = 0, requiredOrders = nil, status = "working", basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
@@ -892,7 +844,7 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            completedOrders = 0, requiredOrders = nil, status = "working", basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
@@ -935,7 +887,7 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            completedOrders = 0, requiredOrders = nil, status = "working", basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
@@ -967,7 +919,7 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            completedOrders = 0, requiredOrders = nil, status = "working", basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
@@ -1000,7 +952,7 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 0, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            completedOrders = 0, requiredOrders = nil, status = "working", basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
             task = {
                 orderIndex = 1, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
@@ -1039,7 +991,7 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 1, requiredOrders = 3, status = "working", basePay = 32, bonus = 0,
+            completedOrders = 1, requiredOrders = nil, status = "working", basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
             task = {
                 orderIndex = 2, mode = "lumber_delivery", engine = "lumber",
                 title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
@@ -1065,22 +1017,41 @@ do
         shift = {
             id = "client-lumber-shift", professionId = "lumberjack", professionName = "Лесоруб",
             npcId = "work_lumberjack", npcName = "Лесоруб", rank = 1,
-            completedOrders = 3, requiredOrders = 3, status = "ready", basePay = 32, bonus = 0,
+            completedOrders = 7, requiredOrders = nil, status = "working",
+            basePay = WO.Config.Economy.LumberjackPayPerBundle, bonus = 0,
+            task = {
+                orderIndex = 8, mode = "lumber_delivery", engine = "lumber",
+                title = "Перенести связку брёвен", instruction = "Отнесите брёвна на склад.",
+                phase = "pickup", progress = 0, sequenceLength = 6,
+                pickupPos = lumberPickup, deliveryPos = lumberDelivery,
+                interactionRadius = 160, routeDistance = lumberPickup:Distance(lumberDelivery),
+                requiredDistance = 1175, carriedDistance = 0,
+            },
         },
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
     lumberWorldHud()
-    local markerShownOutsideWork = false
+    local seventhDeliveryCount, continuingMarker = false, false
     for _, text in ipairs(MOCK.drawnTextValues) do
-        markerShownOutsideWork = markerShownOutsideWork or
-            text == "ШТАБЕЛЬ БРЁВЕН" or text == "СКЛАД БРЁВЕН"
+        seventhDeliveryCount = seventhDeliveryCount or
+            text == "Доставлено связок: 7 · расчёт — у работодателя"
+        continuingMarker = continuingMarker or text == "ШТАБЕЛЬ БРЁВЕН"
     end
-    MOCK.Assert(not markerShownOutsideWork,
-        "мировые метки лесоруба исчезают после завершения рабочих заказов")
+    MOCK.Assert(seventhDeliveryCount and continuingMarker,
+        "после любого числа доставок смена остаётся активной и начинает следующий цикл")
 
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
         characterId = "active-test-character", revision = 13, skills = {}, shift = nil,
     } } }, 8, nil)
+    MOCK.drawnTextValues = {}
+    lumberWorldHud()
+    local markerShownAfterSettlement = false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        markerShownAfterSettlement = markerShownAfterSettlement or
+            text == "ШТАБЕЛЬ БРЁВЕН" or text == "СКЛАД БРЁВЕН"
+    end
+    MOCK.Assert(not markerShownAfterSettlement,
+        "мировые метки скрываются после добровольной сдачи смены")
     MOCK.mapName = previousLumberTestMap
 end
 
@@ -1329,13 +1300,14 @@ MOCK.Assert(hudCanvas ~= nil, "WoW HUD создаёт прозрачный по�
 local previousHudTestMap = MOCK.mapName
 MOCK.mapName = "rp_lordaeron"
 hudCanvas:Paint(ScrW(), ScrH())
-local professionHudVisibleOnCanvas = false
+local idleProfessionTextOnCanvas = false
 for _, text in ipairs(MOCK.drawnTextValues) do
-    professionHudVisibleOnCanvas = professionHudVisibleOnCanvas or
-        text == "СМЕНА ЛЕСОРУБА НЕ НАЧАТА"
+    idleProfessionTextOnCanvas = idleProfessionTextOnCanvas or
+        text == "СМЕНА ЛЕСОРУБА НЕ НАЧАТА" or
+        text == "ШТАБЕЛЬ БРЁВЕН" or text == "СКЛАД БРЁВЕН"
 end
-MOCK.Assert(professionHudVisibleOnCanvas,
-    "общий canvas HUD рисует статус лесоруба поверх прочего UI")
+MOCK.Assert(not idleProfessionTextOnCanvas,
+    "общий canvas HUD не рисует idle-плашку или мировые метки вне смены")
 MOCK.Assert(MOCK.drawTextCalls > hudDrawsBefore,
     "canvas HUD не пропадает из-за устаревшего wo_inmenu после respawn")
 MOCK.Assert(MOCK.surfaceLineCalls > crosshairLinesBefore,
@@ -1873,13 +1845,15 @@ MOCK.NetDeliver({ name = "Dialogue.Finish", args = {} }, 8, nil)
 -- Торговля
 do
 local panelsBeforeVendor = #MOCK.createdPanels
+local testVendorStartingBalance = WO.Config.Economy.StartingBalance
+local testBreadPrice = WO.Vendors.GetBuyPrice(WO.NPCs.Get("trader_marla"), "bread")
 
 MOCK.NetDeliver({ name = "Vendor.Open", args = { { npcId = "trader_marla", npcName = "Марла" } } }, 8, nil)
 MOCK.Assert(MOCK.FindPanelByText(WO.Lang:Get("vendor.loading")) ~= nil,
     "витрина немедленно показывает состояние загрузки, пока сервер присылает stock")
 MOCK.NetDeliver({ name = "Vendor.Sync", args = { {
-    npcId = "trader_marla", npcName = "Марла", money = 100, sellRate = 0.35,
-    stock = { { class = "bread", name = "Хлеб", price = 4, amount = 20, rarity = "common" } },
+    npcId = "trader_marla", npcName = "Марла", money = testVendorStartingBalance, sellRate = 0.50,
+    stock = { { class = "bread", name = "Хлеб", price = testBreadPrice, amount = 20, rarity = "common" } },
 } } }, 8, nil)
 
 MOCK.Assert(#MOCK.createdPanels > panelsBeforeVendor, "окно торговли создано")
@@ -1932,10 +1906,10 @@ MOCK.Assert(vendorBuyButton:IsEnabled() == false and
     "запоздалый ответ другой покупки не снимает блокировку текущего действия")
 MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
     action = "buy", npcId = "trader_marla", requestId = buyRequestId,
-    money = 96, success = true,
+    money = testVendorStartingBalance - testBreadPrice, success = true,
 } } }, 8, nil)
-local updatedWalletText = WO.Lang:Get("currency.name") .. ": " ..
-    (isfunction(WO.Util.FormatMoney) and WO.Util.FormatMoney(96) or tostring(96))
+local updatedVendorBalance = testVendorStartingBalance - testBreadPrice
+local updatedWalletText = WO.Lang:Get("currency.name") .. ": " .. WO.Currency.Format(updatedVendorBalance)
 local updatedWalletImmediately = false
 for _, panel in ipairs(MOCK.createdPanels) do
     if rawget(panel, "woText") == updatedWalletText and rawget(panel, "__removed") ~= true then
@@ -1946,8 +1920,8 @@ end
 MOCK.Assert(updatedWalletImmediately,
     "серверный ответ сразу обновляет баланс, не ожидая полной синхронизации витрины")
 MOCK.NetDeliver({ name = "Vendor.Sync", args = { {
-    npcId = "trader_marla", npcName = "Марла", money = 96, sellRate = 0.35,
-    stock = { { class = "bread", name = "Хлеб", price = 4, amount = 19, rarity = "common" } },
+    npcId = "trader_marla", npcName = "Марла", money = updatedVendorBalance, sellRate = 0.50,
+    stock = { { class = "bread", name = "Хлеб", price = testBreadPrice, amount = 19, rarity = "common" } },
 } } }, 8, nil)
 local retryBuyButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.buy_one"))
 MOCK.Assert(retryBuyButton ~= nil and retryBuyButton:IsEnabled() and
@@ -1962,7 +1936,7 @@ MOCK.Assert(#secondBuyRequest == 1 and isnumber(secondBuyRequestId) and
     "повторная покупка получает отдельный ID, исключающий путаницу ответов")
 MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
     action = "buy", npcId = "trader_marla", requestId = secondBuyRequestId,
-    money = 96, success = false, reason = "not_enough_money",
+    money = updatedVendorBalance, success = false, reason = "not_enough_money",
 } } }, 8, nil)
 local sellTabButton = vendorSellTab
 MOCK.Assert(sellTabButton ~= nil and sellTabButton:IsEnabled(),
@@ -1982,7 +1956,7 @@ MOCK.Assert(#sellRequest == 1 and sellRequest[1].args[1] == "trader_marla" and
     "кнопка продажи сразу показывает Продаю… и передаёт серверу UID и ID операции")
 MOCK.NetDeliver({ name = "Vendor.ActionResult", args = { {
     action = "sell", npcId = "trader_marla", requestId = sellRequestId,
-    money = 96, success = false, reason = "cannot_sell",
+    money = updatedVendorBalance, success = false, reason = "cannot_sell",
 } } }, 8, nil)
 local retrySellButton = MOCK.FindPanelByText(WO.Lang:Get("vendor.sell_one"))
 MOCK.Assert(retrySellButton ~= nil and retrySellButton:IsEnabled(),

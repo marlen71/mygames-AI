@@ -22,7 +22,7 @@ WO.Items.Register({
     requirements = {},
 
     price = {
-        buy = 20,
-        sell = 5,
+        buy = 2000,
+        sell = 500,
     },
 })

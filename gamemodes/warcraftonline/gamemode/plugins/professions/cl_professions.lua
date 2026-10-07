@@ -548,8 +548,7 @@ local function DrawLumberSequence(task, shift, def, rank)
     surface.DrawOutlinedRect(panelX, panelY, panelWidth, panelHeight, 2)
     DrawText((def and def.name or "Лесоруб") .. " · " .. (rank and rank.name or "Дровосек"),
         "WO.Subtitle", panelX + 22, panelY + 15, WO.UI.Colors.accent)
-    DrawText("ЗАКАЗ " .. tostring(math.min((shift.completedOrders or 0) + 1,
-        shift.requiredOrders or 3)) .. "/" .. tostring(shift.requiredOrders or 3),
+    DrawText("ДОСТАВЛЕНО: " .. tostring(math.max(0, tonumber(shift.completedOrders) or 0)),
         "WO.Tiny", panelX + panelWidth - 22, panelY + 20, WO.UI.Colors.textDim,
         TEXT_ALIGN_RIGHT)
     DrawText("ЗАГОТОВКА БРЁВЕН", "WO.Subtitle", centerX, panelY + 48,
@@ -649,54 +648,9 @@ local function DrawLumberWorldMarker(task, shift)
         TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 end
 
-local function DrawLumberWorksiteStatusHint()
-    local char = LocalCharacter()
-    local site = WO.Config and WO.Config.ProfessionWorksites and
-        WO.Config.ProfessionWorksites.lumberjack
-    local ply = LocalPlayer()
-
-    if not istable(site) or not isvector(site.pickupPos) or
-        not game or not isfunction(game.GetMap) or game.GetMap() ~= site.map or
-        not IsValid(ply) then
-        return
-    end
-
-    local distance = ply:GetPos():Distance(site.pickupPos)
-    local radius = math.max(1, tonumber(site.interactionRadius) or 160)
-    if distance > radius then return end
-
-    local data = WO.Professions.ClientData
-    local hasMatchingSnapshot = char and istable(data) and data.characterId == char.id
-    if hasMatchingSnapshot and istable(data.shift) then return end
-
-    local title, instruction
-    if not char then
-        title = "ПЕРСОНАЖ НЕ СИНХРОНИЗИРОВАН"
-        instruction = "Ожидаем данные персонажа от сервера. Если это не исчезнет, переподключитесь."
-    elseif not hasMatchingSnapshot then
-        title = "СИНХРОНИЗАЦИЯ СМЕНЫ"
-        instruction = "Не получен статус профессии. Повторно запрашиваем его у сервера…"
-    else
-        title = "СМЕНА ЛЕСОРУБА НЕ НАЧАТА"
-        instruction = "Возьмите смену у NPC «Лесоруб», затем нажмите E у штабеля."
-    end
-
-    local width, height = math.min(520, ScrW() - 32), 82
-    local x, y = (ScrW() - width) * 0.5, ScrH() - height - 24
-
-    draw.RoundedBox(10, x, y, width, height, Color(10, 15, 23, 238))
-    surface.SetDrawColor(196, 155, 75, 230)
-    surface.DrawOutlinedRect(x, y, width, height, 2)
-    DrawText(title, "WO.Subtitle", x + 18, y + 12, WO.UI.Colors.accent)
-    DrawText(instruction, "WO.Small", x + 18, y + 47, WO.UI.Colors.text)
-end
-
 local function DrawWorldShift()
     local shift = CurrentShift()
-    if not shift then
-        DrawLumberWorksiteStatusHint()
-        return
-    end
+    if not shift then return end
 
     local def = WO.Professions.Get(shift.professionId)
     if not def then return end
@@ -714,10 +668,15 @@ local function DrawWorldShift()
     DrawText(def.name .. " · " .. (rank and rank.name or ""), "WO.Subtitle",
         x + 18, y + 12, WO.UI.Colors.accent)
 
-    local progressText = "Заказ " .. tostring(math.min((shift.completedOrders or 0) + 1,
-        shift.requiredOrders or 3)) .. "/" .. tostring(shift.requiredOrders or 3)
-    DrawText(progressText .. " · работайте в мире; зарплата после сдачи у работодателя",
-        "WO.Tiny", x + 18, y + 43, WO.UI.Colors.textDim)
+    local progressText
+    if shift.professionId == "lumberjack" then
+        progressText = "Доставлено связок: " .. tostring(math.max(0,
+            tonumber(shift.completedOrders) or 0)) .. " · расчёт — у работодателя"
+    else
+        progressText = "Заказ " .. tostring(math.min((shift.completedOrders or 0) + 1,
+            shift.requiredOrders or 3)) .. "/" .. tostring(shift.requiredOrders or 3)
+    end
+    DrawText(progressText, "WO.Tiny", x + 18, y + 43, WO.UI.Colors.textDim)
 
     if shift.status == "ready" then
         DrawText("Заказы готовы. Вернитесь к «" .. tostring(shift.npcName or "работодателю") .. "».",
@@ -729,7 +688,9 @@ local function DrawWorldShift()
         return
     end
 
-    DrawText("X — отменить", "WO.Tiny", x + w - 18, y + 17,
+    local stopText = shift.professionId == "lumberjack" and
+        "Смена сдаётся работодателю" or "X — отменить"
+    DrawText(stopText, "WO.Tiny", x + w - 18, y + 17,
         WO.UI.Colors.textDim, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP)
 
     if not task then return end
@@ -819,7 +780,7 @@ hook.Add("Think", "wo_professions_world_input", function()
     end
 
     local cancelPressed = KeyPressed("cancel", KEY_X)
-    if cancelPressed then
+    if cancelPressed and shift.professionId ~= "lumberjack" then
         WO.Net.SendToServer("Profession.CancelShift", shift.id)
         return
     end

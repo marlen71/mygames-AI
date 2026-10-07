@@ -44,6 +44,10 @@ function WO.Character.New(data)
     char.customization = char.customization or {}
     char.customization.bodygroups = char.customization.bodygroups or {}
 
+    if not isstring(char.faction) and WO.Races and WO.Races.GetDefaultFaction then
+        char.faction = WO.Races.GetDefaultFaction(char.race)
+    end
+
     return char
 end
 
@@ -82,6 +86,10 @@ end
 
 function CHARACTER:GetRace()
     return self.race
+end
+
+function CHARACTER:GetFaction()
+    return self.faction
 end
 
 function CHARACTER:GetClass()
@@ -165,9 +173,18 @@ function WO.Character.Validate(data, opts)
         return false, "invalid_race"
     end
 
+    local faction = data.faction
+    if not isstring(faction) and WO.Races.GetDefaultFaction then
+        faction = WO.Races.GetDefaultFaction(race)
+    end
+
+    if not isstring(faction) or not WO.Races.IsFactionAllowed or
+        not WO.Races.IsFactionAllowed(race, faction) then
+        return false, "faction_race_mismatch"
+    end
+
     if opts.strict == true then
         local canCreateRace = WO.Races.CanCreate and WO.Races.CanCreate(race, opts.player)
-
         if canCreateRace ~= true then
             return false, "race_unavailable"
         end
@@ -206,6 +223,11 @@ function WO.Character.Validate(data, opts)
         return false, "class_not_allowed"
     end
 
+    if opts.strict == true and WO.Classes.IsCharacterCreationAllowed and
+        not WO.Classes.IsCharacterCreationAllowed(class, race) then
+        return false, "class_unavailable"
+    end
+
     -- Модель (должна принадлежать расе и полу)
     local model = data.model
 
@@ -236,6 +258,7 @@ function WO.Character.Validate(data, opts)
         name = name,
         surname = surname,
         age = age,
+        faction = faction,
         race = race,
         gender = gender,
         class = class,
@@ -286,6 +309,17 @@ function WO.Character.SanitizeLoaded(data)
         return nil, warnings
     end
 
+    local factionValid = isstring(data.faction) and WO.Races.IsFactionAllowed and
+        WO.Races.IsFactionAllowed(data.race, data.faction)
+    if not factionValid then
+        data.faction = WO.Races.GetDefaultFaction and WO.Races.GetDefaultFaction(data.race) or nil
+        warnings[#warnings + 1] = "faction_restored"
+    end
+
+    if not data.faction then
+        return nil, warnings
+    end
+
     local genders = WO.Config.Genders or { "male", "female" }
     local genderOk = false
 
@@ -307,16 +341,21 @@ function WO.Character.SanitizeLoaded(data)
         return nil, warnings
     end
 
-    if WO.Classes.Registry and not WO.Classes.Registry:Exists(data.class) then
-        local first = WO.Classes.Registry and WO.Classes.Registry:GetIDs()[1]
+    local classValid = WO.Classes.Registry and WO.Classes.Registry:Exists(data.class)
+    local classAllowed = classValid and
+        (not WO.Races.IsClassAllowed or WO.Races.IsClassAllowed(data.race, data.class))
 
-        data.class = first or "warrior"
+    if not classAllowed then
+        local available = WO.Classes.GetCharacterCreationIDs and
+            WO.Classes.GetCharacterCreationIDs(data.race) or {}
+        data.class = available[1] or (WO.Classes.Registry and WO.Classes.Registry:GetIDs()[1]) or "warrior"
         warnings[#warnings + 1] = "class_restored"
     end
 
     data.level = math.max(1, WO.Util.ToInt(data.level, 1))
     data.experience = math.max(0, WO.Util.ToInt(data.experience, 0))
-    data.money = math.max(0, WO.Util.ToInt(data.money, 0))
+    local maxBalance = WO.Config.Economy and WO.Config.Economy.MaxBalance or 4294967295
+    data.money = math.Clamp(WO.Util.ToInt(data.money, 0), 0, maxBalance)
 
     if not istable(data.customization) then
         data.customization = {}

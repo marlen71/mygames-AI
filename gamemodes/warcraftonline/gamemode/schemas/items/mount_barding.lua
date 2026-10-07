@@ -16,5 +16,5 @@ WO.Items.Register({
         if not (WO.Mounts and WO.Mounts.UpgradeArmor) then return false, "mounts_unavailable" end
         return WO.Mounts.UpgradeArmor(ply, instance)
     end,
-    price = { buy = 180, sell = 0 },
+    price = { buy = 18000, sell = 0 },
 })

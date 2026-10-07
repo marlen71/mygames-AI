@@ -8,7 +8,7 @@ WO.Professions.Register({
         {
             name = "Лавочник",
             requiredXP = 0,
-            basePay = 36,
+            basePay = 3600,
             activities = {
                 {
                     name = "Оформить прилавок",
@@ -37,7 +37,7 @@ WO.Professions.Register({
         {
             name = "Закупщик",
             requiredXP = 300,
-            basePay = 60,
+            basePay = 6000,
             activities = {
                 {
                     name = "Составить список",
@@ -66,7 +66,7 @@ WO.Professions.Register({
         {
             name = "Оценщик",
             requiredXP = 900,
-            basePay = 94,
+            basePay = 9400,
             activities = {
                 {
                     name = "Осмотреть товар",
