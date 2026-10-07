@@ -905,6 +905,13 @@ local function DrawHUDSection(name, callback)
     end
 end
 
+local function DrawProfessionHUD()
+    local professionUI = WO.ProfessionsUI
+    if not istable(professionUI) or not isfunction(professionUI.DrawHUD) then return end
+
+    DrawHUDSection("profession shift", professionUI.DrawHUD)
+end
+
 local function EnsureHUDCanvas()
     if IsValid(hudCanvas) then return hudCanvas end
 
@@ -953,6 +960,7 @@ local function EnsureHUDCanvas()
         if not ply:HasCharacter() or not WO.Character or not WO.Character.GetLocal or
             not WO.Character.GetLocal() then
             HideHUDModels()
+            DrawProfessionHUD()
             return
         end
 
@@ -961,6 +969,9 @@ local function EnsureHUDCanvas()
         DrawHUDSection("quest tracker", WO.HUD.DrawQuestTracker)
         DrawHUDSection("quest waypoint", WO.HUD.DrawQuestWaypoint)
         DrawHUDSection("weapon selector", WO.HUD.DrawWeaponSelector)
+        -- Profession shift/mini-game UI is drawn inside the same VGUI canvas as
+        -- the custom HUD so no later panel can cover the HUDPaint layer.
+        DrawProfessionHUD()
     end
 
     return hudCanvas
@@ -970,7 +981,8 @@ end
 -- panel (with its portraits as children) prevents DModelPanel from covering the
 -- text/resource frames and makes the z-order deterministic.
 hook.Add("HUDPaint", "wo_hud_paint", function()
-    EnsureHUDCanvas()
+    local canvas = EnsureHUDCanvas()
+    if not IsValid(canvas) then DrawProfessionHUD() end
 
     if not HasCustomHUD() then return end
 

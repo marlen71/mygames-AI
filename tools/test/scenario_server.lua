@@ -1237,6 +1237,21 @@ local initialProfessionTask = initialProfessionSnapshots[#initialProfessionSnaps
 MOCK.Assert(initialProfessionTask and initialProfessionTask.sequence == nil and
     initialProfessionTask.sequencePrompt == nil,
     "сервер не раскрывает клиенту будущие клавиши WASD до начала мини-игры")
+local lumberSyncTimer = MOCK.timers["wo_professions_lumber_hud_sync"]
+MOCK.TakeOutbox()
+MOCK.players[#MOCK.players + 1] = workPlayer
+if lumberSyncTimer then lumberSyncTimer.fn() end
+table.remove(MOCK.players)
+local repairedProfessionSnapshots = MOCK.FindInbox(MOCK.TakeOutbox(), "Profession.Sync")
+local repairedLumberShift = false
+for _, message in ipairs(repairedProfessionSnapshots) do
+    local snapshot = message.args[1]
+    repairedLumberShift = repairedLumberShift or (snapshot and
+        snapshot.characterId == workCharacter.id and snapshot.shift and
+        snapshot.shift.id == firstShiftID)
+end
+MOCK.Assert(repairedLumberShift,
+    "сервер периодически восстанавливает снимок активной смены лесоруба для HUD")
 
 WO.Dialogue.Open(workPlayer, workNPCDef, workNPC)
 local duplicateStart, duplicateReason = WO.Professions.StartShift(workPlayer, "lumberjack", 1)

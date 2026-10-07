@@ -655,7 +655,7 @@ local function DrawLumberWorksiteStatusHint()
         WO.Config.ProfessionWorksites.lumberjack
     local ply = LocalPlayer()
 
-    if not char or not istable(site) or not isvector(site.pickupPos) or
+    if not istable(site) or not isvector(site.pickupPos) or
         not game or not isfunction(game.GetMap) or game.GetMap() ~= site.map or
         not IsValid(ply) then
         return
@@ -666,14 +666,21 @@ local function DrawLumberWorksiteStatusHint()
     if distance > radius then return end
 
     local data = WO.Professions.ClientData
-    local hasMatchingSnapshot = istable(data) and data.characterId == char.id
+    local hasMatchingSnapshot = char and istable(data) and data.characterId == char.id
     if hasMatchingSnapshot and istable(data.shift) then return end
 
-    local title = hasMatchingSnapshot and "СМЕНА ЛЕСОРУБА НЕ НАЧАТА" or
-        "СИНХРОНИЗАЦИЯ СМЕНЫ"
-    local instruction = hasMatchingSnapshot and
-        "Возьмите смену у NPC «Лесоруб», затем нажмите E у штабеля." or
-        "Не получен статус профессии. Повторно запрашиваем его у сервера…"
+    local title, instruction
+    if not char then
+        title = "ПЕРСОНАЖ НЕ СИНХРОНИЗИРОВАН"
+        instruction = "Ожидаем данные персонажа от сервера. Если это не исчезнет, переподключитесь."
+    elseif not hasMatchingSnapshot then
+        title = "СИНХРОНИЗАЦИЯ СМЕНЫ"
+        instruction = "Не получен статус профессии. Повторно запрашиваем его у сервера…"
+    else
+        title = "СМЕНА ЛЕСОРУБА НЕ НАЧАТА"
+        instruction = "Возьмите смену у NPC «Лесоруб», затем нажмите E у штабеля."
+    end
+
     local width, height = math.min(520, ScrW() - 32), 82
     local x, y = (ScrW() - width) * 0.5, ScrH() - height - 24
 
@@ -775,6 +782,19 @@ local function DrawLumberMinigameHUD()
     DrawLumberSequence(task, shift, def, rank)
 end
 
+function WO.ProfessionsUI.DrawWorldShift()
+    DrawWorldShift()
+end
+
+function WO.ProfessionsUI.DrawLumberMinigame()
+    DrawLumberMinigameHUD()
+end
+
+function WO.ProfessionsUI.DrawHUD()
+    DrawWorldShift()
+    DrawLumberMinigameHUD()
+end
+
 hook.Add("Think", "wo_professions_world_input", function()
     RequestSnapshot()
     local shift = CurrentShift()
@@ -808,9 +828,6 @@ hook.Add("Think", "wo_professions_world_input", function()
         PollMiniGameInput(shift, task)
     end
 end)
-
-hook.Add("HUDPaint", "wo_professions_world_hud", DrawWorldShift)
-hook.Add("HUDPaint", "wo_professions_lumber_minigame_hud", DrawLumberMinigameHUD)
 
 hook.Add("PlayerBindPress", "wo_professions_world_bind", function(ply, bind)
     if ply ~= LocalPlayer() then return end

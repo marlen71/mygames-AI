@@ -1195,3 +1195,17 @@ hook.Add("Think", "wo_professions_tick", function()
         end
     end
 end)
+
+-- Event-driven Sync is the fast path. Periodic authoritative snapshots repair
+-- a missed/reordered client update while a lumberjack shift is in progress.
+timer.Create("wo_professions_lumber_hud_sync", 2, 0, function()
+    for _, ply in ipairs(player.GetAll()) do
+        if IsValid(ply) and ply:HasCharacter() then
+            local char = ply:GetCharacter()
+            local shift = char and char.activeProfessionShift
+            if istable(shift) and shift.professionId == "lumberjack" then
+                WO.Professions.Sync(ply)
+            end
+        end
+    end
+end)

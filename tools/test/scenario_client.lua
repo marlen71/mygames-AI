@@ -664,7 +664,7 @@ do
 
     local fishPolygonsBefore = MOCK.surfacePolyCalls or 0
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    WO.ProfessionsUI.DrawWorldShift()
     local fishHudVisible = false
     for _, text in ipairs(MOCK.drawnTextValues) do
         if text:find("Рыбалка", 1, true) then fishHudVisible = true end
@@ -698,7 +698,7 @@ do
         },
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    WO.ProfessionsUI.DrawWorldShift()
     local merchantTargetVisible, merchantPriceVisible = false, false
     for _, text in ipairs(MOCK.drawnTextValues) do
         merchantTargetVisible = merchantTargetVisible or text:find("60 монет", 1, true) ~= nil
@@ -731,7 +731,7 @@ do
         },
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    WO.ProfessionsUI.DrawWorldShift()
     local herbTargetVisible, herbOptionVisible = false, false
     for _, text in ipairs(MOCK.drawnTextValues) do
         herbTargetVisible = herbTargetVisible or text:find("Полынь", 1, true) ~= nil
@@ -755,11 +755,23 @@ do
     MOCK.mapName = "rp_lordaeron"
     LocalPlayer():SetPos(lumberPickup)
 
+    local savedLocalCharacter = WO.Character.Local
+    WO.Character.Local = nil
+    MOCK.drawnTextValues = {}
+    WO.ProfessionsUI.DrawHUD()
+    local missingCharacterHint = false
+    for _, text in ipairs(MOCK.drawnTextValues) do
+        missingCharacterHint = missingCharacterHint or text == "ПЕРСОНАЖ НЕ СИНХРОНИЗИРОВАН"
+    end
+    MOCK.Assert(missingCharacterHint,
+        "слой профессий canvas показывает диагностику у штабеля даже до синхронизации персонажа")
+    WO.Character.Local = savedLocalCharacter
+
     MOCK.NetDeliver({ name = "Profession.Sync", args = { {
         characterId = "active-test-character", revision = 4, skills = {}, shift = nil,
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    WO.ProfessionsUI.DrawHUD()
     local noShiftHint, falseMarker = false, false
     for _, text in ipairs(MOCK.drawnTextValues) do
         noShiftHint = noShiftHint or text == "СМЕНА ЛЕСОРУБА НЕ НАЧАТА"
@@ -804,7 +816,7 @@ do
         },
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    WO.ProfessionsUI.DrawWorldShift()
     local lumberPickupHud, lumberPickupMarker = false, false
     for _, text in ipairs(MOCK.drawnTextValues) do
         lumberPickupHud = lumberPickupHud or text:find("ЛЕСНАЯ ЗАГОТОВКА", 1, true) ~= nil
@@ -843,17 +855,17 @@ do
             },
         },
     } } }, 8, nil)
-    local lumberWorldHud = hook.GetTable().HUDPaint.wo_professions_world_hud
-    local lumberMinigameHud = hook.GetTable().HUDPaint.wo_professions_lumber_minigame_hud
+    local lumberWorldHud = WO.ProfessionsUI.DrawWorldShift
+    local lumberMinigameHud = WO.ProfessionsUI.DrawLumberMinigame
+    local drawProfessionHUD = WO.ProfessionsUI.DrawHUD
     MOCK.drawnTextValues = {}
-    lumberWorldHud()
+    drawProfessionHUD()
     local pickupMarkerDuringWork = false
     for _, text in ipairs(MOCK.drawnTextValues) do
         pickupMarkerDuringWork = pickupMarkerDuringWork or text == "ШТАБЕЛЬ БРЁВЕН"
     end
     MOCK.Assert(pickupMarkerDuringWork and isfunction(lumberMinigameHud),
-        "во время мини-игры метка штабеля остаётся видимой, а у мини-игры есть отдельный HUD hook")
-    lumberMinigameHud()
+        "общая HUD canvas одновременно рисует метку во время попытки и мини-игру")
     local shownDirections = { W = false, A = false, S = false, D = false }
     local lumberCountLabel = false
     for _, text in ipairs(MOCK.drawnTextValues) do
@@ -1001,7 +1013,7 @@ do
         },
     } } }, 8, nil)
     MOCK.drawnTextValues = {}
-    hook.GetTable().HUDPaint.wo_professions_world_hud()
+    WO.ProfessionsUI.DrawWorldShift()
     local lumberCarryHud = false
     for _, text in ipairs(MOCK.drawnTextValues) do
         lumberCarryHud = lumberCarryHud or text:find("СКЛАД БРЁВЕН", 1, true) ~= nil
@@ -1314,7 +1326,16 @@ for i = #MOCK.createdPanels, 1, -1 do
     end
 end
 MOCK.Assert(hudCanvas ~= nil, "WoW HUD создаёт прозрачный полноэкранный VGUI canvas")
+local previousHudTestMap = MOCK.mapName
+MOCK.mapName = "rp_lordaeron"
 hudCanvas:Paint(ScrW(), ScrH())
+local professionHudVisibleOnCanvas = false
+for _, text in ipairs(MOCK.drawnTextValues) do
+    professionHudVisibleOnCanvas = professionHudVisibleOnCanvas or
+        text == "СМЕНА ЛЕСОРУБА НЕ НАЧАТА"
+end
+MOCK.Assert(professionHudVisibleOnCanvas,
+    "общий canvas HUD рисует статус лесоруба поверх прочего UI")
 MOCK.Assert(MOCK.drawTextCalls > hudDrawsBefore,
     "canvas HUD не пропадает из-за устаревшего wo_inmenu после respawn")
 MOCK.Assert(MOCK.surfaceLineCalls > crosshairLinesBefore,
@@ -1328,6 +1349,7 @@ for _, text in ipairs(MOCK.drawnTextValues) do
     end
 end
 MOCK.Assert(not hudShowsMoney, "валюта не отображается в WoW-style HUD")
+MOCK.mapName = previousHudTestMap
 LocalPlayer():SetNW2Bool("wo_inmenu", false)
 
 local hoverNPC = MOCK.NewEntity("npc")
